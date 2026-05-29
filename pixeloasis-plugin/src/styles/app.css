@@ -1,0 +1,96 @@
+:root {
+  color-scheme: dark;
+  font-family: "Adobe Clean", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at top, rgba(79, 140, 255, 0.2), transparent 32%),
+    linear-gradient(180deg, #10151d 0%, #0b0f15 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  color: #f5f7fb;
+}
+
+.app-shell {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.hero,
+.status-bar,
+.notes {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+}
+
+.hero,
+.notes {
+  padding: 18px;
+}
+
+.hero__eyebrow,
+.preset-card__eyebrow,
+.status-bar__label {
+  margin: 0 0 8px;
+  color: #9db5ff;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.hero__title,
+.notes__title,
+.preset-card__title {
+  margin: 0 0 8px;
+  line-height: 1.15;
+}
+
+.hero__title {
+  font-size: 24px;
+}
+
+.hero__copy,
+.notes__copy,
+.preset-card__summary,
+.status-bar__value {
+  margin: 0;
+  color: rgba(245, 247, 251, 0.76);
+  line-height: 1.5;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+}
+
+.preset-card {
+  width: 100%;
+}
+
+.preset-card__body {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
