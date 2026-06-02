@@ -40,6 +40,7 @@ export interface GenerationResponse {
 
 export interface LayerPlacementPayload {
   imageBase64: string;
+  mimeType?: string;
   bounds: SelectionBounds;
   layerName: string;
   maskBase64?: string;

@@ -9,8 +9,12 @@ if (!root) {
   throw new Error("PixelOasis root element not found.");
 }
 
-ReactDOM.createRoot(root).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+try {
+  ReactDOM.createRoot(root).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+} catch (error) {
+  root.textContent = error instanceof Error ? error.message : String(error);
+}

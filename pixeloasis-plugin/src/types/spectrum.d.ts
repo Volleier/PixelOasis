@@ -16,10 +16,25 @@ declare namespace JSX {
       size?: string;
       vertical?: boolean;
     };
+    "sp-field-label": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
+      for?: string;
+      sideLabel?: boolean;
+    };
     "sp-progress-circle": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
       size?: string;
       indeterminate?: boolean;
       progress?: number;
+    };
+    "sp-textfield": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
+      id?: string;
+      value?: string;
+      placeholder?: string;
+      type?: string;
+      multiline?: boolean;
+      rows?: number;
+      quiet?: boolean;
+      disabled?: boolean;
+      invalid?: boolean;
     };
   }
 }

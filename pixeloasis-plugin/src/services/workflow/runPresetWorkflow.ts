@@ -7,6 +7,7 @@ import { generate } from "../gateway/generate";
 export interface WorkflowOptions {
   gatewayUrl: string;
   provider: string;
+  workflow: string;
 }
 
 function createCorrelationId(): string {
@@ -26,6 +27,7 @@ export async function runPresetWorkflow(
     adapter: {
       provider: options.provider,
       endpoint: options.gatewayUrl,
+      workflow: options.workflow,
     },
     parameters: preset.defaults,
     correlationId: createCorrelationId(),
@@ -33,6 +35,7 @@ export async function runPresetWorkflow(
 
   await placeGeneratedLayer({
     imageBase64: response.result.imageBase64,
+    mimeType: response.result.mimeType,
     bounds: selection.bounds,
     layerName: `PixelOasis - ${preset.label}`,
     maskBase64: selection.maskBase64,

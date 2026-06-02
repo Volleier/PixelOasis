@@ -5,17 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "bolt-uxp dev",
-    "build": "bolt-uxp build",
+    "build": "vite build && node ./scripts/prepare-udt-dist.mjs",
+    "build:uxp": "bolt-uxp build",
     "package": "bolt-uxp package",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@spectrum-web-components/button": "^1.9.0",
     "@spectrum-web-components/card": "^1.9.0",
+    "@spectrum-web-components/field-label": "^1.9.0",
     "@spectrum-web-components/divider": "^1.9.0",
+    "@spectrum-web-components/textfield": "^1.9.0",
     "@spectrum-web-components/progress-circle": "^1.9.0",
     "@spectrum-web-components/theme": "^1.9.0",
-    "@spectrum-web-components/typography": "^1.9.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
