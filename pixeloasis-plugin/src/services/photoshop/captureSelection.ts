@@ -142,13 +142,66 @@ function createRgbBufferFromGrayscale(
   return target;
 }
 
+function createRgbBufferFromImage(
+  source: TypedPixelBuffer,
+  width: number,
+  height: number,
+  components: number,
+): TypedPixelBuffer {
+  if (components === 3) {
+    return source;
+  }
+
+  const pixelCount = width * height;
+  const Constructor = source.constructor as
+    | Uint8ArrayConstructor
+    | Uint16ArrayConstructor
+    | Float32ArrayConstructor;
+  const target = new Constructor(pixelCount * 3) as TypedPixelBuffer;
+
+  for (let index = 0; index < pixelCount; index += 1) {
+    const sourceIndex = index * components;
+    const targetIndex = index * 3;
+    target[targetIndex] = source[sourceIndex];
+    target[targetIndex + 1] = source[sourceIndex + 1];
+    target[targetIndex + 2] = source[sourceIndex + 2];
+  }
+
+  return target;
+}
+
 async function encodeImageDataAsBase64(imageData: any): Promise<string> {
   const photoshop = require("photoshop");
   const { imaging } = photoshop;
-  return (await imaging.encodeImageData({
-    imageData,
-    base64: true,
-  })) as string;
+  const pixelBuffer = (await imageData.getData({
+    chunky: true,
+  })) as TypedPixelBuffer;
+
+  const rgbBuffer = createRgbBufferFromImage(
+    pixelBuffer,
+    imageData.width,
+    imageData.height,
+    imageData.components,
+  );
+
+  const rgbImageData = await imaging.createImageDataFromBuffer(rgbBuffer, {
+    width: imageData.width,
+    height: imageData.height,
+    components: 3,
+    colorSpace: "RGB",
+    colorProfile: "sRGB IEC61966-2.1",
+    ...(imageData.componentSize === 16 ? { fullRange: false } : {}),
+  });
+
+  try {
+    return (await imaging.encodeImageData({
+      imageData: rgbImageData,
+      type: "image/png",
+      base64: true,
+    })) as string;
+  } finally {
+    rgbImageData.dispose();
+  }
 }
 
 async function encodeSelectionMaskAsBase64(maskImageData: any): Promise<string> {

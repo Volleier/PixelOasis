@@ -38,8 +38,10 @@ class LayerPlacementError extends Error {
 }
 
 function inferExtension(mimeType?: string): string {
-  if (mimeType === "image/jpeg" || mimeType === "image/jpg") {
-    return "jpg";
+  if (mimeType && mimeType !== "image/png") {
+    throw new Error(
+      `Unsupported mime type "${mimeType}". PixelOasis currently supports PNG only.`,
+    );
   }
 
   return "png";
