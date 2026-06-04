@@ -1,10 +1,33 @@
+:root {
+  --bg-primary: #2b2b2b;
+  --bg-surface: #303030;
+  --bg-surface-alt: #353535;
+  --bg-control: #565656;
+  --bg-control-alt: #3f3f3f;
+  --bg-toggle: #4a4a4a;
+  --border-muted: #404040;
+  --border-strong: #666666;
+  --border-subtle: #1f1f1f;
+  --text-primary: #f3f3f3;
+  --text-secondary: #d0d0d0;
+  --text-muted: #9f9f9f;
+  --text-eyebrow: #bdbdbd;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 20px;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+}
+
 html,
 body {
   margin: 0;
   width: 100%;
   height: 100%;
-  background: #2b2b2b;
-  color: #f3f3f3;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   font-family: "Adobe Clean", "Segoe UI", sans-serif;
   cursor: default;
   overflow: hidden;
@@ -24,70 +47,52 @@ body {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: #2b2b2b;
+  background: var(--bg-primary);
 }
 
 .po-main {
   flex: 1;
-  padding: 52px 16px 16px;
-  overflow: hidden;
+  min-height: 0;
+  padding: 52px var(--space-md) var(--space-md);
+  overflow-y: auto;
 }
 
-.po-card {
+.po-section {
   display: block;
-  width: 100%;
-  max-width: 360px;
-  padding: 12px;
-  border: 1px solid #404040;
-  background: #303030;
+  border: 1px solid var(--border-muted);
+  background: var(--bg-surface);
+  padding: var(--space-sm);
+  margin-bottom: var(--space-sm);
 }
 
-.po-card__eyebrow {
-  display: block;
-  margin-bottom: 10px;
-  color: #bdbdbd;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.po-section__header {
+  margin-bottom: var(--space-xs);
 }
 
-.po-button,
-.po-bottom-button,
-.po-toggle {
-  font: inherit;
-  cursor: pointer;
+.po-section__title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+  font-weight: 600;
 }
 
-.po-button {
-  display: block;
-  width: 100%;
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid #666666;
-  border-radius: 0;
-  background: #565656;
-  color: #ffffff;
-  text-align: left;
-  font-size: 13px;
-  -webkit-appearance: none;
-  appearance: none;
-  margin-top: 8px;
+.po-section__body {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
 }
 
-.po-button:first-of-type {
-  margin-top: 0;
-}
-
-.po-button--secondary {
-  background: #4a4a4a;
+.po-section__placeholder {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
 }
 
 .po-sheet {
   display: none;
   border-top: 1px solid #424242;
-  border-left: 1px solid #1f1f1f;
-  border-right: 1px solid #1f1f1f;
-  background: #353535;
+  border-left: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-surface-alt);
 }
 
 .po-sheet.is-open {
@@ -99,22 +104,22 @@ body {
   align-items: center;
   justify-content: center;
   height: 32px;
-  padding: 0 12px;
+  padding: 0 var(--space-sm);
   border-bottom: 1px solid #424242;
-  color: #f3f3f3;
-  font-size: 13px;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
   font-weight: 600;
 }
 
 .po-sheet__body {
-  padding: 8px 12px 12px;
+  padding: var(--space-xs) var(--space-sm) var(--space-sm);
 }
 
 .po-setting-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-sm);
 }
 
 .po-setting-copy {
@@ -124,14 +129,14 @@ body {
 }
 
 .po-setting-row__label {
-  color: #f1f1f1;
-  font-size: 13px;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
 }
 
 .po-setting-row__hint {
   margin-top: 2px;
-  color: #9f9f9f;
-  font-size: 11px;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
 }
 
 .po-toggle {
@@ -141,7 +146,8 @@ body {
   padding: 0;
   border: 0;
   border-radius: 999px;
-  background: #4a4a4a;
+  background: var(--bg-toggle);
+  cursor: pointer;
 }
 
 .po-toggle__thumb {
@@ -164,9 +170,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 0 8px;
-  border-top: 1px solid #1f1f1f;
+  gap: var(--space-xs);
+  padding: 0 var(--space-xs);
+  border-top: 1px solid var(--border-subtle);
   background: #333333;
 }
 
@@ -176,8 +182,8 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #d0d0d0;
-  font-size: 11px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
 }
 
 .po-bottom-button {
@@ -186,9 +192,11 @@ body {
   padding: 0 10px;
   border: 1px solid #4a4a4a;
   border-radius: 0;
-  background: #3f3f3f;
+  background: var(--bg-control-alt);
   color: #efefef;
-  font-size: 13px;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
 }
 
 .po-fatal {
@@ -196,6 +204,6 @@ body {
   padding: 16px;
   white-space: pre-wrap;
   color: #ffb5b5;
-  background: #2b2b2b;
+  background: var(--bg-primary);
   font-size: 12px;
 }

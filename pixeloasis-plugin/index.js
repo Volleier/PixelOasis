@@ -1,8 +1,5 @@
 (function () {
   const TEXT = {
-    selection: "Selection",
-    selectRectTool: "\u9009\u62e9\u77e9\u5f62\u9009\u6846\u5de5\u5177",
-    captureSelection: "\u6293\u53d6\u5f53\u524d\u9009\u533a",
     settings: "\u8bbe\u7f6e",
     themeMode: "\u4eae\u6697\u6a21\u5f0f",
     themeHint: "\u4ec5\u663e\u793a\u754c\u9762\uff0c\u903b\u8f91\u6682\u672a\u63a5\u5165",
@@ -13,21 +10,52 @@
     settingsOpened: "settings opened",
     settingsClosed: "settings closed",
     themeClicked: "theme toggle clicked",
+    sections: [
+      {
+        title: "\u4eba\u50cf\u7cbe\u4fee",
+        hint: "\u529f\u80fd\u6309\u94ae\u5f85\u63a5\u5165",
+      },
+      {
+        title: "\u6784\u56fe\u5de5\u5177",
+        hint: "\u529f\u80fd\u6309\u94ae\u5f85\u63a5\u5165",
+      },
+      {
+        title: "\u5149\u5f71\u98ce\u683c",
+        hint: "\u529f\u80fd\u6309\u94ae\u5f85\u63a5\u5165",
+      },
+      {
+        title: "\u89c6\u89c9\u7279\u6548",
+        hint: "\u529f\u80fd\u6309\u94ae\u5f85\u63a5\u5165",
+      },
+      {
+        title: "\u753b\u8d28\u63d0\u5347",
+        hint: "\u529f\u80fd\u6309\u94ae\u5f85\u63a5\u5165",
+      },
+    ],
   };
+
+  function buildSectionCards() {
+    return TEXT.sections
+      .map(function (section) {
+        return `
+          <section class="po-section">
+            <div class="po-section__header">
+              <h2 class="po-section__title">${section.title}</h2>
+            </div>
+            <div class="po-section__body">
+              <div class="po-section__placeholder">${section.hint}</div>
+            </div>
+          </section>
+        `;
+      })
+      .join("");
+  }
 
   function buildTemplate() {
     return `
       <div class="po-root">
         <main class="po-main">
-          <section class="po-card">
-            <div class="po-card__eyebrow">${TEXT.selection}</div>
-            <button id="tool-btn" class="po-button" type="button">
-              ${TEXT.selectRectTool}
-            </button>
-            <button id="capture-btn" class="po-button po-button--secondary" type="button">
-              ${TEXT.captureSelection}
-            </button>
-          </section>
+          ${buildSectionCards()}
         </main>
 
         <aside id="settings-sheet" class="po-sheet" aria-hidden="true">
@@ -153,30 +181,14 @@
 
     appRoot.innerHTML = buildTemplate();
 
-    const toolButton = document.getElementById("tool-btn");
-    const captureButton = document.getElementById("capture-btn");
     const settingsButton = document.getElementById("settings-btn");
     const settingsSheet = document.getElementById("settings-sheet");
     const themeToggleButton = document.getElementById("theme-toggle-btn");
     const statusNode = document.getElementById("status");
 
-    if (
-      !toolButton ||
-      !captureButton ||
-      !settingsButton ||
-      !settingsSheet ||
-      !themeToggleButton ||
-      !statusNode
-    ) {
+    if (!settingsButton || !settingsSheet || !themeToggleButton || !statusNode) {
       throw new Error("PixelOasis UI element not found.");
     }
-
-    const selectRectangularMarqueeToolCommand = [
-      {
-        _obj: "select",
-        _target: [{ _ref: "marqueeRectTool" }],
-      },
-    ];
 
     let transientStatusTimer = null;
 
@@ -223,40 +235,6 @@
       const current = themeToggleButton.getAttribute("aria-pressed") === "true";
       themeToggleButton.setAttribute("aria-pressed", current ? "false" : "true");
       showTransientStatus(TEXT.themeClicked);
-    });
-
-    toolButton.addEventListener("click", async function () {
-      try {
-        const photoshop = window.require("photoshop");
-        const { app, action, core } = photoshop;
-        const before =
-          app.currentTool && app.currentTool.id ? app.currentTool.id : "unknown";
-
-        await core.executeAsModal(
-          async function () {
-            await action.batchPlay(selectRectangularMarqueeToolCommand, {
-              synchronousExecution: false,
-              modalBehavior: "execute",
-            });
-          },
-          { commandName: "PixelOasis Select Rectangular Marquee Tool" },
-        );
-
-        const after =
-          app.currentTool && app.currentTool.id ? app.currentTool.id : "unknown";
-        showTransientStatus("tool: " + before + " -> " + after);
-      } catch (error) {
-        setStatus(error instanceof Error ? error.message : String(error));
-      }
-    });
-
-    captureButton.addEventListener("click", async function () {
-      try {
-        const bounds = await getSelectionBounds();
-        showTransientStatus(formatSelectionBounds(bounds));
-      } catch (error) {
-        setStatus(error instanceof Error ? error.message : String(error));
-      }
     });
 
     try {
