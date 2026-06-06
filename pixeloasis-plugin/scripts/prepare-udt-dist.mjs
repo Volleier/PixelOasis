@@ -35,6 +35,18 @@ for (const filename of scriptFiles) {
   );
 }
 
+/* Vendor modules */
+const distVendorDir = resolve(distDir, "scripts", "vendor");
+await mkdir(distVendorDir, { recursive: true });
+const vendorFiles = ["png-encoder.js"];
+
+for (const filename of vendorFiles) {
+  await copyFile(
+    resolve(scriptDir, "vendor", filename),
+    resolve(distVendorDir, filename),
+  );
+}
+
 /* Patch manifest — set main to index.html */
 const manifestTarget = resolve(distDir, "manifest.json");
 const manifestRaw = await readFile(manifestTarget, "utf8");
@@ -44,5 +56,6 @@ manifest.main = "index.html";
 await writeFile(manifestTarget, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
 console.log("Prepared classic UXP dist for UXP Developer Tool.");
-console.log(`  Root:   index.html, index.js, panel.css, manifest.json`);
+console.log(`  Root:    index.html, index.js, panel.css, manifest.json`);
 console.log(`  Scripts: ${scriptFiles.map(f => `scripts/${f}`).join(", ")}`);
+console.log(`  Vendor:  ${vendorFiles.map(f => `scripts/vendor/${f}`).join(", ")}`);

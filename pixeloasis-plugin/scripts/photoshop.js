@@ -170,54 +170,36 @@ window.PO.padImageDataToBounds = async function (imageData, requestedBounds, act
 
 /* ── Image encoding ──
  *
- * NOTE: Adobe documents imaging.encodeImageData primarily as a JPEG / base64
- * path for <img> preview.  It DOES accept type "image/png" and produces valid
- * PNG output in tested UXP versions, BUT alpha-channel fidelity is not
- * guaranteed by the API contract.
+ * Formal image & mask → vendor/png-encoder.js (pure JS, produces real PNG bytes).
+ * UI preview           → Adobe imaging.encodeImageData (JPEG, safe for <img> display).
  *
- * For the formal image pipeline we encode RGB-only (no alpha) PNGs, so the
- * limitation does not currently bite.  If alpha-bearing PNGs become necessary,
- * switch to a pure-JS PNG encoder fed by imageData.getData().
+ * DevList §8-P1: Do NOT rely on imaging.encodeImageData as the formal PNG encoder.
  */
 
-window.PO.encodeImageDataAsPngBase64 = async function (imageData) {
-  var photoshop = window.require("photoshop");
-  var imaging = photoshop.imaging;
-  return imaging.encodeImageData({
-    imageData: imageData,
-    type: "image/png",
-    base64: true,
-  });
+window.PO.encodeFormalImagePng = async function (imageData) {
+  var rawData = await imageData.getData({ chunky: true });
+  var components = imageData.components || 3;
+  return window.PO.PngEncoder.encode(
+    imageData.width,
+    imageData.height,
+    rawData,
+    components >= 4 ? 6 /* RGBA */ : 2 /* RGB */,
+  );
 };
 
-window.PO.encodeSelectionMaskAsPngBase64 = async function (maskImageData) {
-  var photoshop = window.require("photoshop");
-  var imaging = photoshop.imaging;
+window.PO.encodeFormalMaskPng = async function (maskImageData) {
   var grayscaleBuffer = await maskImageData.getData({ chunky: true });
   var rgbBuffer = window.PO.createRgbBufferFromGrayscale(
     grayscaleBuffer,
     maskImageData.width,
     maskImageData.height,
   );
-
-  var rgbMaskImageData = await imaging.createImageDataFromBuffer(rgbBuffer, Object.assign({
-    width: maskImageData.width,
-    height: maskImageData.height,
-    components: 3,
-    colorSpace: "RGB",
-    colorProfile: "sRGB IEC61966-2.1",
-    chunky: true,
-  }, maskImageData.componentSize === 16 ? { fullRange: false } : {}));
-
-  try {
-    return await imaging.encodeImageData({
-      imageData: rgbMaskImageData,
-      type: "image/png",
-      base64: true,
-    });
-  } finally {
-    rgbMaskImageData.dispose();
-  }
+  return window.PO.PngEncoder.encode(
+    maskImageData.width,
+    maskImageData.height,
+    rgbBuffer,
+    2 /* RGB */,
+  );
 };
 
 window.PO.encodePreviewJpegBase64 = async function (previewImageData) {
@@ -338,13 +320,14 @@ window.PO.captureSelectionData = async function () {
         documentRef.height,
       );
 
-      /* ── Formal image (full resolution, RGB) ── */
+      /* ── Formal image (full resolution, RGBA) ── */
       var imageResult = await imaging.getPixels({
         documentID: documentRef.id,
         sourceBounds: captureBounds,
         colorSpace: "RGB",
         colorProfile: "sRGB IEC61966-2.1",
         componentSize: 8,
+        applyAlpha: true, /* preserve transparency for formal PNG */
       });
 
       /* ── UI preview (thumbnail, RGBA) ── */
@@ -371,7 +354,7 @@ window.PO.captureSelectionData = async function () {
           imageResult.imageData,
           captureBounds,
           imageResult.sourceBounds || captureBounds,
-          0, /* fill black for RGB */
+          0, /* fill transparent black for RGBA */
         );
 
         var paddedMaskData = await window.PO.padImageDataToBounds(
@@ -381,8 +364,9 @@ window.PO.captureSelectionData = async function () {
           0, /* fill black = not-selected for grayscale mask */
         );
 
-        var imageBase64 = await window.PO.encodeImageDataAsPngBase64(paddedImageData);
-        var maskBase64 = await window.PO.encodeSelectionMaskAsPngBase64(paddedMaskData);
+        /* Encode with vendor PNG encoder — real PNG bytes, preserves alpha */
+        var imagePngBase64 = await window.PO.encodeFormalImagePng(paddedImageData);
+        var maskPngBase64 = await window.PO.encodeFormalMaskPng(paddedMaskData);
         var previewJpegBase64 = await window.PO.encodePreviewJpegBase64(
           previewResult.imageData,
         );
@@ -391,8 +375,8 @@ window.PO.captureSelectionData = async function () {
           documentId: String(documentRef.id),
           bounds: selection,
           captureBounds: captureBounds,
-          imageBase64: imageBase64,
-          maskBase64: maskBase64,
+          imagePngBase64: imagePngBase64,
+          maskPngBase64: maskPngBase64,
           previewJpegBase64: previewJpegBase64,
           colorMode: String(documentRef.mode),
           resolution: documentRef.resolution,
