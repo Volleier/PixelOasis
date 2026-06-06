@@ -2,18 +2,29 @@ window.PO = window.PO || {};
 
 window.PO.buildSections = function () {
   var TEXT = window.PO.TEXT;
+
+  function sectionBody(section) {
+    if (section.id === "composition") {
+      return [
+        '<div class="po-action-row">',
+        '<button class="po-button" type="button" data-workflow="composition.remove.basic">移除</button>',
+        '<button class="po-button" type="button" data-workflow="composition.outpaint.basic">扩图</button>',
+        "</div>",
+      ].join("");
+    }
+    if (section.id === "quality") {
+      return [
+        '<div class="po-action-row">',
+        '<button class="po-button" type="button" data-workflow="quality.upscale.basic">超分放大</button>',
+        '<button class="po-button" type="button" data-workflow="quality.realism-enhance.basic">真实感增强</button>',
+        "</div>",
+      ].join("");
+    }
+    return '<div class="po-section__placeholder">' + section.hint + "</div>";
+  }
+
   return TEXT.sections
     .map(function (section) {
-      var actionMarkup =
-        section.id === "composition"
-          ? [
-              '<div class="po-action-row">',
-              '<button id="tool-btn" class="po-button" type="button">' + TEXT.selectRectTool + "</button>",
-              '<button id="capture-btn" class="po-button po-button--secondary" type="button">' + TEXT.captureSelection + "</button>",
-              "</div>",
-            ].join("")
-          : '<div class="po-section__placeholder">' + section.hint + "</div>";
-
       return [
         '<section class="po-section" data-section="',
         section.id,
@@ -24,7 +35,7 @@ window.PO.buildSections = function () {
         "</h2>",
         "</div>",
         '<div class="po-section__body">',
-        actionMarkup,
+        sectionBody(section),
         "</div>",
         "</section>",
       ].join("");

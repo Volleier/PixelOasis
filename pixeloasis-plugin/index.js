@@ -28,13 +28,9 @@
       settingsDrawer: document.getElementById("settings-drawer"),
       themeToggleButton: document.getElementById("theme-toggle-btn"),
       gatewayUrlInput: document.getElementById("gateway-url-input"),
-      captureButtons: [
-        document.getElementById("capture-btn"),
-      ].filter(Boolean),
       statusNode: document.getElementById("status"),
       previewEmpty: document.getElementById("preview-empty"),
       previewImage: document.getElementById("preview-image"),
-      toolButton: document.getElementById("tool-btn"),
     };
 
     /* ── Query parameter page elements ── */
@@ -66,11 +62,9 @@
       !els.settingsOverlay ||
       !els.settingsDrawer ||
       !els.themeToggleButton ||
-      !els.captureButtons.length ||
       !els.statusNode ||
       !els.previewEmpty ||
-      !els.previewImage ||
-      !els.toolButton
+      !els.previewImage
     ) {
       throw new Error("PixelOasis UI element not found.");
     }

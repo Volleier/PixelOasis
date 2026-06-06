@@ -82,7 +82,8 @@ body {
 .po-section__body {
   min-height: 48px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: var(--space-xs);
 }
 
 .po-section__placeholder {

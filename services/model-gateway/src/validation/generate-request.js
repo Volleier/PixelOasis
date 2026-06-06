@@ -2,9 +2,9 @@ const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
 const MAX_BOUNDS_SIZE = 32768;
 
 const KNOWN_WORKFLOWS = [
-  "composition.inpaint.basic",
-  "composition.object-remove.basic",
+  "composition.remove.basic",
   "composition.outpaint.basic",
+  "composition.inpaint.basic",
   "portrait.skin-retouch.basic",
   "portrait.face-restore.basic",
   "lighting.relight.basic",
@@ -12,6 +12,7 @@ const KNOWN_WORKFLOWS = [
   "effects.style-transfer.basic",
   "effects.background-effect.basic",
   "quality.upscale.basic",
+  "quality.realism-enhance.basic",
   "quality.denoise.basic",
 ];
 

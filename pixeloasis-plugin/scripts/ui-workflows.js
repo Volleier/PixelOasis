@@ -25,57 +25,42 @@ window.PO.SCHEDULER_OPTIONS = [
  * and persists user edits per workflowId in window.PO.workflowParams.
  */
 
-window.PO.ENTRY_WORKFLOWS = {
-  /* tool-btn → parameter set A */
-  "entry.tool-select": {
-    id: "entry.tool-select",
-    title: "工具选择",
-    category: "composition",
-    defaults: {
-      prompt: "",
-      negativePrompt: "",
-      seed: -1,
-      steps: 28,
-      cfg: 7,
-      denoise: 0.75,
-      sampler: "dpmpp_2m",
-      scheduler: "karras",
-    },
-  },
-  /* capture-btn → parameter set B */
-  "entry.capture": {
-    id: "entry.capture",
-    title: "选区生成",
-    category: "composition",
-    defaults: {
-      prompt: "",
-      negativePrompt: "",
-      seed: -1,
-      steps: 28,
-      cfg: 7,
-      denoise: 0.75,
-      sampler: "dpmpp_2m",
-      scheduler: "karras",
-    },
-  },
-};
-
 window.PO.WORKFLOWS = {
-  "portrait.skin-retouch.basic": {
-    id: "portrait.skin-retouch.basic",
-    title: "皮肤精修",
-    category: "portrait",
+
+  /* ═══ 构图工具 ═══ */
+
+  "composition.remove.basic": {
+    id: "composition.remove.basic",
+    title: "移除",
+    category: "composition",
     defaults: {
-      prompt: "",
-      negativePrompt: "",
+      prompt: "clean background, remove selected object, natural continuation, preserve surrounding texture and lighting",
+      negativePrompt: "object remains, blurry, distorted, duplicate object, artifacts, bad texture",
       seed: -1,
       steps: 28,
-      cfg: 7,
-      denoise: 0.75,
+      cfg: 6.5,
+      denoise: 0.85,
       sampler: "dpmpp_2m",
       scheduler: "karras",
     },
   },
+
+  "composition.outpaint.basic": {
+    id: "composition.outpaint.basic",
+    title: "扩图",
+    category: "composition",
+    defaults: {
+      prompt: "extend the scene naturally, consistent perspective, consistent lighting, seamless background continuation",
+      negativePrompt: "hard edge, visible seam, distorted perspective, repeated pattern, artifacts",
+      seed: -1,
+      steps: 30,
+      cfg: 7,
+      denoise: 0.9,
+      sampler: "dpmpp_2m",
+      scheduler: "karras",
+    },
+  },
+
   "composition.inpaint.basic": {
     id: "composition.inpaint.basic",
     title: "局部修复",
@@ -91,6 +76,59 @@ window.PO.WORKFLOWS = {
       scheduler: "karras",
     },
   },
+
+  /* ═══ 画质提升 ═══ */
+
+  "quality.upscale.basic": {
+    id: "quality.upscale.basic",
+    title: "超分放大",
+    category: "quality",
+    defaults: {
+      prompt: "enhance detail, clean texture, sharp but natural, preserve original structure",
+      negativePrompt: "over-sharpened, plastic skin, noisy, artifacts, changed identity, changed shape",
+      seed: -1,
+      steps: 18,
+      cfg: 5,
+      denoise: 0.25,
+      sampler: "dpmpp_2m",
+      scheduler: "karras",
+    },
+  },
+
+  "quality.realism-enhance.basic": {
+    id: "quality.realism-enhance.basic",
+    title: "真实感增强",
+    category: "quality",
+    defaults: {
+      prompt: "make the selected area more photorealistic, natural lighting, realistic texture, preserve identity, preserve composition",
+      negativePrompt: "overprocessed, plastic, waxy skin, distorted, changed face, changed object shape, artifacts",
+      seed: -1,
+      steps: 24,
+      cfg: 5.5,
+      denoise: 0.35,
+      sampler: "dpmpp_2m",
+      scheduler: "karras",
+    },
+  },
+
+  /* ═══ 后续扩展 ═══ */
+
+  "portrait.skin-retouch.basic": {
+    id: "portrait.skin-retouch.basic",
+    title: "皮肤精修",
+    category: "portrait",
+    defaults: {
+      prompt: "",
+      negativePrompt: "",
+      seed: -1,
+      steps: 28,
+      cfg: 7,
+      denoise: 0.75,
+      sampler: "dpmpp_2m",
+      scheduler: "karras",
+    },
+  },
+
   "lighting.relight.basic": {
     id: "lighting.relight.basic",
     title: "光影调整",
@@ -106,6 +144,7 @@ window.PO.WORKFLOWS = {
       scheduler: "karras",
     },
   },
+
   "effects.style-transfer.basic": {
     id: "effects.style-transfer.basic",
     title: "风格迁移",
@@ -121,28 +160,4 @@ window.PO.WORKFLOWS = {
       scheduler: "normal",
     },
   },
-  "quality.upscale.basic": {
-    id: "quality.upscale.basic",
-    title: "画质放大",
-    category: "quality",
-    defaults: {
-      prompt: "",
-      negativePrompt: "",
-      seed: -1,
-      steps: 20,
-      cfg: 7,
-      denoise: 0.3,
-      sampler: "dpmpp_2m",
-      scheduler: "karras",
-    },
-  },
-};
-
-/* Map category id → first workflow (for section buttons) */
-window.PO.CATEGORY_WORKFLOW = {
-  portrait: "portrait.skin-retouch.basic",
-  composition: "composition.inpaint.basic",
-  lighting: "lighting.relight.basic",
-  fx: "effects.style-transfer.basic",
-  quality: "quality.upscale.basic",
 };
