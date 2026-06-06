@@ -1,3 +1,7 @@
+/* DEPRECATED — replaced by services/model-gateway/ (G0 milestone).
+ * This file is kept for reference only.  Use `npm run dev` inside
+ * services/model-gateway/ to start the current gateway. */
+
 import { createServer } from "node:http";
 
 const registry = {
