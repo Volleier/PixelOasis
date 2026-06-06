@@ -24,6 +24,7 @@ const scriptFiles = [
   "ui-workflows.js",
   "photoshop.js",
   "gateway-client.js",
+  "photoshop-place-layer.js",
   "ui-status.js",
   "ui-preview.js",
   "ui-settings.js",

@@ -268,9 +268,27 @@ window.PO.initParameterPage = function () {
       var result = await window.PO.GatewayClient.generate(req);
 
       if (result && result.status === "succeeded" && result.result && result.result.imagePngBase64) {
-        /* Store result for P4 placement */
         window.PO.state.lastResult = result;
-        window.PO.showTransientStatus("生成完成 — " + result.result.width + "x" + result.result.height);
+
+        /* P4 — Place returned image as a new layer in Photoshop */
+        window.PO.setStatus("placing layer...");
+        var capture = window.PO.state.capture;
+        var placeBounds = capture
+          ? { left: capture.bounds.left, top: capture.bounds.top, width: capture.bounds.width, height: capture.bounds.height }
+          : null;
+        var workflowTitle = (window.PO.WORKFLOWS[req.workflowId] || {}).title || req.workflowId;
+
+        try {
+          var placeInfo = await window.PO.placeGeneratedLayer(
+            result.result.imagePngBase64,
+            capture ? capture.maskPngBase64 : null,
+            placeBounds,
+            workflowTitle,
+          );
+          window.PO.showTransientStatus("生成完成 — " + placeInfo.layerName);
+        } catch (placeErr) {
+          window.PO.showTransientStatus("生成完成但置入失败: " + (placeErr.message || placeErr));
+        }
       } else {
         var errMsg = (result && result.error && result.error.message)
           ? result.error.message
