@@ -3,10 +3,20 @@ import { createServer } from "node:http";
 const registry = {
   echo: {
     async execute(request) {
+      const imagePngBase64 =
+        request.selection?.imagePngBase64 ||
+        request.selection?.imageBase64 ||
+        "";
+
+      if (!imagePngBase64) {
+        throw new Error("Missing selection.imagePngBase64.");
+      }
+
       return {
         correlationId: request.correlationId,
+        status: "succeeded",
         result: {
-          imageBase64: request.selection.imageBase64,
+          imagePngBase64,
           mimeType: "image/png",
           metadata: {
             echoed: true,
@@ -34,9 +44,10 @@ function writeJson(response, statusCode, payload) {
 }
 
 function resolveAdapter(request) {
-  const adapter = registry[request.adapter.provider];
+  const provider = request.adapter?.provider || "echo";
+  const adapter = registry[provider];
   if (!adapter) {
-    throw new Error(`No adapter registered for provider "${request.adapter.provider}".`);
+    throw new Error(`No adapter registered for provider "${provider}".`);
   }
   return adapter;
 }

@@ -24,7 +24,7 @@ window.PO.captureAndPreview = async function () {
 window.PO.handleCapture = async function () {
   /* Capture, update preview, then open param page */
   await window.PO.captureAndPreview();
-  window.PO.openParameterPage("entry.capture");
+  window.PO.openParameterPage("composition.inpaint.basic");
 };
 
 window.PO.handleSelectTool = async function () {
@@ -56,7 +56,6 @@ window.PO.handleSelectTool = async function () {
 
   /* Capture + preview after tool switch (silent if no selection) */
   await window.PO.captureAndPreview();
-  window.PO.openParameterPage("entry.tool-select");
 };
 
 window.PO.bindEvents = function () {

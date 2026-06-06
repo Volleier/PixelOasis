@@ -267,7 +267,10 @@ window.PO.initParameterPage = function () {
     try {
       var result = await window.PO.GatewayClient.generate(req);
 
-      if (result && result.status === "succeeded" && result.result && result.result.imagePngBase64) {
+      /* Accept both protocol name (imagePngBase64) and legacy mock name (imageBase64) */
+      var returnedImage = (result && result.result && (result.result.imagePngBase64 || result.result.imageBase64)) || null;
+
+      if (result && result.status === "succeeded" && returnedImage) {
         window.PO.state.lastResult = result;
 
         /* P4 — Place returned image as a new layer in Photoshop */
@@ -280,7 +283,7 @@ window.PO.initParameterPage = function () {
 
         try {
           var placeInfo = await window.PO.placeGeneratedLayer(
-            result.result.imagePngBase64,
+            returnedImage,
             capture ? capture.maskPngBase64 : null,
             placeBounds,
             workflowTitle,
