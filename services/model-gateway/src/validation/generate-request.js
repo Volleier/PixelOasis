@@ -1,13 +1,7 @@
-/* validation/generate-request.js — G1: full request validation
- *
- * Rejects invalid requests before they touch any adapter (echo or ComfyUI).
- * DevList §9-G1.
- */
+const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
+const MAX_BOUNDS_SIZE = 32768;
 
-var MAX_IMAGE_BYTES = 50 * 1024 * 1024; /* 50 MB per image */
-
-/* ── Known-good workflow IDs ── */
-var KNOWN_WORKFLOWS = [
+const KNOWN_WORKFLOWS = [
   "composition.inpaint.basic",
   "composition.object-remove.basic",
   "composition.outpaint.basic",
@@ -19,171 +13,223 @@ var KNOWN_WORKFLOWS = [
   "effects.background-effect.basic",
   "quality.upscale.basic",
   "quality.denoise.basic",
-  /* Entry-point IDs used by the plugin */
-  "entry.tool-select",
-  "entry.capture",
 ];
 
-var KNOWN_SAMPLERS = [
-  "dpmpp_2m", "euler", "euler_ancestral", "ddim", "uni_pc",
+const KNOWN_SAMPLERS = [
+  "dpmpp_2m",
+  "euler",
+  "euler_ancestral",
+  "ddim",
+  "uni_pc",
 ];
 
-var KNOWN_SCHEDULERS = [
-  "karras", "normal", "simple", "ddim_uniform", "sg_uniform",
+const KNOWN_SCHEDULERS = [
+  "karras",
+  "normal",
+  "simple",
+  "ddim_uniform",
+  "sg_uniform",
 ];
 
-/* ── Base64 helpers ── */
+const BASE64_URL_RE = /^data:([^;]+);base64,/;
 
-var BASE64_URL_RE = /^data:([^;]+);base64,/;
-
-function stripDataUrlPrefix(b64) {
-  var match = b64.match(BASE64_URL_RE);
-  if (match) return { payload: b64.substring(match[0].length), mime: match[1] };
-  return { payload: b64, mime: null };
+function stripDataUrlPrefix(base64) {
+  const match = base64.match(BASE64_URL_RE);
+  if (match) {
+    return {
+      payload: base64.substring(match[0].length),
+      mime: match[1],
+    };
+  }
+  return { payload: base64, mime: null };
 }
 
-/* Check first few decoded bytes for PNG or JPEG magic */
-function detectImageFormat(b64) {
-  var info = stripDataUrlPrefix(b64);
+function decodedByteLength(base64) {
+  const info = stripDataUrlPrefix(base64);
+  const payload = info.payload.replace(/\s/g, "");
+  const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
+  return Math.floor((payload.length * 3) / 4) - padding;
+}
 
-  /* If data URL with explicit MIME, trust it */
-  if (info.mime) {
-    if (info.mime === "image/png") return "png";
-    if (info.mime === "image/jpeg" || info.mime === "image/jpg") return "jpeg";
+function decodeBase64Prefix(base64, charCount) {
+  const info = stripDataUrlPrefix(base64);
+  const payload = info.payload.substring(0, charCount);
+  return Buffer.from(payload, "base64");
+}
+
+function detectImageFormat(base64) {
+  if (typeof base64 !== "string" || !base64.trim()) {
+    return "unknown";
   }
 
-  /* Decode first 4 bytes to check magic */
-  try {
-    var decoded = atob(info.payload.substring(0, 8));
-    var b0 = decoded.charCodeAt(0);
-    var b1 = decoded.charCodeAt(1);
+  const info = stripDataUrlPrefix(base64);
+  if (info.mime === "image/png") return "png";
+  if (info.mime === "image/jpeg" || info.mime === "image/jpg") return "jpeg";
 
-    /* PNG: 0x89 'P' 'N' 'G' */
-    if (b0 === 0x89 && decoded.charCodeAt(1) === 0x50 && decoded.charCodeAt(2) === 0x4E && decoded.charCodeAt(3) === 0x47) {
+  try {
+    const bytes = decodeBase64Prefix(base64, 16);
+    if (
+      bytes.length >= 4 &&
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4e &&
+      bytes[3] === 0x47
+    ) {
       return "png";
     }
-    /* JPEG: 0xFF 0xD8 */
-    if (b0 === 0xFF && b1 === 0xD8) {
+    if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8) {
       return "jpeg";
     }
-  } catch (e) {
-    /* Invalid base64 — handled below */
+  } catch (error) {
+    return "unknown";
   }
 
   return "unknown";
 }
 
-/* ── Main validation ── */
+function invalid(error) {
+  return { valid: false, error };
+}
+
+function validatePngField(value, fieldName) {
+  if (!value || typeof value !== "string") {
+    return invalid(`Missing ${fieldName}.`);
+  }
+
+  const format = detectImageFormat(value);
+  if (format === "jpeg") {
+    return invalid(`${fieldName} must be PNG, not JPEG.`);
+  }
+  if (format !== "png") {
+    return invalid(`${fieldName} must be a valid PNG base64 payload.`);
+  }
+
+  if (decodedByteLength(value) > MAX_IMAGE_BYTES) {
+    return invalid(`${fieldName} exceeds ${MAX_IMAGE_BYTES} bytes.`);
+  }
+
+  return { valid: true };
+}
+
+function validateBounds(bounds) {
+  if (!bounds || typeof bounds !== "object") {
+    return invalid("Missing selection.bounds.");
+  }
+
+  if (typeof bounds.left !== "number" || bounds.left < 0) {
+    return invalid("selection.bounds.left must be a non-negative number.");
+  }
+  if (typeof bounds.top !== "number" || bounds.top < 0) {
+    return invalid("selection.bounds.top must be a non-negative number.");
+  }
+  if (
+    typeof bounds.width !== "number" ||
+    bounds.width <= 0 ||
+    bounds.width > MAX_BOUNDS_SIZE
+  ) {
+    return invalid(`selection.bounds.width must be between 1 and ${MAX_BOUNDS_SIZE}.`);
+  }
+  if (
+    typeof bounds.height !== "number" ||
+    bounds.height <= 0 ||
+    bounds.height > MAX_BOUNDS_SIZE
+  ) {
+    return invalid(`selection.bounds.height must be between 1 and ${MAX_BOUNDS_SIZE}.`);
+  }
+
+  return { valid: true };
+}
+
+function validateParameters(parameters) {
+  if (parameters === undefined) return { valid: true };
+  if (!parameters || typeof parameters !== "object") {
+    return invalid("parameters must be an object.");
+  }
+
+  if (parameters.steps !== undefined) {
+    const steps = Number(parameters.steps);
+    if (!Number.isFinite(steps) || steps < 1 || steps > 100) {
+      return invalid("parameters.steps must be between 1 and 100.");
+    }
+  }
+
+  if (parameters.cfg !== undefined) {
+    const cfg = Number(parameters.cfg);
+    if (!Number.isFinite(cfg) || cfg < 1 || cfg > 30) {
+      return invalid("parameters.cfg must be between 1 and 30.");
+    }
+  }
+
+  if (parameters.denoise !== undefined) {
+    const denoise = Number(parameters.denoise);
+    if (!Number.isFinite(denoise) || denoise < 0 || denoise > 1) {
+      return invalid("parameters.denoise must be between 0 and 1.");
+    }
+  }
+
+  if (
+    parameters.sampler !== undefined &&
+    KNOWN_SAMPLERS.indexOf(parameters.sampler) === -1
+  ) {
+    return invalid(`Unknown sampler: ${parameters.sampler}.`);
+  }
+
+  if (
+    parameters.scheduler !== undefined &&
+    KNOWN_SCHEDULERS.indexOf(parameters.scheduler) === -1
+  ) {
+    return invalid(`Unknown scheduler: ${parameters.scheduler}.`);
+  }
+
+  if (parameters.seed !== undefined) {
+    const seed = Number(parameters.seed);
+    if (!Number.isFinite(seed)) {
+      return invalid("parameters.seed must be numeric.");
+    }
+  }
+
+  return { valid: true };
+}
 
 export function validateGenerateRequest(body) {
-  /* ── Top-level shape ── */
   if (!body || typeof body !== "object") {
-    return { valid: false, error: "Request body must be a JSON object." };
+    return invalid("Request body must be a JSON object.");
   }
 
   if (!body.correlationId || typeof body.correlationId !== "string") {
-    return { valid: false, error: "缺少 correlationId" };
+    return invalid("Missing correlationId.");
   }
 
   if (!body.workflowId || typeof body.workflowId !== "string") {
-    return { valid: false, error: "缺少 workflowId" };
+    return invalid("Missing workflowId.");
   }
 
   if (KNOWN_WORKFLOWS.indexOf(body.workflowId) === -1) {
-    return { valid: false, error: "未知 workflowId: " + body.workflowId };
+    return invalid(`Unknown workflowId: ${body.workflowId}.`);
   }
 
-  /* ── Selection object ── */
-  var selection = body.selection;
+  const selection = body.selection;
   if (!selection || typeof selection !== "object") {
-    return { valid: false, error: "缺少 selection 对象" };
+    return invalid("Missing selection.");
   }
 
-  /* ── Formal image (must be PNG, not JPEG) ── */
-  var image = selection.imagePngBase64 || selection.imageBase64 || "";
-  if (!image) {
-    return { valid: false, error: "缺少 selection.imagePngBase64" };
-  }
+  const imageValidation = validatePngField(
+    selection.imagePngBase64 || selection.imageBase64,
+    "selection.imagePngBase64",
+  );
+  if (!imageValidation.valid) return imageValidation;
 
-  var imageFormat = detectImageFormat(image);
-  if (imageFormat === "jpeg") {
-    return { valid: false, error: "正式图像不能使用 JPEG — 请使用 PNG 格式" };
-  }
-  if (imageFormat === "unknown") {
-    return { valid: false, error: "无法识别图像格式 — 请确认是有效的 PNG base64" };
-  }
+  const maskValidation = validatePngField(
+    selection.maskPngBase64 || selection.maskBase64,
+    "selection.maskPngBase64",
+  );
+  if (!maskValidation.valid) return maskValidation;
 
-  if (image.length > MAX_IMAGE_BYTES) {
-    return { valid: false, error: "图像数据超过 50 MB 限制" };
-  }
+  const boundsValidation = validateBounds(selection.bounds);
+  if (!boundsValidation.valid) return boundsValidation;
 
-  /* ── Mask (must be PNG if present) ── */
-  var mask = selection.maskPngBase64 || selection.maskBase64 || "";
-  if (mask) {
-    var maskFormat = detectImageFormat(mask);
-    if (maskFormat === "jpeg") {
-      return { valid: false, error: "正式蒙版不能使用 JPEG — 请使用 PNG 格式" };
-    }
-    if (mask.length > MAX_IMAGE_BYTES) {
-      return { valid: false, error: "蒙版数据超过 50 MB 限制" };
-    }
-  }
-
-  /* ── Bounds ── */
-  var bounds = selection.bounds;
-  if (bounds) {
-    if (typeof bounds.left !== "number" || bounds.left < 0) {
-      return { valid: false, error: "bounds.left 无效" };
-    }
-    if (typeof bounds.top !== "number" || bounds.top < 0) {
-      return { valid: false, error: "bounds.top 无效" };
-    }
-    if (typeof bounds.width !== "number" || bounds.width <= 0 || bounds.width > 32768) {
-      return { valid: false, error: "bounds.width 无效 (需在 1–32768 之间)" };
-    }
-    if (typeof bounds.height !== "number" || bounds.height <= 0 || bounds.height > 32768) {
-      return { valid: false, error: "bounds.height 无效 (需在 1–32768 之间)" };
-    }
-  }
-
-  /* ── Parameters (if present) ── */
-  var params = body.parameters;
-  if (params && typeof params === "object") {
-    if (params.steps !== undefined) {
-      var steps = Number(params.steps);
-      if (!Number.isFinite(steps) || steps < 1 || steps > 100) {
-        return { valid: false, error: "steps 需在 1–100 之间" };
-      }
-    }
-    if (params.cfg !== undefined) {
-      var cfg = Number(params.cfg);
-      if (!Number.isFinite(cfg) || cfg < 1 || cfg > 30) {
-        return { valid: false, error: "cfg 需在 1–30 之间" };
-      }
-    }
-    if (params.denoise !== undefined) {
-      var denoise = Number(params.denoise);
-      if (!Number.isFinite(denoise) || denoise < 0 || denoise > 1) {
-        return { valid: false, error: "denoise 需在 0–1 之间" };
-      }
-    }
-    if (params.sampler !== undefined) {
-      if (KNOWN_SAMPLERS.indexOf(params.sampler) === -1) {
-        return { valid: false, error: "未知 sampler: " + params.sampler + " — 可选: " + KNOWN_SAMPLERS.join(", ") };
-      }
-    }
-    if (params.scheduler !== undefined) {
-      if (KNOWN_SCHEDULERS.indexOf(params.scheduler) === -1) {
-        return { valid: false, error: "未知 scheduler: " + params.scheduler + " — 可选: " + KNOWN_SCHEDULERS.join(", ") };
-      }
-    }
-    if (params.seed !== undefined) {
-      var seed = Number(params.seed);
-      if (!Number.isFinite(seed)) {
-        return { valid: false, error: "seed 必须为数字" };
-      }
-    }
-  }
+  const paramsValidation = validateParameters(body.parameters);
+  if (!paramsValidation.valid) return paramsValidation;
 
   return { valid: true };
 }
