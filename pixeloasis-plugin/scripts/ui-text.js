@@ -14,7 +14,6 @@ window.PO.TEXT = {
   previewTitle: "预览区",
   previewAction: "抓取当前选区",
   previewEmpty: "暂无预览内容",
-  previewCaptured: "已抓取选区",
   selectRectTool: "选择矩形选框工具",
   captureSelection: "抓取当前选区",
   sections: [

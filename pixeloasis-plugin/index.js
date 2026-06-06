@@ -1,14 +1,17 @@
 /* PixelOasis — Assembly & startup
  *
  * Dependencies (loaded via <script> tags in index.html, in order):
- *   scripts/ui-text.js       → window.PO.TEXT
- *   scripts/state.js          → window.PO.state, clearTransientTimer
- *   scripts/ui-template.js    → window.PO.buildTemplate
- *   scripts/photoshop.js      → PS API wrappers
- *   scripts/ui-status.js     → setStatus, showTransientStatus, refreshSelectionStatus
- *   scripts/ui-preview.js     → updatePreview
- *   scripts/ui-settings.js    → toggleSettings, initSettings
- *   scripts/actions.js        → handleCapture, handleSelectTool, bindEvents
+ *   scripts/ui-text.js        → window.PO.TEXT
+ *   scripts/state.js           → window.PO.state, clearTransientTimer
+ *   scripts/ui-template.js     → window.PO.buildTemplate
+ *   scripts/ui-workflows.js    → window.PO.WORKFLOWS, CATEGORY_WORKFLOW
+ *   scripts/vendor/png-encoder.js → window.PO.PngEncoder
+ *   scripts/photoshop.js       → PS API wrappers
+ *   scripts/ui-status.js      → setStatus, showTransientStatus, refreshSelectionStatus
+ *   scripts/ui-preview.js      → updatePreview
+ *   scripts/ui-settings.js     → toggleSettings, initSettings
+ *   scripts/ui-parameters.js   → buildParameterPage, open/close/save, initParameterPage
+ *   scripts/actions.js         → handleCapture, handleSelectTool, bindEvents
  */
 
 (function () {
@@ -26,12 +29,32 @@
       themeToggleButton: document.getElementById("theme-toggle-btn"),
       captureButtons: [
         document.getElementById("capture-btn"),
-        document.getElementById("capture-btn-preview"),
       ].filter(Boolean),
       statusNode: document.getElementById("status"),
       previewEmpty: document.getElementById("preview-empty"),
       previewImage: document.getElementById("preview-image"),
       toolButton: document.getElementById("tool-btn"),
+    };
+
+    /* ── Query parameter page elements ── */
+    window.PO.paramElements = {
+      page: document.getElementById("param-page"),
+      title: document.getElementById("param-title"),
+      backBtn: document.getElementById("param-back-btn"),
+      backBtnBottom: document.getElementById("param-back-btn-bottom"),
+      prompt: document.getElementById("param-prompt"),
+      negPrompt: document.getElementById("param-neg-prompt"),
+      seed: document.getElementById("param-seed"),
+      randomSeedBtn: document.getElementById("param-random-seed"),
+      steps: document.getElementById("param-steps"),
+      stepsVal: document.getElementById("param-steps-val"),
+      cfg: document.getElementById("param-cfg"),
+      cfgVal: document.getElementById("param-cfg-val"),
+      denoise: document.getElementById("param-denoise"),
+      denoiseVal: document.getElementById("param-denoise-val"),
+      sampler: document.getElementById("param-sampler"),
+      scheduler: document.getElementById("param-scheduler"),
+      runBtn: document.getElementById("param-run-btn"),
     };
 
     var els = window.PO.elements;
@@ -53,6 +76,9 @@
 
     /* ── Bind events ── */
     window.PO.bindEvents();
+
+    /* ── Init parameter page ── */
+    window.PO.initParameterPage();
 
     /* ── Startup ── */
     try {

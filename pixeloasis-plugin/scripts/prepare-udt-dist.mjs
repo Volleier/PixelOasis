@@ -21,10 +21,12 @@ const scriptFiles = [
   "ui-text.js",
   "state.js",
   "ui-template.js",
+  "ui-workflows.js",
   "photoshop.js",
   "ui-status.js",
   "ui-preview.js",
   "ui-settings.js",
+  "ui-parameters.js",
   "actions.js",
 ];
 

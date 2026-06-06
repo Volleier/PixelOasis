@@ -128,23 +128,11 @@ body {
   background: #4d4d4d;
 }
 
-/* ── Preview area (fixed height, image only) ── */
+/* ── Preview area (normal flow, below main) ── */
 
 .po-preview {
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-surface);
-}
-
-.po-preview__header {
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--space-sm);
-  border-bottom: 1px solid var(--border-muted);
-  color: var(--text-primary);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
 }
 
 .po-preview__viewport {
@@ -175,23 +163,6 @@ body {
 
 .po-preview__empty[hidden] {
   display: none;
-}
-
-.po-preview-button {
-  height: 22px;
-  min-width: 92px;
-  padding: 0 10px;
-  border: 1px solid #4a4a4a;
-  border-radius: 0;
-  background: var(--bg-control-alt);
-  color: #efefef;
-  font: inherit;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-}
-
-.po-preview-button:hover {
-  background: #4d4d4d;
 }
 
 /* ── Bottom bar ── */
@@ -236,7 +207,7 @@ body {
   background: #4d4d4d;
 }
 
-/* ── Settings overlay (covers content, outside document flow) ── */
+/* ── 设置区 overlay (covers main + preview, outside document flow) ── */
 
 .po-settings-overlay {
   position: absolute;
@@ -252,7 +223,7 @@ body {
   display: none;
 }
 
-/* ── Settings drawer (slides over content) ── */
+/* ── 设置区 drawer (slides over content) ── */
 
 .po-settings-drawer {
   position: absolute;
@@ -347,4 +318,268 @@ body {
   color: #ffb5b5;
   background: var(--bg-primary);
   font-size: 12px;
+}
+
+/* ── Workflow button (in section body) ── */
+
+.po-button--workflow {
+  width: 100%;
+  margin-top: var(--space-xs);
+  background: var(--bg-surface-alt);
+  border-color: var(--border-muted);
+  font-size: var(--font-size-sm);
+  justify-content: space-between;
+  text-align: left;
+}
+
+.po-button--workflow:hover {
+  background: #4a4a4a;
+}
+
+/* ── Primary action button ── */
+
+.po-button--primary {
+  background: #4a7ab5;
+  border-color: #5a8fc5;
+  color: #fff;
+  font-weight: 600;
+}
+
+.po-button--primary:hover {
+  background: #5a8fc5;
+}
+
+/* ── Parameter page (full-screen overlay) ── */
+
+.po-param-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 193px; /* 32px bottom-bar + 160px preview + 1px — main area only */
+  z-index: 20; /* above settings overlay/drawer */
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+}
+
+.po-param-page[hidden] {
+  display: none;
+}
+
+.po-param-page__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: 36px;
+  padding: 0 var(--space-sm);
+  border-bottom: 1px solid var(--border-muted);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.po-param-back-btn {
+  height: 24px;
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--border-muted);
+  background: var(--bg-control-alt);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.po-param-back-btn:hover {
+  background: #4d4d4d;
+}
+
+.po-param-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ── Parameter page scroll area ── */
+
+.po-param-page__scroll {
+  flex: 1;
+  min-height: 0; /* allow shrinking so overflow-y:auto kicks in */
+  overflow-y: auto;
+  padding: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* ── Parameter groups ── */
+
+.po-param-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0; /* never compress — scroll instead */
+}
+
+.po-param-label {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.po-param-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 52px; /* never collapse to zero */
+  padding: var(--space-xs);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  resize: vertical;
+}
+
+.po-param-textarea:focus {
+  outline: none;
+  border-color: #5a8fc5;
+}
+
+/* ── Parameter rows (horizontal) ── */
+
+.po-param-row {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: flex-end;
+  flex-shrink: 0; /* never compress — scroll instead */
+}
+
+.po-param-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.po-param-col--shrink {
+  flex: 0 0 auto;
+}
+
+.po-param-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+}
+
+.po-param-input:focus {
+  outline: none;
+  border-color: #5a8fc5;
+}
+
+/* ── Range sliders ── */
+
+.po-param-range-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.po-param-range-val {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.po-param-range {
+  width: 100%;
+  height: 20px;
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.po-param-range::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--border-strong);
+  border-radius: 2px;
+}
+
+.po-param-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #5a8fc5;
+  margin-top: -5px;
+  border: none;
+}
+
+.po-param-range:focus {
+  outline: none;
+}
+
+.po-param-range:focus::-webkit-slider-thumb {
+  background: #6a9fd5;
+  box-shadow: 0 0 0 2px rgba(90, 143, 197, 0.3);
+}
+
+/* ── Select dropdowns ── */
+
+.po-param-select {
+  width: 100%;
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.po-param-select:focus {
+  outline: none;
+  border-color: #5a8fc5;
+}
+
+/* ── Toggle button (random seed) ── */
+
+.po-param-toggle-btn {
+  height: 28px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-control-alt);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.po-param-toggle-btn:hover {
+  background: #4d4d4d;
+}
+
+/* ── Parameter page action buttons (pinned at bottom) ── */
+
+.po-param-actions {
+  display: flex;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border-top: 1px solid var(--border-muted);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.po-param-actions .po-button {
+  flex: 1;
 }

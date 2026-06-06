@@ -4,18 +4,31 @@ var selectRectangularMarqueeToolCommand = [
   { _obj: "select", _target: [{ _ref: "marqueeRectTool" }] },
 ];
 
-window.PO.handleCapture = async function () {
+/* Shared: capture current selection + update preview.
+ * Returns the capture object on success, null if no selection. */
+window.PO.captureAndPreview = async function () {
   try {
     window.PO.setStatus("capturing...");
     var capture = await window.PO.captureSelectionData();
     window.PO.updatePreview(capture);
     window.PO.showTransientStatus(window.PO.formatSelectionBounds(capture.bounds));
+    return capture;
   } catch (error) {
+    /* No selection or no document → clear preview, don't throw */
+    window.PO.updatePreview(null);
     window.PO.setStatus(error instanceof Error ? error.message : String(error));
+    return null;
   }
 };
 
+window.PO.handleCapture = async function () {
+  /* Capture, update preview, then open param page */
+  await window.PO.captureAndPreview();
+  window.PO.openParameterPage("entry.capture");
+};
+
 window.PO.handleSelectTool = async function () {
+  /* Switch tool, capture current selection (if any), update preview, open param page */
   try {
     var photoshop = window.require("photoshop");
     var app = photoshop.app;
@@ -40,6 +53,10 @@ window.PO.handleSelectTool = async function () {
   } catch (error) {
     window.PO.setStatus(error instanceof Error ? error.message : String(error));
   }
+
+  /* Capture + preview after tool switch (silent if no selection) */
+  await window.PO.captureAndPreview();
+  window.PO.openParameterPage("entry.tool-select");
 };
 
 window.PO.bindEvents = function () {
@@ -48,7 +65,7 @@ window.PO.bindEvents = function () {
   /* Settings (overlay + drawer) */
   window.PO.initSettings();
 
-  /* Capture buttons */
+  /* Capture button */
   els.captureButtons.forEach(function (button) {
     button.addEventListener("click", window.PO.handleCapture);
   });

@@ -44,12 +44,8 @@ window.PO.buildTemplate = function () {
     "</div>",
     "</main>",
 
-    /* ── Preview area (fixed height, image only) ── */
+    /* ── Preview area (in normal flow, below main) ── */
     '<section class="po-preview">',
-    '<div class="po-preview__header">',
-    "<span>" + TEXT.previewTitle + "</span>",
-    '<button id="capture-btn-preview" class="po-preview-button" type="button">' + TEXT.previewAction + "</button>",
-    "</div>",
     '<div class="po-preview__viewport">',
     '<img id="preview-image" class="po-preview__image" alt="selection preview" />',
     '<div id="preview-empty" class="po-preview__empty">' + TEXT.previewEmpty + "</div>",
@@ -62,7 +58,7 @@ window.PO.buildTemplate = function () {
     '<button id="settings-btn" class="po-bottom-button" type="button">' + TEXT.settings + "</button>",
     "</footer>",
 
-    /* ── Settings overlay + drawer (outside document flow) ── */
+    /* ── 设置区 (overlay + drawer, root-level, covers main + preview) ── */
     '<div id="settings-overlay" class="po-settings-overlay" hidden></div>',
     '<aside id="settings-drawer" class="po-settings-drawer" hidden>',
     '<div class="po-settings-drawer__body">',
@@ -77,6 +73,9 @@ window.PO.buildTemplate = function () {
     "</div>",
     "</div>",
     "</aside>",
+
+    /* ── 参数页 (full-screen overlay, covers main + preview, not bottom bar) ── */
+    window.PO.buildParameterPage ? window.PO.buildParameterPage() : "",
 
     "</div>",
   ].join("");

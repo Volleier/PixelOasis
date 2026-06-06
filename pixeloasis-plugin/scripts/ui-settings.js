@@ -10,12 +10,10 @@ window.PO.toggleSettings = function () {
     els.settingsOverlay.hidden = false;
     els.settingsDrawer.hidden = false;
     els.settingsDrawer.setAttribute("aria-hidden", "false");
-    window.PO.showTransientStatus("settings opened");
   } else {
     els.settingsOverlay.hidden = true;
     els.settingsDrawer.hidden = true;
     els.settingsDrawer.setAttribute("aria-hidden", "true");
-    window.PO.showTransientStatus("settings closed");
   }
 };
 
