@@ -27,6 +27,7 @@
       settingsOverlay: document.getElementById("settings-overlay"),
       settingsDrawer: document.getElementById("settings-drawer"),
       themeToggleButton: document.getElementById("theme-toggle-btn"),
+      gatewayUrlInput: document.getElementById("gateway-url-input"),
       captureButtons: [
         document.getElementById("capture-btn"),
       ].filter(Boolean),

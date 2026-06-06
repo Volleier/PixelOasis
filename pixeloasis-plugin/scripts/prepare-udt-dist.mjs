@@ -23,6 +23,7 @@ const scriptFiles = [
   "ui-template.js",
   "ui-workflows.js",
   "photoshop.js",
+  "gateway-client.js",
   "ui-status.js",
   "ui-preview.js",
   "ui-settings.js",

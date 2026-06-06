@@ -71,6 +71,13 @@ window.PO.buildTemplate = function () {
     '<span class="po-toggle__thumb"></span>',
     "</button>",
     "</div>",
+
+    /* Gateway URL */
+    '<div class="po-setting-group">',
+    '<label class="po-setting-row__label" for="gateway-url-input">' + TEXT.gatewayUrlLabel + "</label>",
+    '<input id="gateway-url-input" class="po-settings-url-input" type="text" placeholder="' + TEXT.gatewayUrlPlaceholder + '" />',
+    "</div>",
+
     "</div>",
     "</aside>",
 

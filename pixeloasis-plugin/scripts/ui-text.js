@@ -11,6 +11,8 @@ window.PO.TEXT = {
   themeMode: "亮暗模式",
   themeHint: "仅显示界面，逻辑暂未接入",
   themeClicked: "theme toggle clicked",
+  gatewayUrlLabel: "网关地址",
+  gatewayUrlPlaceholder: "http://127.0.0.1:8787",
   previewTitle: "预览区",
   previewAction: "抓取当前选区",
   previewEmpty: "暂无预览内容",

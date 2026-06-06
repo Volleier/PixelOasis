@@ -37,4 +37,16 @@ window.PO.initSettings = function () {
     );
     window.PO.showTransientStatus("theme toggle clicked");
   });
+
+  /* Gateway URL — save on change */
+  if (els.gatewayUrlInput) {
+    els.gatewayUrlInput.value = window.PO.state.gatewayUrl || "http://127.0.0.1:8787";
+    els.gatewayUrlInput.addEventListener("change", function () {
+      var val = els.gatewayUrlInput.value.trim();
+      if (val) {
+        window.PO.state.gatewayUrl = val;
+        window.PO.showTransientStatus("网关地址已更新");
+      }
+    });
+  }
 };

@@ -242,15 +242,46 @@ window.PO.initParameterPage = function () {
     els.denoiseVal.textContent = parseFloat(els.denoise.value).toFixed(2);
   });
 
-  /* Run button — placeholder (wired in P3) */
-  els.runBtn.addEventListener("click", function () {
+  /* Run button — P3: send to gateway */
+  els.runBtn.addEventListener("click", async function () {
     window.PO.saveParameterPage();
     var req = window.PO.assembleGenerateRequest();
     if (!req || !req.selection) {
       window.PO.showTransientStatus("请先抓取选区再生成");
       return;
     }
-    /* P3 gateway client will go here */
-    window.PO.showTransientStatus("生成功能将在 P3 阶段接入网关");
+
+    /* Progress: check gateway */
+    window.PO.setStatus("checking gateway...");
+    var healthy = await window.PO.GatewayClient.health();
+    if (!healthy) {
+      window.PO.showTransientStatus("网关不可达 — 请确认 " + (window.PO.state.gatewayUrl || "http://127.0.0.1:8787") + " 已启动");
+      return;
+    }
+
+    /* Progress: sending */
+    window.PO.setStatus("sending request...");
+    els.runBtn.disabled = true;
+    els.runBtn.textContent = "生成中...";
+
+    try {
+      var result = await window.PO.GatewayClient.generate(req);
+
+      if (result && result.status === "succeeded" && result.result && result.result.imagePngBase64) {
+        /* Store result for P4 placement */
+        window.PO.state.lastResult = result;
+        window.PO.showTransientStatus("生成完成 — " + result.result.width + "x" + result.result.height);
+      } else {
+        var errMsg = (result && result.error && result.error.message)
+          ? result.error.message
+          : "生成失败";
+        window.PO.showTransientStatus(errMsg);
+      }
+    } catch (error) {
+      window.PO.showTransientStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      els.runBtn.disabled = false;
+      els.runBtn.textContent = "生成";
+    }
   });
 };

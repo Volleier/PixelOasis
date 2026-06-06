@@ -270,6 +270,32 @@ body {
   margin-top: 2px;
 }
 
+/* ── Settings group (label + input) ── */
+
+.po-setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: var(--space-sm);
+}
+
+.po-settings-url-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 26px;
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-xs);
+}
+
+.po-settings-url-input:focus {
+  outline: none;
+  border-color: #5a8fc5;
+}
+
 /* ── Toggle switch ── */
 
 .po-toggle {
