@@ -12,8 +12,17 @@ await mkdir(distDir, { recursive: true });
 await mkdir(distScriptsDir, { recursive: true });
 
 /* Root-level files */
-for (const filename of ["index.html", "index.js", "panel.css", "manifest.json"]) {
+const rootFiles = ["index.html", "index.js", "panel.css", "manifest.json"];
+for (const filename of rootFiles) {
   await copyFile(resolve(pluginRoot, filename), resolve(distDir, filename));
+}
+
+/* Icons */
+const distIconsDir = resolve(distDir, "icons");
+await mkdir(distIconsDir, { recursive: true });
+const iconFiles = ["icon.png", "icon@1x.png", "icon@2x.png"];
+for (const filename of iconFiles) {
+  await copyFile(resolve(pluginRoot, "icons", filename), resolve(distIconsDir, filename));
 }
 
 /* Script modules */

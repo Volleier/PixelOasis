@@ -1,5 +1,5 @@
 node_modules
-dist
+pixeloasis-plugin/dist
 .turbo
 .DS_Store
 coverage
