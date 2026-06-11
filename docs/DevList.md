@@ -51,7 +51,7 @@ Recommended ComfyUI access method:
 - The plugin should call one stable local endpoint, for example `POST http://127.0.0.1:8787/generate`.
 - The local gateway owns ComfyUI workflow transformation, model selection, file upload, queue polling, progress tracking, and result retrieval.
 - ComfyUI should stay official and unmodified. Do not require custom ComfyUI nodes for the first accepted workflow.
-- The default ComfyUI endpoint is `http://127.0.0.1:8188`.
+- The ComfyUI endpoint depends on the local distribution: ComfyUI Desktop is currently `http://127.0.0.1:8000` on this machine, while manual/portable ComfyUI commonly uses `http://127.0.0.1:8188`.
 - The default PixelOasis gateway endpoint is `http://127.0.0.1:8787`.
 
 Reason:
@@ -498,124 +498,441 @@ Acceptance:
 
 ## 9. Gateway Development Phases
 
-### Phase G0: Service Skeleton
+Gateway development can continue now. The current repository already has the service skeleton, request validation, an echo adapter, and plugin-side gateway calls. The remaining work is the real ComfyUI path: discover the local ComfyUI endpoint, build/import an executable workflow, register that workflow in the gateway, and run it without Photoshop before attempting the full UXP route.
 
-Tasks:
+Important runtime note for ComfyUI Desktop:
 
-- Replace current placeholder service with `services/model-gateway`.
-- Add `package.json`.
-- Add server start script.
-- Add config for ComfyUI base URL.
-- Add routes:
+- ComfyUI Desktop manages and launches a local ComfyUI instance. In the current local environment it listens at `http://127.0.0.1:8000`, not `http://127.0.0.1:8188`.
+- Manual/portable ComfyUI commonly uses `http://127.0.0.1:8188`.
+- The gateway must support `COMFYUI_URL` and should later auto-detect candidates in this order: explicit env var, `http://127.0.0.1:8000`, then `http://127.0.0.1:8188`.
+- The Photoshop plugin gateway URL remains `http://127.0.0.1:8787`. Do not point the plugin directly at ComfyUI.
+
+### Phase G0: Gateway Runtime Hardening
+
+Current status: mostly implemented. Harden it before adding the real adapter.
+
+Implementation details:
+
+- Keep `services/model-gateway` as the only gateway service.
+- Keep routes:
   - `GET /health`
   - `GET /workflows`
   - `POST /generate`
-- Add structured error responses.
+- Add explicit ComfyUI upstream configuration:
+  - `COMFYUI_URL=http://127.0.0.1:8000` for ComfyUI Desktop on this machine.
+  - fallback candidates for manual/portable ComfyUI.
+- Extend `GET /health` so it can optionally report upstream ComfyUI status:
+  - gateway process status
+  - configured ComfyUI base URL
+  - result of `GET /system_stats`
+  - result of `GET /object_info` only when a deeper check is requested
+- Keep structured errors shaped for the plugin:
+  - `correlationId`
+  - `error.code`
+  - `error.message`
+  - optional `error.details` for developer diagnostics
+- Keep the echo adapter available for Photoshop-side testing and make the active provider explicit in config:
+  - `PO_MODEL_PROVIDER=echo`
+  - `PO_MODEL_PROVIDER=comfyui`
 
 Acceptance:
 
-- `npm install` works inside `services/model-gateway`.
-- `npm run dev` starts the service.
-- `GET /health` returns JSON.
+- `npm run dev` starts the gateway on `127.0.0.1:8787`.
+- `GET /health` works when ComfyUI is offline.
+- `GET /health?upstream=1` reports a clear offline/online status for ComfyUI.
+- With ComfyUI Desktop running, the gateway can reach `http://127.0.0.1:8000/system_stats`.
+- Existing echo generation still works after the config changes.
 
-### Phase G1: Request Validation
+### Phase G1: Request Validation Completion
 
-Tasks:
+Current status: partially implemented. Complete it before forwarding any request to ComfyUI.
 
-- Validate request shape.
-- Validate required PNG fields.
-- Validate bounds.
-- Validate workflowId.
-- Validate parameter ranges.
-- Reject JPEG as formal image or formal mask.
-- Enforce payload size limits.
+Implementation details:
+
+- Validate the public plugin request shape:
+  - `correlationId`
+  - `workflowId`
+  - `selection.bounds`
+  - `selection.imagePngBase64`
+  - `selection.maskPngBase64`
+  - `parameters`
+- Treat `workflowId` as the public PixelOasis workflow ID, for example `composition.inpaint.basic`.
+- Do not expose the ComfyUI API workflow filename or node IDs to the plugin.
+- Support an internal workflow variant in metadata, for example:
+  - public `workflowId`: `composition.inpaint.basic`
+  - internal `variantId`: `sdxl-inpaint-basic`
+  - internal API file: `sdxl-inpaint-basic.api.json`
+- Validate formal image and mask as PNG only.
+- Reject JPEG for formal image/mask even if a preview JPEG exists.
+- Validate bounds:
+  - positive width and height
+  - finite numeric left/top
+  - max pixel count
+  - max payload bytes
+- Validate parameter ranges:
+  - `steps` 1-100
+  - `cfg` 1-30
+  - `denoise` 0-1
+  - `seed` finite number or `-1`
+  - `sampler` and `scheduler` from allowed lists or workflow metadata
+- Normalize optional fields before adapter execution:
+  - missing prompt -> `""`
+  - missing negative prompt -> `""`
+  - seed `-1` -> gateway-generated integer seed
 
 Acceptance:
 
 - Invalid requests fail before touching ComfyUI.
-- Errors are readable in the plugin status area.
+- Validation errors are readable in the plugin status area.
+- The same validation path works for both echo and ComfyUI providers.
+- Public workflow IDs and internal ComfyUI workflow variants are not conflated.
 
 ### Phase G2: ComfyUI Client
 
-Tasks:
+Implement the low-level ComfyUI client before building the workflow registry. Keep this module independent of PixelOasis request details.
 
-- Implement ComfyUI HTTP client.
-- Implement image upload.
-- Implement prompt submission.
-- Implement WebSocket progress listener.
-- Implement history polling fallback.
-- Implement output download.
-- Implement timeout and cancellation strategy.
+Target file:
 
-Acceptance:
+```text
+services/model-gateway/src/adapters/comfyui/client.js
+```
 
-- Gateway can submit a hardcoded API-format workflow.
-- Gateway can retrieve the generated output PNG.
-- Gateway returns normalized PixelOasis response.
+Client functions:
 
-### Phase G3: Workflow Registry
+- `getSystemStats()`: calls `GET /system_stats`.
+- `getObjectInfo()`: calls `GET /object_info`.
+- `getQueue()`: calls `GET /queue`.
+- `uploadImage({ bytes, filename, overwrite })`: posts `multipart/form-data` to `/upload/image`.
+- `submitPrompt({ workflow, clientId })`: posts `{ prompt, client_id }` to `/prompt`.
+- `getHistory(promptId)`: calls `GET /history/{prompt_id}`.
+- `downloadView({ filename, subfolder, type })`: calls `GET /view?...` and returns PNG bytes.
+- `waitForPrompt(promptId, options)`: polls history until output is available, timeout is reached, or an error appears.
+- Optional later: `connectWebSocket(clientId)` for `/ws?clientId=...` progress events.
 
-Tasks:
+Implementation rules:
 
-- Load workflow metadata at startup.
-- Load API workflow JSON by `workflowId`.
-- Patch workflow node inputs from request.
-- Validate required model names through ComfyUI object info when possible.
-- Return workflow list to plugin.
-
-Acceptance:
-
-- `GET /workflows` returns categories and workflow metadata.
-- `POST /generate` can run by `workflowId`.
-- Missing workflow or missing model produces clear error.
-
-### Phase G4: First Real ComfyUI Workflow
-
-Tasks:
-
-- Build `composition.inpaint.basic`.
-- Export API-format workflow JSON from ComfyUI.
-- Add workflow metadata and node bindings.
-- Test with source PNG and mask PNG.
-- Ensure output PNG dimensions match input selection dimensions.
-- Implement `FLUX.1 Kontext Dev` first when local hardware and ComfyUI version support it.
-- Add `SDXL Inpaint` as the fallback workflow if `FLUX.1 Kontext Dev` cannot meet the first milestone quickly.
+- Use Node 18+ built-in `fetch`, `FormData`, `Blob`, and `AbortController` where possible.
+- Keep timeouts explicit:
+  - health/object info: 5-10 seconds
+  - upload: 30 seconds
+  - generation: configurable, default 10 minutes for local models
+- On `/prompt` validation errors, preserve ComfyUI `error` and `node_errors` in `error.details`.
+- WebSocket progress is useful but not required for the first real milestone; polling `/history/{prompt_id}` is acceptable as the first reliable path.
+- Do not depend on custom ComfyUI nodes in the first route.
 
 Acceptance:
 
-- Gateway can run the inpaint workflow without Photoshop.
-- A test request with local PNG and mask returns a valid PNG.
-- The workflow returns exactly one output image.
-- The output image dimensions match the input selection dimensions.
+- A local script or temporary route can call `getSystemStats()` against ComfyUI Desktop at `8000`.
+- The client can upload a PNG and receive a ComfyUI upload response.
+- The client can submit a small known API-format workflow and receive a `prompt_id`.
+- The client can poll history and download the final output image.
+- Errors distinguish ComfyUI offline, workflow validation failure, timeout, and missing output.
+
+### Phase G3: Workflow Registry And Metadata
+
+Create a file-backed registry. Workflow files belong to the gateway, not the plugin.
+
+Directory shape:
+
+```text
+services/model-gateway/workflows/comfyui/
+  composition/
+    sdxl-inpaint-basic.api.json
+    sdxl-inpaint-basic.meta.json
+    flux-kontext-dev-inpaint-basic.api.json
+    flux-kontext-dev-inpaint-basic.meta.json
+```
+
+Metadata schema:
+
+```json
+{
+  "workflowId": "composition.inpaint.basic",
+  "variantId": "sdxl-inpaint-basic",
+  "title": "SDXL Inpaint Basic",
+  "category": "composition",
+  "provider": "comfyui",
+  "apiWorkflowFile": "sdxl-inpaint-basic.api.json",
+  "enabled": true,
+  "priority": 20,
+  "requiredModels": [
+    {
+      "folder": "checkpoints",
+      "name": "sd_xl_base_1.0.safetensors"
+    }
+  ],
+  "inputs": {
+    "sourceImage": {
+      "nodeId": "10",
+      "input": "image"
+    },
+    "maskImage": {
+      "nodeId": "11",
+      "input": "image"
+    },
+    "positivePrompt": {
+      "nodeId": "6",
+      "input": "text"
+    },
+    "negativePrompt": {
+      "nodeId": "7",
+      "input": "text"
+    },
+    "seed": {
+      "nodeId": "3",
+      "input": "seed"
+    },
+    "steps": {
+      "nodeId": "3",
+      "input": "steps"
+    },
+    "cfg": {
+      "nodeId": "3",
+      "input": "cfg"
+    },
+    "denoise": {
+      "nodeId": "3",
+      "input": "denoise"
+    }
+  },
+  "outputs": {
+    "images": {
+      "nodeId": "99"
+    }
+  },
+  "defaults": {
+    "prompt": "",
+    "negativePrompt": "",
+    "seed": -1,
+    "steps": 28,
+    "cfg": 7,
+    "denoise": 0.75,
+    "sampler": "dpmpp_2m",
+    "scheduler": "karras"
+  },
+  "sizePolicy": {
+    "mode": "matchSelection",
+    "allowResize": false
+  }
+}
+```
+
+Implementation details:
+
+- Add `workflow-loader.js`:
+  - recursively finds `*.meta.json`
+  - validates metadata shape
+  - loads matching `.api.json`
+  - indexes by public `workflowId`
+  - supports choosing the best enabled variant by priority
+- Add `workflow-bindings.js`:
+  - deep-clones the API workflow
+  - patches uploaded image filenames into `LoadImage`-style nodes
+  - patches prompt, negative prompt, seed, steps, cfg, denoise, sampler, scheduler
+  - validates that each configured node ID and input exists before submit
+- Add model validation:
+  - use `/models` and `/models/{folder}` when available
+  - use `/object_info` as a fallback for node class availability
+  - fail early with `MISSING_MODEL` when required model files are absent
+- Update `GET /workflows`:
+  - returns public workflows and selected variant metadata
+  - omits internal node IDs from plugin-facing response unless debug mode is enabled
+
+Acceptance:
+
+- `GET /workflows` returns file-backed workflow metadata.
+- Missing `.api.json`, invalid `.meta.json`, and broken bindings produce startup or request-time errors with clear messages.
+- `POST /generate` can resolve `composition.inpaint.basic` to one ComfyUI API workflow variant.
+- The plugin does not need to know whether the selected variant is FLUX or SDXL.
+
+### Phase G4: Create And Import The First ComfyUI Workflow
+
+Because the current ComfyUI Desktop install has no PixelOasis workflow configured, build the workflow in ComfyUI first, then export and register it.
+
+Recommended practical order:
+
+1. Build `SDXL Inpaint Basic` first as the fallback milestone workflow.
+2. Build `FLUX.1 Kontext Dev Inpaint Basic` after the SDXL route proves the gateway path.
+3. Keep both variants behind the same public PixelOasis workflow: `composition.inpaint.basic`.
+
+Why SDXL first:
+
+- It uses a mature inpainting path.
+- It is easier to validate mask alignment and exact output dimensions.
+- It reduces the number of moving parts while developing the gateway.
+- It gives PixelOasis an end-to-end fallback even if FLUX is too heavy locally.
+
+ComfyUI Desktop workflow authoring steps:
+
+1. Start ComfyUI Desktop and confirm the API base:
+   - open `http://127.0.0.1:8000/`
+   - check `http://127.0.0.1:8000/system_stats`
+   - check `http://127.0.0.1:8000/object_info`
+2. Install or confirm required models in the ComfyUI model folders.
+3. In ComfyUI, create a workflow that accepts:
+   - a source image loaded from an uploaded PNG
+   - a mask image loaded from an uploaded PNG
+   - positive prompt
+   - negative prompt
+   - seed
+   - steps
+   - cfg
+   - denoise
+4. Use official nodes only for the first accepted workflow.
+5. Save a normal UI workflow copy for human editing under:
+   - `services/model-gateway/workflows/comfyui/composition/sdxl-inpaint-basic.ui.json`
+6. Export the workflow in API format and save it under:
+   - `services/model-gateway/workflows/comfyui/composition/sdxl-inpaint-basic.api.json`
+7. Create the matching metadata file:
+   - `services/model-gateway/workflows/comfyui/composition/sdxl-inpaint-basic.meta.json`
+8. Fill metadata bindings by inspecting the API workflow node IDs.
+9. Run the workflow manually inside ComfyUI with test images before calling it from PixelOasis.
+10. Run the workflow through the gateway with local PNG files before involving Photoshop.
+
+Workflow constraints:
+
+- Output exactly one image.
+- Output PNG dimensions must match the requested Photoshop selection dimensions.
+- If the ComfyUI workflow internally resizes or pads, it must crop or resize back before `SaveImage`.
+- The mask polarity must be documented in metadata:
+  - white means editable/generated area
+  - black means preserved area
+- The gateway must invert the mask only if metadata explicitly declares `maskPolicy.invertBeforeUpload`.
+- The output node must be a known image-producing node, typically `SaveImage`.
+
+Acceptance:
+
+- The workflow runs manually inside ComfyUI Desktop.
+- The API-format workflow can be submitted through `POST /prompt`.
+- The gateway can upload source and mask PNG files, patch the workflow, submit it, poll completion, and download one PNG.
+- The downloaded PNG has the same width and height as the input selection image.
+- The same public request can switch between SDXL and FLUX variants by metadata/config, not by Photoshop code changes.
+
+### Phase G5: ComfyUI Adapter Integration
+
+Replace the current ComfyUI adapter stub with the complete gateway execution path.
+
+Target file:
+
+```text
+services/model-gateway/src/adapters/comfyui/adapter.js
+```
+
+Execution flow:
+
+1. Receive validated PixelOasis request.
+2. Resolve public `workflowId` to selected workflow metadata and API JSON.
+3. Decode `selection.imagePngBase64` and `selection.maskPngBase64`.
+4. Upload source PNG to ComfyUI.
+5. Upload mask PNG to ComfyUI.
+6. Patch the API workflow using metadata bindings.
+7. Submit the workflow to `/prompt`.
+8. Poll `/history/{prompt_id}` until completion.
+9. Read output image references from the configured output node.
+10. Download output PNG through `/view`.
+11. Verify PNG dimensions against `selection.bounds`.
+12. Return normalized PixelOasis response:
+
+```json
+{
+  "correlationId": "po-...",
+  "status": "succeeded",
+  "result": {
+    "imagePngBase64": "BASE64_RESULT_PNG",
+    "mimeType": "image/png",
+    "width": 512,
+    "height": 512,
+    "seed": 123456,
+    "metadata": {
+      "provider": "comfyui",
+      "workflowId": "composition.inpaint.basic",
+      "variantId": "sdxl-inpaint-basic",
+      "promptId": "..."
+    }
+  }
+}
+```
+
+Failure behavior:
+
+- `COMFYUI_OFFLINE`: cannot reach configured ComfyUI URL.
+- `WORKFLOW_NOT_FOUND`: no metadata for public workflow ID.
+- `WORKFLOW_BINDING_ERROR`: metadata points to missing node/input.
+- `MISSING_MODEL`: required model file is not available.
+- `COMFYUI_VALIDATION_ERROR`: `/prompt` rejects the API workflow.
+- `COMFYUI_TIMEOUT`: no result before timeout.
+- `NO_OUTPUT_IMAGE`: history completed but no configured output image exists.
+- `OUTPUT_SIZE_MISMATCH`: result dimensions do not match selection and no resize policy allows it.
+
+Acceptance:
+
+- `PO_MODEL_PROVIDER=comfyui npm run dev` runs the real adapter.
+- A standalone gateway test can generate from local PNG and mask files without Photoshop.
+- The adapter returns the normalized response shape consumed by the existing plugin.
+- ComfyUI errors are preserved enough to debug node and model issues.
 
 ## 10. End-To-End Acceptance Path
 
-The first accepted full route is:
+Run the first accepted route in three layers: ComfyUI only, gateway only, then Photoshop end to end.
 
-1. Start official ComfyUI locally.
-2. Start PixelOasis model-gateway.
-3. Open Photoshop.
-4. Load `pixeloasis-plugin/dist/manifest.json` in UXP Developer Tool.
-5. Open a document.
-6. Create a rectangular selection.
-7. Click `composition.inpaint.basic`.
-8. Open parameter page.
-9. Confirm or edit parameters.
-10. Run generation.
-11. Plugin captures formal PNG image and PNG mask.
-12. Plugin sends request to gateway.
-13. Gateway uploads images to ComfyUI.
-14. Gateway submits workflow.
-15. Gateway retrieves output PNG.
-16. Plugin places returned PNG as a top layer.
-17. Plugin applies mask aligned to the original selection.
+### Layer 1: ComfyUI Desktop Manual Verification
+
+1. Start ComfyUI Desktop.
+2. Confirm `http://127.0.0.1:8000/system_stats` responds.
+3. Open the PixelOasis UI workflow in ComfyUI.
+4. Load a local source PNG and mask PNG.
+5. Run the workflow manually.
+6. Confirm it produces exactly one PNG.
+7. Confirm the output dimensions match the source dimensions.
+
+### Layer 2: Gateway To ComfyUI Without Photoshop
+
+1. Start the gateway:
+
+```powershell
+cd E:\PixelOasis\services\model-gateway
+$env:COMFYUI_URL="http://127.0.0.1:8000"
+$env:PO_MODEL_PROVIDER="comfyui"
+npm run dev
+```
+
+2. Call `GET http://127.0.0.1:8787/health?upstream=1`.
+3. Call `GET http://127.0.0.1:8787/workflows`.
+4. Submit a test `POST /generate` using local fixture PNG and mask data.
+5. Confirm the gateway response contains `status: "succeeded"` and `result.imagePngBase64`.
+6. Decode the returned PNG and confirm dimensions.
+
+### Layer 3: Full Photoshop Route
+
+1. Build the plugin:
+
+```powershell
+cd E:\PixelOasis\pixeloasis-plugin
+npm run build
+```
+
+2. Open Photoshop.
+3. Load `pixeloasis-plugin/dist/manifest.json` in UXP Developer Tool.
+4. Open a document.
+5. Create a rectangular selection.
+6. Click `composition.inpaint.basic`.
+7. Open the parameter page.
+8. Confirm or edit prompt and generation parameters.
+9. Run generation.
+10. Plugin captures formal PNG image and PNG mask.
+11. Plugin sends request to the gateway.
+12. Gateway uploads images to ComfyUI.
+13. Gateway submits the selected API workflow.
+14. Gateway retrieves output PNG.
+15. Plugin places returned PNG as a top layer.
+16. Plugin applies the original selection mask.
 
 Acceptance:
 
-- No JPEG is used for formal image or mask.
+- No JPEG is used for formal image or formal mask.
 - Preview JPEG displays correctly.
-- ComfyUI receives valid input image and mask.
-- Generated image returns to Photoshop.
+- ComfyUI receives valid source and mask PNG files.
+- The generated image returns to Photoshop.
 - New layer appears above existing layers.
 - New layer is positioned at the original selection.
 - New layer mask matches the original selection.
@@ -630,7 +947,54 @@ Acceptance:
 
 ## 11. Testing Plan
 
-Plugin tests inside Photoshop:
+### Gateway Unit And Integration Tests
+
+- Config:
+  - `COMFYUI_URL` explicitly set to Desktop `8000`.
+  - `COMFYUI_URL` explicitly set to unavailable URL.
+  - fallback candidate detection when env var is not set.
+- Health:
+  - gateway online with ComfyUI offline.
+  - gateway online with ComfyUI online.
+  - upstream deep check can call `/object_info`.
+- Validation:
+  - invalid JSON.
+  - missing `correlationId`.
+  - missing `workflowId`.
+  - unknown public workflow ID.
+  - missing formal PNG image.
+  - missing formal PNG mask.
+  - JPEG submitted as formal image or mask.
+  - invalid base64.
+  - bounds width/height too small, too large, or non-finite.
+  - parameter ranges outside allowed limits.
+- Workflow registry:
+  - missing metadata file.
+  - missing API workflow file.
+  - duplicate public workflow IDs with priorities.
+  - binding points to missing node ID.
+  - binding points to missing node input.
+  - missing required model.
+- ComfyUI client:
+  - upload image success.
+  - `/prompt` validation error.
+  - history polling success.
+  - history polling timeout.
+  - output download success.
+  - missing output image.
+
+### Workflow Tests
+
+- Manual ComfyUI run with an opaque source image and rectangular mask.
+- Manual ComfyUI run with transparent pixels in the source PNG.
+- Manual ComfyUI run with soft mask edges.
+- Gateway run with the same fixtures.
+- Output dimensions match input dimensions.
+- Mask polarity matches PixelOasis expectation.
+- Re-running with the same seed is deterministic enough for debugging.
+- Seed `-1` is replaced by a concrete seed and returned in metadata.
+
+### Plugin Tests Inside Photoshop
 
 - No document open.
 - Document open but no selection.
@@ -642,109 +1006,129 @@ Plugin tests inside Photoshop:
 - Layer with transparency.
 - Multiple documents open.
 - Non-RGB document if Photoshop allows capture.
+- Gateway offline.
+- ComfyUI offline while gateway is online.
+- ComfyUI workflow validation failure surfaced in UI.
 
-Gateway tests:
+### End-To-End Tests
 
-- Health check.
-- Invalid JSON.
-- Missing workflowId.
-- Missing formal PNG image.
-- Missing formal PNG mask.
-- Invalid base64.
-- ComfyUI offline.
-- ComfyUI missing model.
-- ComfyUI timeout.
-- Successful mock workflow.
-- Successful real workflow.
-
-End-to-end tests:
-
-- One inpaint workflow returns a layer.
-- Repeated generation does not corrupt previous layers.
+- One inpaint workflow returns one layer.
+- Repeated generation creates additional layers without corrupting previous layers.
 - Reloading the plugin does not lose core settings.
-- Photoshop restart and UDT reload still load correct dist.
+- Photoshop restart and UDT reload still load the correct `pixeloasis-plugin/dist`.
+- Switching workflow variant from SDXL to FLUX does not require Photoshop-side code changes.
 
 ## 12. Documentation To Add Or Update
 
-Protocol is defined in §4 of this document (plugin ↔ gateway request/response schema).
+Add `docs/workflows.md` before adding the second real workflow variant. It must explain:
 
-Add `docs/workflows.md` when the workflow registry grows beyond the in-memory list:
+- Public PixelOasis `workflowId` versus internal ComfyUI `variantId`.
+- Metadata file format.
+- API workflow export steps from ComfyUI Desktop.
+- How to identify node IDs and input names in API-format JSON.
+- Binding rules for source image, mask image, prompts, seed, steps, cfg, denoise, sampler, scheduler, and output image.
+- Required model declaration and validation.
+- Mask polarity and whether inversion is required.
+- Size policy and exact selection-size output requirements.
 
-- Explain workflow metadata format.
-- Explain API-format workflow export.
-- Explain node binding rules.
-- Explain required model declaration.
+Update `docs/dev-guide.md` whenever a new runtime pitfall is discovered:
 
-Update `docs/dev-guide.md` if a new pitfall is discovered:
-
+- ComfyUI Desktop port and instance behavior.
 - PNG encoder behavior.
 - ComfyUI workflow binding mistakes.
+- ComfyUI `/prompt` validation error interpretation.
 - Photoshop placement and mask alignment pitfalls.
+- Model file location differences between Desktop, portable, and manual ComfyUI installs.
 
-## 13. Recommended Build Order
+Update `README.md` once the gateway can run a real workflow:
 
-Use this exact order to avoid repeating previous drift:
+- How to start ComfyUI Desktop.
+- How to start the gateway with `COMFYUI_URL`.
+- How to build and load the UXP plugin.
+- Minimal troubleshooting checklist.
 
-1. Fix documentation and protocol names.
-2. Stabilize plugin shell and settings overlay behavior.
-3. Implement correct PNG image/mask capture.
-4. Implement result placement with a local test PNG before ComfyUI.
-5. Create gateway skeleton.
-6. Add mock gateway response.
-7. Connect plugin to mock gateway.
-8. Add ComfyUI client.
-9. Add first API-format inpaint workflow.
-10. Run gateway-to-ComfyUI without Photoshop.
-11. Run full Photoshop-to-ComfyUI-to-Photoshop flow.
-12. Add parameter pages.
-13. Add more workflows per category.
+## 13. Recommended Build Order From This Point
+
+Use this order from the current repository state:
+
+1. Confirm ComfyUI Desktop API base at `http://127.0.0.1:8000`.
+2. Update gateway config to support `COMFYUI_URL` and Desktop/manual fallback candidates.
+3. Extend `GET /health` with optional upstream ComfyUI status.
+4. Keep echo adapter green as the Photoshop-side safety test.
+5. Implement the ComfyUI client functions in `client.js`.
+6. Build `SDXL Inpaint Basic` manually in ComfyUI Desktop.
+7. Save both UI workflow JSON and API workflow JSON into `services/model-gateway/workflows/comfyui/composition/`.
+8. Create `sdxl-inpaint-basic.meta.json` with node bindings.
+9. Implement file-backed workflow loading and metadata validation.
+10. Implement workflow patching from request data.
+11. Implement ComfyUI adapter execution.
+12. Add a gateway-only test request that uses local PNG fixtures.
+13. Run gateway-to-ComfyUI without Photoshop.
+14. Run Photoshop-to-gateway-to-ComfyUI-to-Photoshop with `composition.inpaint.basic`.
+15. Add `FLUX.1 Kontext Dev` as a second variant after SDXL proves the route.
+16. Promote the preferred variant by metadata priority/config.
+17. Add more workflow categories only after this route is stable.
 
 ## 14. Confirmed Assumptions And Remaining User Information
 
 Confirmed:
 
-- ComfyUI runs locally.
-- Use official recommended ComfyUI local setup.
-- Primary model route is `FLUX.1 Kontext Dev`.
-- Fallback model route is `SDXL Inpaint`.
-- First accepted feature is `composition.inpaint.basic`.
+- ComfyUI Desktop is installed locally.
+- On the current machine, ComfyUI Desktop responds at `http://127.0.0.1:8000`.
+- PixelOasis gateway runs locally at `http://127.0.0.1:8787`.
+- The plugin must call the gateway, not ComfyUI directly.
+- The first accepted feature is `composition.inpaint.basic`.
 - Quality has priority over speed.
 - Output must always equal the Photoshop selection dimensions.
 - First version generates one result at a time.
 - Workflow settings persist per workflow.
+- No PixelOasis ComfyUI workflow is configured yet; it must be authored, exported, and registered.
 
 Still useful to know before model download and workflow tuning:
 
 - GPU model and VRAM amount.
 - Available disk space for models.
 - Whether the machine can run `FLUX.1 Kontext Dev` comfortably.
+- Which SDXL inpaint checkpoint is already installed or preferred.
 - Whether prompts should be written in English only, or whether the plugin should later add prompt translation.
 
 Default runtime assumptions:
 
-- ComfyUI runs locally at `http://127.0.0.1:8188`.
-- Gateway runs locally at `http://127.0.0.1:8787`.
-- First workflow is `FLUX.1 Kontext Dev Inpaint Basic`.
-- Fallback workflow is `SDXL Inpaint Basic`.
+- ComfyUI Desktop URL on this machine: `http://127.0.0.1:8000`.
+- Manual/portable ComfyUI fallback URL: `http://127.0.0.1:8188`.
+- Gateway URL: `http://127.0.0.1:8787`.
+- First public workflow: `composition.inpaint.basic`.
+- First implementation variant: `SDXL Inpaint Basic`.
+- Preferred later variant: `FLUX.1 Kontext Dev Inpaint Basic`.
 
 ## 15. Definition Of Done For First Milestone
 
 The first milestone is complete only when:
 
+- ComfyUI Desktop is running and reachable from the gateway.
+- At least one PixelOasis inpaint workflow has been authored in ComfyUI.
+- The workflow has both UI JSON and API-format JSON saved in the gateway workflow directory.
+- The workflow has a valid `.meta.json` with complete bindings.
+- Gateway `GET /workflows` lists `composition.inpaint.basic`.
+- Gateway `POST /generate` runs `composition.inpaint.basic` through ComfyUI without Photoshop.
+- The gateway uploads source PNG and mask PNG to ComfyUI.
+- ComfyUI returns exactly one PNG.
+- The returned PNG dimensions match the requested selection dimensions.
 - Photoshop plugin loads through UDT.
 - User can create a selection.
 - User can run `composition.inpaint.basic`.
 - Plugin captures PNG image and PNG mask correctly.
-- Gateway submits the matching `FLUX.1 Kontext Dev` or fallback `SDXL Inpaint` workflow to official ComfyUI.
-- ComfyUI returns a PNG.
-- Plugin places the PNG as a new top layer.
+- Plugin sends the request to the gateway.
+- Gateway submits the selected SDXL or FLUX workflow to official ComfyUI.
+- Plugin places the returned PNG as a new top layer.
 - Plugin creates a mask aligned to the original selection.
-- A transparent-pixel selection does not break preview or formal upload.
+- Transparent-pixel selections do not break preview or formal upload.
 - The full route works after rebuilding and reloading `pixeloasis-plugin/dist/manifest.json`.
 
 ## 16. References
 
 - Official ComfyUI server routes: https://docs.comfy.org/development/comfyui-server/comms_routes
+- Official ComfyUI Desktop overview: https://docs.comfy.org/installation/desktop/overview
 - Official ComfyUI Cloud API overview, useful for route naming and file/workflow concepts: https://docs.comfy.org/api-reference/cloud/overview
 - Official ComfyUI local system requirements: https://docs.comfy.org/installation/system_requirements/
 - Official ComfyUI FLUX.1 Kontext Dev native workflow: https://docs.comfy.org/tutorials/flux/flux-1-kontext-dev
