@@ -1,10 +1,10 @@
 /* server.js — PixelOasis model-gateway entry point
  *
- * DevList §9 — Phase G0: Gateway Runtime Hardening.
+ * DevList §9 — Phase G0/G3.
  *
  * Routes:
  *   GET  /health     → health check (supports ?upstream=1 and ?upstream=deep)
- *   GET  /workflows  → workflow registry
+ *   GET  /workflows  → workflow registry (file-backed, G3)
  *   POST /generate   → submit generation request
  */
 
@@ -14,6 +14,7 @@ import { handleHealth } from "./routes/health.js";
 import { handleWorkflows } from "./routes/workflows.js";
 import { handleGenerate } from "./routes/generate.js";
 import { notFound } from "./utils/errors.js";
+import { initRegistry } from "./adapters/registry-instance.js";
 
 /* Route table — keyed by "METHOD:pathname" */
 var ROUTES = {
@@ -44,11 +45,20 @@ var server = createServer(async function (request, response) {
   }
 });
 
+/* ── Startup: initialise workflow registry, then listen ── */
+
+try {
+  await initRegistry();
+} catch (err) {
+  console.warn("Workflow registry initialisation warning: " + err.message);
+  console.warn("GET /workflows will fall back to hardcoded defaults.");
+}
+
 server.listen(config.port, config.host, function () {
   console.log("PixelOasis model-gateway listening at http://" + config.host + ":" + config.port);
   console.log("  Provider: " + config.modelProvider);
   console.log("  ComfyUI:  " + config.comfyui.baseUrl);
   console.log("  GET  /health     → health check (?upstream=1 for ComfyUI status)");
-  console.log("  GET  /workflows  → workflow registry");
+  console.log("  GET  /workflows  → workflow registry (file-backed)");
   console.log("  POST /generate   → submit generation");
 });

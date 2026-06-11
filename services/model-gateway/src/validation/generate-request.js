@@ -4,9 +4,14 @@ const MAX_IMAGE_BYTES = 50 * 1024 * 1024;       // 50 MB per image
 const MAX_BOUNDS_DIMENSION = 32768;              // max width or height
 const MAX_PIXEL_COUNT = 4096 * 4096;             // ≈ 16.8 Mpix
 
-/* ── Known workflow IDs (public PixelOasis workflowId) ── */
+/* ── Known workflow IDs (public PixelOasis workflowId) ──
+ *
+ * When the file-backed registry (G3) is loaded, workflow IDs are read from
+ * the registry.  Otherwise the hardcoded fallback list is used. */
 
-const KNOWN_WORKFLOWS = [
+import { getRegistry } from "../adapters/registry-instance.js";
+
+const FALLBACK_WORKFLOWS = [
   "composition.remove.basic",
   "composition.outpaint.basic",
   "composition.inpaint.basic",
@@ -20,6 +25,14 @@ const KNOWN_WORKFLOWS = [
   "quality.realism-enhance.basic",
   "quality.denoise.basic",
 ];
+
+function getKnownWorkflows() {
+  try {
+    return getRegistry().getAllWorkflowIds();
+  } catch (_) {
+    return FALLBACK_WORKFLOWS;
+  }
+}
 
 /* ── Allowed colour modes for the source document ── */
 
@@ -288,10 +301,11 @@ export function validateGenerateRequest(body) {
     return invalid("Missing workflowId.");
   }
 
-  if (KNOWN_WORKFLOWS.indexOf(body.workflowId) === -1) {
+  var knownWorkflows = getKnownWorkflows();
+  if (knownWorkflows.indexOf(body.workflowId) === -1) {
     return invalid(
       "Unknown workflowId: " + body.workflowId + ". " +
-      "Known workflows: " + KNOWN_WORKFLOWS.join(", ") + "."
+      "Known workflows: " + knownWorkflows.join(", ") + "."
     );
   }
 

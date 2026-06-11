@@ -1,0 +1,41 @@
+{
+  "workflowId": "composition.inpaint.basic",
+  "variantId": "passthrough-test",
+  "title": "Passthrough Test (G3)",
+  "category": "composition",
+  "provider": "comfyui",
+  "apiWorkflowFile": "passthrough-test.api.json",
+  "enabled": true,
+  "priority": 0,
+
+  "requiredModels": [],
+
+  "inputs": {
+    "sourceImage": {
+      "nodeId": "1",
+      "input": "image"
+    }
+  },
+
+  "outputs": {
+    "images": {
+      "nodeId": "2"
+    }
+  },
+
+  "defaults": {
+    "prompt": "",
+    "negativePrompt": "",
+    "seed": -1,
+    "steps": 28,
+    "cfg": 7,
+    "denoise": 0.75,
+    "sampler": "dpmpp_2m",
+    "scheduler": "karras"
+  },
+
+  "sizePolicy": {
+    "mode": "matchSelection",
+    "allowResize": false
+  }
+}
