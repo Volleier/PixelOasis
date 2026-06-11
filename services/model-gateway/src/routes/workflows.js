@@ -118,6 +118,6 @@ var WORKFLOWS = [
   },
 ];
 
-export function handleWorkflows(request, response) {
+export function handleWorkflows(request, response, _params) {
   writeJson(response, 200, { workflows: WORKFLOWS });
 }

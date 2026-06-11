@@ -1,7 +1,9 @@
 /* routes/generate.js — POST /generate
  *
- * Reads the JSON body, validates it, resolves the appropriate adapter,
- * and returns the normalized PixelOasis response.
+ * Reads the JSON body, validates it, normalizes parameters, resolves the
+ * appropriate adapter, and returns the normalized PixelOasis response.
+ *
+ * DevList §9 — Phase G0/G1.
  */
 
 import { badRequest, serverError, writeJson } from "../utils/errors.js";
@@ -28,7 +30,34 @@ async function readJson(request) {
   return JSON.parse(payload);
 }
 
-export async function handleGenerate(request, response) {
+/* ── Normalize optional request fields before adapter execution ── */
+function normalizeRequest(body) {
+  if (!body.parameters) {
+    body.parameters = {};
+  }
+
+  var p = body.parameters;
+
+  /* Default missing string fields */
+  if (typeof p.prompt !== "string") {
+    p.prompt = "";
+  }
+  if (typeof p.negativePrompt !== "string") {
+    p.negativePrompt = "";
+  }
+
+  /* Seed: -1 means "random" — the gateway generates a concrete seed */
+  if (p.seed === undefined || p.seed === null) {
+    p.seed = -1;
+  }
+  if (p.seed === -1) {
+    p.seed = Math.floor(Math.random() * 0x7FFFFFFF);
+  }
+
+  return body;
+}
+
+export async function handleGenerate(request, response, _params) {
   /* ── G1: Content-Length pre-check ── */
   var contentLength = parseInt(request.headers["content-length"], 10);
   var maxBytes = config.maxPayloadBytes || 50 * 1024 * 1024;
@@ -56,6 +85,9 @@ export async function handleGenerate(request, response) {
     badRequest(response, body.correlationId || "", validation.error);
     return;
   }
+
+  /* ── Normalize before execution ── */
+  body = normalizeRequest(body);
 
   /* ── Resolve adapter & execute ── */
   try {

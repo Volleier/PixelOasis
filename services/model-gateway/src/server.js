@@ -1,9 +1,9 @@
 /* server.js — PixelOasis model-gateway entry point
  *
- * DevList §9 — Phase G0: Service Skeleton.
+ * DevList §9 — Phase G0: Gateway Runtime Hardening.
  *
  * Routes:
- *   GET  /health     → health check
+ *   GET  /health     → health check (supports ?upstream=1 and ?upstream=deep)
  *   GET  /workflows  → workflow registry
  *   POST /generate   → submit generation request
  */
@@ -15,18 +15,30 @@ import { handleWorkflows } from "./routes/workflows.js";
 import { handleGenerate } from "./routes/generate.js";
 import { notFound } from "./utils/errors.js";
 
+/* Route table — keyed by "METHOD:pathname" */
 var ROUTES = {
   "GET:/health": handleHealth,
   "GET:/workflows": handleWorkflows,
   "POST:/generate": handleGenerate,
 };
 
+/* Parse request.url into pathname + URLSearchParams.
+ * Node.js http request.url is the path + query string, e.g. "/health?upstream=1". */
+function parseUrl(request) {
+  var queryIndex = request.url.indexOf("?");
+  var pathname = queryIndex === -1 ? request.url : request.url.substring(0, queryIndex);
+  var queryString = queryIndex === -1 ? "" : request.url.substring(queryIndex + 1);
+  var params = new URLSearchParams(queryString);
+  return { pathname, params };
+}
+
 var server = createServer(async function (request, response) {
-  var key = request.method + ":" + request.url;
+  var { pathname, params } = parseUrl(request);
+  var key = request.method + ":" + pathname;
   var handler = ROUTES[key];
 
   if (handler) {
-    await handler(request, response);
+    await handler(request, response, params);
   } else {
     notFound(response);
   }
@@ -34,7 +46,9 @@ var server = createServer(async function (request, response) {
 
 server.listen(config.port, config.host, function () {
   console.log("PixelOasis model-gateway listening at http://" + config.host + ":" + config.port);
-  console.log("  GET  /health     → health check");
+  console.log("  Provider: " + config.modelProvider);
+  console.log("  ComfyUI:  " + config.comfyui.baseUrl);
+  console.log("  GET  /health     → health check (?upstream=1 for ComfyUI status)");
   console.log("  GET  /workflows  → workflow registry");
-  console.log("  POST /generate   → submit generation (echo adapter)");
+  console.log("  POST /generate   → submit generation");
 });
