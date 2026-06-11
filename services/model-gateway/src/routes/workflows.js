@@ -1,10 +1,15 @@
-/* routes/workflows.js — GET /workflows */
+/* routes/workflows.js — GET /workflows
+ *
+ * DevList §9 — Phase G0/G1.
+ *
+ * Returns the public PixelOasis workflow catalogue.
+ * Must stay in sync with KNOWN_WORKFLOWS in validation/generate-request.js. */
 
 import { writeJson } from "../utils/errors.js";
 
 var WORKFLOWS = [
 
-  /* ═══ 构图工具 ═══ */
+  /* ═══ 构图工具 — composition ═══ */
 
   {
     id: "composition.remove.basic",
@@ -46,7 +51,7 @@ var WORKFLOWS = [
     },
   },
 
-  /* ═══ 画质提升 ═══ */
+  /* ═══ 画质提升 — quality ═══ */
 
   {
     id: "quality.upscale.basic",
@@ -74,8 +79,21 @@ var WORKFLOWS = [
       scheduler: "karras",
     },
   },
+  {
+    id: "quality.denoise.basic",
+    title: "去噪",
+    category: "quality",
+    description: "选区降噪与细节恢复",
+    defaults: {
+      steps: 15,
+      cfg: 5,
+      denoise: 0.3,
+      sampler: "dpmpp_2m",
+      scheduler: "karras",
+    },
+  },
 
-  /* ═══ 后续扩展 ═══ */
+  /* ═══ 人像精修 — portrait ═══ */
 
   {
     id: "portrait.skin-retouch.basic",
@@ -91,6 +109,22 @@ var WORKFLOWS = [
     },
   },
   {
+    id: "portrait.face-restore.basic",
+    title: "面部修复",
+    category: "portrait",
+    description: "面部细节恢复与增强",
+    defaults: {
+      steps: 28,
+      cfg: 7,
+      denoise: 0.65,
+      sampler: "dpmpp_2m",
+      scheduler: "karras",
+    },
+  },
+
+  /* ═══ 光影风格 — lighting ═══ */
+
+  {
     id: "lighting.relight.basic",
     title: "光影调整",
     category: "lighting",
@@ -104,6 +138,22 @@ var WORKFLOWS = [
     },
   },
   {
+    id: "lighting.color-grade.basic",
+    title: "色调调整",
+    category: "lighting",
+    description: "风格化色调与氛围调整",
+    defaults: {
+      steps: 22,
+      cfg: 6.5,
+      denoise: 0.55,
+      sampler: "dpmpp_2m",
+      scheduler: "karras",
+    },
+  },
+
+  /* ═══ 视觉特效 — effects ═══ */
+
+  {
     id: "effects.style-transfer.basic",
     title: "风格迁移",
     category: "effects",
@@ -114,6 +164,19 @@ var WORKFLOWS = [
       denoise: 0.8,
       sampler: "euler",
       scheduler: "normal",
+    },
+  },
+  {
+    id: "effects.background-effect.basic",
+    title: "背景特效",
+    category: "effects",
+    description: "选区/背景特效替换",
+    defaults: {
+      steps: 28,
+      cfg: 7,
+      denoise: 0.75,
+      sampler: "dpmpp_2m",
+      scheduler: "karras",
     },
   },
 ];
