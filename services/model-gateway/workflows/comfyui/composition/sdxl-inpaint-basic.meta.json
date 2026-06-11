@@ -45,7 +45,9 @@
 
   "sizePolicy": {
     "mode": "matchSelection",
-    "allowResize": false
+    "allowResize": true,
+    "maxSourceDimension": 1024,
+    "note": "Source images larger than 1024px in either dimension are auto-scaled down before generation and upscaled back to original size after."
   },
 
   "maskPolicy": {
