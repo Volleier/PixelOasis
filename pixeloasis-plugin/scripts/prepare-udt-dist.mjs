@@ -29,6 +29,7 @@ for (const filename of iconFiles) {
 const scriptFiles = [
   "ui-text.js",
   "state.js",
+  "logger.js",
   "ui-template.js",
   "ui-workflows.js",
   "photoshop.js",

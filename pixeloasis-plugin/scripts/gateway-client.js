@@ -27,13 +27,26 @@ window.PO.GatewayClient = (function () {
     var controller = new AbortController();
     var timer = setTimeout(function () { controller.abort(); }, HEALTH_TIMEOUT_MS);
 
+    var healthStart = Date.now();
     try {
       var resp = await fetch(base + "/health", {
         method: "GET",
         signal: controller.signal,
       });
-      return resp.ok;
+      var ok = resp.ok;
+      window.PO.Logger.info("gateway.health.completed", {
+        component: "gateway",
+        durationMs: Date.now() - healthStart,
+        data: { url: base, healthy: ok },
+      });
+      return ok;
     } catch (e) {
+      window.PO.Logger.warn("gateway.health.failed", {
+        component: "gateway",
+        durationMs: Date.now() - healthStart,
+        error: e,
+        data: { url: base },
+      });
       return false;
     } finally {
       clearTimeout(timer);
@@ -48,6 +61,16 @@ window.PO.GatewayClient = (function () {
     var controller = new AbortController();
     var timer = setTimeout(function () { controller.abort(); }, GENERATE_TIMEOUT_MS);
 
+    var generateStart = Date.now();
+    var corrId = requestPayload.correlationId || "";
+
+    window.PO.Logger.info("gateway.generate.started", {
+      component: "gateway",
+      correlationId: corrId,
+      workflowId: requestPayload.workflowId,
+      data: { url: base },
+    });
+
     try {
       var resp = await fetch(base + "/generate", {
         method: "POST",
@@ -59,8 +82,16 @@ window.PO.GatewayClient = (function () {
       if (!resp.ok) {
         var errorText = "";
         try { errorText = await resp.text(); } catch (e) { /* ignore */ }
+        window.PO.Logger.error("gateway.generate.failed", {
+          component: "gateway",
+          correlationId: corrId,
+          workflowId: requestPayload.workflowId,
+          durationMs: Date.now() - generateStart,
+          data: { status: resp.status },
+          error: { code: "HTTP_" + resp.status, message: errorText },
+        });
         return {
-          correlationId: requestPayload.correlationId || "",
+          correlationId: corrId,
           status: "failed",
           error: {
             code: "HTTP_" + resp.status,
@@ -70,24 +101,39 @@ window.PO.GatewayClient = (function () {
       }
 
       var data = await resp.json();
+
+      window.PO.Logger.info("gateway.generate.completed", {
+        component: "gateway",
+        correlationId: corrId,
+        workflowId: requestPayload.workflowId,
+        durationMs: Date.now() - generateStart,
+        data: { status: data.status },
+      });
+
       return data;
     } catch (e) {
+      var errCode = "NETWORK_ERROR";
+      var errMsg = e instanceof Error ? e.message : String(e);
+
       if (e && e.name === "AbortError") {
-        return {
-          correlationId: requestPayload.correlationId || "",
-          status: "failed",
-          error: {
-            code: "TIMEOUT",
-            message: "Gateway request timed out after " + (GENERATE_TIMEOUT_MS / 1000) + "s",
-          },
-        };
+        errCode = "TIMEOUT";
+        errMsg = "Gateway request timed out after " + (GENERATE_TIMEOUT_MS / 1000) + "s";
       }
+
+      window.PO.Logger.error("gateway.generate.failed", {
+        component: "gateway",
+        correlationId: corrId,
+        workflowId: requestPayload.workflowId,
+        durationMs: Date.now() - generateStart,
+        error: { code: errCode, message: errMsg },
+      });
+
       return {
-        correlationId: requestPayload.correlationId || "",
+        correlationId: corrId,
         status: "failed",
         error: {
-          code: "NETWORK_ERROR",
-          message: e instanceof Error ? e.message : String(e),
+          code: errCode,
+          message: errMsg,
         },
       };
     } finally {

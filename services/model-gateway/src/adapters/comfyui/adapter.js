@@ -22,6 +22,7 @@ import { patchWorkflow, validateBindings, WorkflowBindingError } from "./workflo
 import { createComfyUIClient, ComfyUIError, ComfyUIOfflineError, ComfyUIValidationError, ComfyUITimeoutError, ComfyUINoOutputError } from "./client.js";
 import { readOutputImages, detectImageDimensions } from "./result-reader.js";
 import { scaleImageDown, scaleImageUp, getPngDimensions } from "../../utils/images.js";
+import logger from "../../utils/logger.js";
 
 /* Default max source dimension per workflow type (overridden by variant metadata) */
 var DEFAULT_MAX_SOURCE_DIMENSION = 1024;
@@ -52,6 +53,13 @@ export default {
 
     console.log("[comfyui] Resolved workflow " + request.workflowId +
       " → variant " + variant.variantId + " (priority " + variant.priority + ")");
+
+    logger.info("workflow.resolved", {
+      component: "adapter",
+      correlationId: request.correlationId,
+      workflowId: request.workflowId,
+      data: { variantId: variant.variantId, priority: variant.priority },
+    });
 
     /* ═══════════════════════════════════════════════════════════════
      * Step 2: Validate models
@@ -124,6 +132,12 @@ export default {
       overwrite: true,
     });
     console.log("[comfyui] Uploaded source: " + sourceUpload.name);
+    logger.info("comfyui.upload.source.completed", {
+      component: "adapter",
+      correlationId: request.correlationId,
+      workflowId: request.workflowId,
+      data: { filename: sourceUpload.name },
+    });
 
     /* Upload mask */
     var maskUpload = null;
@@ -134,6 +148,12 @@ export default {
         overwrite: true,
       });
       console.log("[comfyui] Uploaded mask: " + maskUpload.name);
+      logger.info("comfyui.upload.mask.completed", {
+        component: "adapter",
+        correlationId: request.correlationId,
+        workflowId: request.workflowId,
+        data: { filename: maskUpload.name },
+      });
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -158,6 +178,11 @@ export default {
      * ═══════════════════════════════════════════════════════════════ */
 
     console.log("[comfyui] Submitting workflow...");
+    logger.info("comfyui.prompt.submitted", {
+      component: "adapter",
+      correlationId: request.correlationId,
+      workflowId: request.workflowId,
+    });
     var submitResult;
     try {
       submitResult = await client.submitPrompt({
@@ -201,6 +226,12 @@ export default {
       throw err;
     }
     console.log("[comfyui] Generation completed: " + promptId);
+    logger.info("comfyui.generation.completed", {
+      component: "adapter",
+      correlationId: request.correlationId,
+      workflowId: request.workflowId,
+      data: { promptId: promptId },
+    });
 
     /* ═══════════════════════════════════════════════════════════════
      * Step 9: Download output
@@ -231,6 +262,12 @@ export default {
     var outputDims = detectImageDimensions(outputPng);
     console.log("[comfyui] Output: " + outputDims.width + "x" + outputDims.height +
       " (" + outputPng.length + " bytes)");
+    logger.info("comfyui.output.downloaded", {
+      component: "adapter",
+      correlationId: request.correlationId,
+      workflowId: request.workflowId,
+      data: { width: outputDims.width, height: outputDims.height, bytes: outputPng.length },
+    });
 
     /* ═══════════════════════════════════════════════════════════════
      * Step 10: Upscale result back to original dimensions

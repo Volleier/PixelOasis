@@ -7,6 +7,13 @@ window.PO.state = {
   status: "ready",
   capture: null,
   transientTimer: null,
+  logging: {
+    enabled: true,
+    level: "info",
+    maxFileBytes: 1024 * 1024,
+    retainFiles: 5,
+    logPromptText: false,
+  },
 };
 
 window.PO.clearTransientTimer = function () {

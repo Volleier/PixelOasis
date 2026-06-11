@@ -15,6 +15,10 @@ import { handleWorkflows } from "./routes/workflows.js";
 import { handleGenerate } from "./routes/generate.js";
 import { notFound } from "./utils/errors.js";
 import { initRegistry } from "./adapters/registry-instance.js";
+import logger from "./utils/logger.js";
+
+/* Init logger with config */
+logger.init(config);
 
 /* Route table — keyed by "METHOD:pathname" */
 var ROUTES = {
@@ -34,13 +38,33 @@ function parseUrl(request) {
 }
 
 var server = createServer(async function (request, response) {
+  var reqStart = Date.now();
   var { pathname, params } = parseUrl(request);
   var key = request.method + ":" + pathname;
   var handler = ROUTES[key];
 
   if (handler) {
-    await handler(request, response, params);
+    try {
+      await handler(request, response, params);
+    } catch (err) {
+      logger.error("request.handler_error", {
+        component: "server",
+        data: { method: request.method, path: pathname },
+        error: err,
+        durationMs: Date.now() - reqStart,
+      });
+      notFound(response);
+    }
+    logger.info("request.completed", {
+      component: "server",
+      data: { method: request.method, path: pathname },
+      durationMs: Date.now() - reqStart,
+    });
   } else {
+    logger.debug("request.not_found", {
+      component: "server",
+      data: { method: request.method, path: pathname },
+    });
     notFound(response);
   }
 });
@@ -52,6 +76,10 @@ try {
 } catch (err) {
   console.warn("Workflow registry initialisation warning: " + err.message);
   console.warn("GET /workflows will fall back to hardcoded defaults.");
+  logger.warn("workflow.init_warning", {
+    component: "server",
+    error: err,
+  });
 }
 
 server.listen(config.port, config.host, function () {
@@ -61,4 +89,16 @@ server.listen(config.port, config.host, function () {
   console.log("  GET  /health     → health check (?upstream=1 for ComfyUI status)");
   console.log("  GET  /workflows  → workflow registry (file-backed)");
   console.log("  POST /generate   → submit generation");
+
+  logger.info("gateway.started", {
+    component: "server",
+    data: {
+      host: config.host,
+      port: config.port,
+      provider: config.modelProvider,
+      comfyuiUrl: config.comfyui.baseUrl,
+      nodeVersion: process.version,
+      pid: process.pid,
+    },
+  });
 });

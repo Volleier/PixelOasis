@@ -15,6 +15,7 @@
 
 import config from "../config.js";
 import { writeJson } from "../utils/errors.js";
+import logger from "../utils/logger.js";
 
 /* ── Small helper: fetch JSON from a URL with a timeout ── */
 async function fetchJson(url, timeoutMs) {
@@ -91,6 +92,11 @@ export async function handleHealth(request, response, params) {
     var deep = upstream === "deep";
     var primary = await probeComfyUI(config.comfyui.baseUrl, deep);
     payload.comfyui.upstream = primary;
+
+    logger.info(primary.reachable ? "comfyui.health.up" : "comfyui.health.down", {
+      component: "health",
+      data: { baseUrl: config.comfyui.baseUrl, reachable: primary.reachable },
+    });
 
     /* If the primary URL is unreachable and no explicit COMFYUI_URL was set,
      * try fallback candidates for diagnostic purposes. */

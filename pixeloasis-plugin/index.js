@@ -16,6 +16,13 @@
 
 (function () {
   try {
+    /* ── Startup log ── */
+    window.PO.Logger.info("plugin.started", {
+      component: "startup",
+      message: "PixelOasis initializing",
+      data: { version: "0.1.0" },
+    });
+
     /* ── Render template ── */
     var appRoot = document.getElementById("app");
     if (!appRoot) throw new Error("PixelOasis root element not found.");
@@ -88,6 +95,10 @@
       window.PO.setStatus(error instanceof Error ? error.message : String(error));
     }
   } catch (error) {
+    window.PO.Logger.error("plugin.initialization_failed", {
+      component: "startup",
+      error: error,
+    });
     document.body.innerHTML =
       '<pre class="po-fatal">' +
       (error instanceof Error ? error.stack || error.message : String(error)) +

@@ -176,6 +176,18 @@ window.PO.placeGeneratedLayer = async function (imagePngBase64, maskPngBase64, b
 
   return core.executeAsModal(
     async function () {
+      var placeStart = Date.now();
+      window.PO.Logger.info("placement.started", {
+        component: "placement",
+        correlationId: window.PO.state.capture ? "po-place-" + Date.now().toString(36) : undefined,
+        workflowId: workflowTitle,
+        data: {
+          hasImage: !!imagePngBase64,
+          hasMask: !!maskPngBase64,
+          imageLength: imagePngBase64 ? imagePngBase64.length : 0,
+        },
+      });
+
       var imagePath = await writeTempFile(
         "po-result-" + Date.now() + ".png",
         base64ToBytes(imagePngBase64),
@@ -209,6 +221,14 @@ window.PO.placeGeneratedLayer = async function (imagePngBase64, maskPngBase64, b
 
       var layerName = (workflowTitle || "PixelOasis") + " - " + new Date().toLocaleString();
       await renameActiveLayer(layerName);
+
+      window.PO.Logger.info("placement.completed", {
+        component: "placement",
+        workflowId: workflowTitle,
+        durationMs: Date.now() - placeStart,
+        data: { layerName: layerName },
+      });
+
       return { layerName: layerName };
     },
     { commandName: "PixelOasis Place Generated Layer" },

@@ -271,6 +271,16 @@ window.PO.getSelectionBounds = async function () {
     throw new Error("No active selection.");
   }
 
+  window.PO.Logger.info("selection.detected", {
+    component: "photoshop",
+    data: {
+      left: selection.left,
+      top: selection.top,
+      width: selection.width,
+      height: selection.height,
+    },
+  });
+
   return selection;
 };
 

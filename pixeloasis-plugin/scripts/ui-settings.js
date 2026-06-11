@@ -49,4 +49,45 @@ window.PO.initSettings = function () {
       }
     });
   }
+
+  /* ── Log settings ── */
+  var logToggleBtn = document.getElementById("log-toggle-btn");
+  var logLevelSelect = document.getElementById("log-level-select");
+  var logClearBtn = document.getElementById("log-clear-btn");
+  var logPathNode = document.getElementById("log-path-display");
+
+  if (logToggleBtn) {
+    logToggleBtn.setAttribute("aria-pressed", window.PO.state.logging.enabled ? "true" : "false");
+    logToggleBtn.addEventListener("click", function () {
+      window.PO.state.logging.enabled = !window.PO.state.logging.enabled;
+      logToggleBtn.setAttribute("aria-pressed", window.PO.state.logging.enabled ? "true" : "false");
+      window.PO.showTransientStatus("日志已" + (window.PO.state.logging.enabled ? "开启" : "关闭"));
+    });
+  }
+
+  if (logLevelSelect) {
+    logLevelSelect.value = window.PO.state.logging.level || "info";
+    logLevelSelect.addEventListener("change", function () {
+      window.PO.state.logging.level = logLevelSelect.value;
+      window.PO.showTransientStatus("日志级别: " + logLevelSelect.value);
+    });
+  }
+
+  if (logClearBtn) {
+    logClearBtn.addEventListener("click", async function () {
+      try {
+        await window.PO.Logger.clearLogs();
+        window.PO.showTransientStatus("日志已清空");
+      } catch (e) {
+        window.PO.showTransientStatus("清空日志失败: " + (e.message || e));
+      }
+    });
+  }
+
+  /* Display log path */
+  if (logPathNode) {
+    window.PO.Logger.getLogPath().then(function (p) {
+      logPathNode.textContent = p;
+    });
+  }
 };

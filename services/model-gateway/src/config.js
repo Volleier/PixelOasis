@@ -36,4 +36,14 @@ export default {
 
   /* Limits */
   maxPayloadBytes: 50 * 1024 * 1024, /* 50 MB */
+
+  /* Logging */
+  logging: {
+    enabled: process.env.PO_LOG_ENABLED !== "0",
+    level: process.env.PO_LOG_LEVEL || "info",
+    dir: process.env.PO_LOG_DIR || "logs",
+    maxFileBytes: 5 * 1024 * 1024,
+    retainFiles: 10,
+    logPromptText: process.env.PO_LOG_PROMPT_TEXT === "1",
+  },
 };

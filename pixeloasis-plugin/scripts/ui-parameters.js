@@ -186,7 +186,7 @@ window.PO.assembleGenerateRequest = function () {
 
   var capture = window.PO.state.capture;
   var req = {
-    correlationId: "po-" + Date.now().toString(36),
+    correlationId: "po-" + Date.now().toString(36) + "-" + Math.floor(Math.random() * 1000).toString(36),
     workflowId: workflowId,
     selection: capture ? {
       documentId: capture.documentId || "",
@@ -208,6 +208,23 @@ window.PO.assembleGenerateRequest = function () {
       scheduler: params.scheduler,
     },
   };
+
+  window.PO.Logger.info("request.assembled", {
+    component: "parameters",
+    correlationId: req.correlationId,
+    workflowId: workflowId,
+    data: {
+      prompt: params.prompt,
+      negativePrompt: params.negativePrompt,
+      seed: params.seed,
+      steps: params.steps,
+      cfg: params.cfg,
+      denoise: params.denoise,
+      sampler: params.sampler,
+      scheduler: params.scheduler,
+      hasSelection: !!capture,
+    },
+  });
 
   return req;
 };
@@ -246,16 +263,35 @@ window.PO.initParameterPage = function () {
   els.runBtn.addEventListener("click", async function () {
     window.PO.saveParameterPage();
     var req = window.PO.assembleGenerateRequest();
-    if (!req || !req.selection) {
+    if (!req) {
+      window.PO.showTransientStatus("无法组装请求");
+      return;
+    }
+    if (!req.selection) {
       window.PO.showTransientStatus("请先抓取选区再生成");
       return;
     }
 
+    var genStart = Date.now();
+    var corrId = req.correlationId;
+
     /* Progress: check gateway */
     window.PO.setStatus("checking gateway...");
+    window.PO.Logger.info("generation.started", {
+      component: "parameters",
+      correlationId: corrId,
+      workflowId: req.workflowId,
+    });
+
     var healthy = await window.PO.GatewayClient.health();
     if (!healthy) {
       window.PO.showTransientStatus("网关不可达 — 请确认 " + (window.PO.state.gatewayUrl || "http://127.0.0.1:8787") + " 已启动");
+      window.PO.Logger.error("generation.failed", {
+        component: "parameters",
+        correlationId: corrId,
+        workflowId: req.workflowId,
+        error: { message: "Gateway unreachable" },
+      });
       return;
     }
 
@@ -272,6 +308,18 @@ window.PO.initParameterPage = function () {
 
       if (result && result.status === "succeeded" && returnedImage) {
         window.PO.state.lastResult = result;
+
+        window.PO.Logger.info("generation.completed", {
+          component: "parameters",
+          correlationId: corrId,
+          workflowId: req.workflowId,
+          durationMs: Date.now() - genStart,
+          data: {
+            resultWidth: result.result.width,
+            resultHeight: result.result.height,
+            seed: result.result.seed,
+          },
+        });
 
         /* P4 — Place returned image as a new layer in Photoshop */
         window.PO.setStatus("placing layer...");
@@ -291,14 +339,34 @@ window.PO.initParameterPage = function () {
           window.PO.showTransientStatus("生成完成 — " + placeInfo.layerName);
         } catch (placeErr) {
           window.PO.showTransientStatus("生成完成但置入失败: " + (placeErr.message || placeErr));
+          window.PO.Logger.error("placement.failed", {
+            component: "parameters",
+            correlationId: corrId,
+            workflowId: req.workflowId,
+            error: placeErr,
+          });
         }
       } else {
         var errMsg = (result && result.error && result.error.message)
           ? result.error.message
           : "生成失败";
+        window.PO.Logger.error("generation.failed", {
+          component: "parameters",
+          correlationId: corrId,
+          workflowId: req.workflowId,
+          durationMs: Date.now() - genStart,
+          error: { message: errMsg },
+        });
         window.PO.showTransientStatus(errMsg);
       }
     } catch (error) {
+      window.PO.Logger.error("generation.failed", {
+        component: "parameters",
+        correlationId: corrId,
+        workflowId: req.workflowId,
+        durationMs: Date.now() - genStart,
+        error: error,
+      });
       window.PO.showTransientStatus(error instanceof Error ? error.message : String(error));
     } finally {
       els.runBtn.disabled = false;

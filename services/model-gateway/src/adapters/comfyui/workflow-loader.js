@@ -16,6 +16,7 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
+import logger from "../../utils/logger.js";
 
 /* ═══════════════════════════════════════════════════════════════════════
  * Schema constants
@@ -437,12 +438,35 @@ export async function loadWorkflows(workflowsDir) {
     for (var wrn = 0; wrn < warnings.length; wrn++) {
       console.warn("  - " + warnings[wrn]);
     }
+    logger.warn("workflow.load_warnings", {
+      component: "workflow-loader",
+      data: { count: warnings.length, warnings: warnings.slice(0, 10) },
+    });
   }
 
   console.log(
     "[workflow-loader] Loaded " + allVariants.length +
     " variant(s) across " + workflowIds.length + " public workflow(s)."
   );
+
+  /* Count disabled / missing */
+  var disabledCount = 0;
+  var missingFileCount = 0;
+  for (var st = 0; st < allVariants.length; st++) {
+    if (!allVariants[st].enabled) disabledCount++;
+    if (allVariants[st].apiLoadError) missingFileCount++;
+  }
+
+  logger.info("workflow.loaded", {
+    component: "workflow-loader",
+    data: {
+      totalVariants: allVariants.length,
+      publicWorkflows: workflowIds.length,
+      disabled: disabledCount,
+      missingApiFile: missingFileCount,
+      warningCount: warnings.length,
+    },
+  });
 
   return registry;
 }
