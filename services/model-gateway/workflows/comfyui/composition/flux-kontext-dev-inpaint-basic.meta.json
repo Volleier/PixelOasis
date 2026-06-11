@@ -1,0 +1,50 @@
+{
+  "workflowId": "composition.inpaint.basic",
+  "variantId": "flux-kontext-dev-inpaint-basic",
+  "title": "FLUX.1 Kontext Dev Inpaint Basic",
+  "category": "composition",
+  "provider": "comfyui",
+  "apiWorkflowFile": "flux-kontext-dev-inpaint-basic.api.json",
+  "enabled": false,
+  "priority": 30,
+
+  "requiredModels": [
+    { "folder": "diffusion_models", "name": "flux1-dev-kontext_fp8_scaled.safetensors" },
+    { "folder": "vae", "name": "ae.safetensors" },
+    { "folder": "text_encoders", "name": "clip_l.safetensors" },
+    { "folder": "text_encoders", "name": "t5xxl_fp16.safetensors" }
+  ],
+
+  "inputs": {
+    "sourceImage": { "nodeId": "12", "input": "image" },
+    "maskImage": { "nodeId": "13", "input": "image" },
+    "positivePrompt": { "nodeId": "6", "input": "text" },
+    "negativePrompt": { "nodeId": "7", "input": "text" },
+    "seed": { "nodeId": "3", "input": "seed" },
+    "steps": { "nodeId": "3", "input": "steps" },
+    "cfg": { "nodeId": "3", "input": "cfg" },
+    "denoise": { "nodeId": "3", "input": "denoise" }
+  },
+
+  "outputs": {
+    "images": { "nodeId": "99" }
+  },
+
+  "defaults": {
+    "prompt": "",
+    "negativePrompt": "",
+    "seed": -1,
+    "steps": 28,
+    "cfg": 7,
+    "denoise": 0.75,
+    "sampler": "dpmpp_2m",
+    "scheduler": "karras"
+  },
+
+  "sizePolicy": {
+    "mode": "matchSelection",
+    "allowResize": false
+  },
+
+  "note": "API workflow file must be authored in ComfyUI Desktop following the FLUX.1 Kontext Dev tutorial at https://docs.comfy.org/tutorials/flux/flux-1-kontext-dev. Enable this variant after creating and testing the corresponding .api.json file."
+}
