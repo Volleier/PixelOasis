@@ -1,5 +1,5 @@
 {
-  "manifestVersion": 5,
+  "manifestVersion": 6,
   "id": "com.pixeloasis.plugin",
   "name": "PixelOasis",
   "version": "0.1.0",
@@ -16,12 +16,10 @@
       "path": "icons/icon@2x.png"
     }
   ],
-  "host": [
-    {
-      "app": "PS",
-      "minVersion": "25.0.0"
-    }
-  ],
+  "host": {
+    "app": "PS",
+    "minVersion": "23.0.0"
+  },
   "entrypoints": [
     {
       "type": "panel",
@@ -46,5 +44,34 @@
         "height": 680
       }
     }
-  ]
+  ],
+  "requiredPermissions": {
+    "localFileSystem": "fullAccess",
+    "launchProcess": {
+      "schemes": [
+        "https",
+        "http",
+        "file",
+        "ws"
+      ],
+      "extensions": [
+        ".png",
+        ".jpg",
+        ".jpeg"
+      ]
+    },
+    "network": {
+      "domains": "all"
+    },
+    "clipboard": "readAndWrite",
+    "webview": {
+      "allow": "yes",
+      "domains": "all",
+      "enableMessageBridge": "localAndRemote"
+    },
+    "ipc": {
+      "enablePluginCommunication": true
+    },
+    "allowCodeGenerationFromStrings": true
+  }
 }

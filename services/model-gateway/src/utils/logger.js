@@ -4,7 +4,7 @@
  * One JSON object per line.  Never logs base64 image data.
  *
  * API:
- *   const logger = require('./utils/logger');
+ *   import logger from "./utils/logger.js";
  *   logger.debug(event, opts)
  *   logger.info(event, opts)
  *   logger.warn(event, opts)
@@ -13,10 +13,8 @@
  *   opts: { component, correlationId, workflowId, durationMs, data, error, message }
  */
 
-"use strict";
-
-const fs = require("node:fs");
-const path = require("node:path");
+import fs from "node:fs";
+import path from "node:path";
 
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
 const LEVEL_NAMES = ["debug", "info", "warn", "error"];
@@ -208,7 +206,7 @@ function info(event, opts) { log("info", event, opts); }
 function warn(event, opts) { log("warn", event, opts); }
 function errorLog(event, opts) { log("error", event, opts); }
 
-module.exports = {
+export default {
   debug: debug,
   info: info,
   warn: warn,
