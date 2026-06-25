@@ -363,6 +363,17 @@ window.PO.Logger = (function () {
     }
   }
 
+  /* Get log file path for opening */
+  async function getLogFilePath() {
+    try {
+      var file = await ensureLogFile();
+      if (!file) return "(unavailable)";
+      return file.nativePath || "(unknown)";
+    } catch (e) {
+      return "(error)";
+    }
+  }
+
   /* Export recent log entries as text (for copy/debug) */
   async function exportRecent(maxLines) {
     maxLines = maxLines || 50;
@@ -384,6 +395,7 @@ window.PO.Logger = (function () {
     error: errorLog,
     clearLogs: clearLogs,
     getLogPath: getLogPath,
+    getLogFilePath: getLogFilePath,
     exportRecent: exportRecent,
   };
 })();
@@ -490,19 +502,7 @@ window.PO.buildTemplate = function () {
     '<span class="po-toggle__thumb"></span>',
     "</button>",
     "</div>",
-    '<div class="po-setting-row" style="margin-top:8px;">',
-    '<label class="po-setting-row__label" for="log-level-select">日志级别</label>',
-    '<select id="log-level-select" class="po-param-select" style="width:120px;">',
-    '<option value="debug">debug</option>',
-    '<option value="info" selected>info</option>',
-    '<option value="warn">warn</option>',
-    '<option value="error">error</option>',
-    "</select>",
-    "</div>",
-    '<div class="po-setting-row" style="margin-top:8px;">',
-    '<span id="log-path-display" class="po-setting-row__hint" style="font-size:10px;">(loading...)</span>',
-    "</div>",
-    '<button id="log-clear-btn" class="po-button po-button--secondary" type="button" style="margin-top:8px;width:100%;">清空日志</button>',
+    '<button id="log-open-btn" class="po-button po-button--secondary" type="button" style="margin-top:8px;width:100%;">打开日志</button>',
     "</div>",
 
     "</div>",
@@ -1822,6 +1822,17 @@ window.PO.updatePreview = function (capture) {
 /* ===== scripts/ui-settings.js ===== */
 window.PO = window.PO || {};
 
+/* 窗口级捕获阶段滚轮拦截 —— 这是唯一能阻止 UXP 事件穿透到 Photoshop 的方式 */
+window.PO._settingsWheelCapture = function (e) {
+  if (!window.PO.state.settingsOpen) return;
+  e.preventDefault();
+  e.stopPropagation();
+  var body = document.querySelector(".po-settings-drawer__body");
+  if (body) {
+    body.scrollTop += e.deltaY;
+  }
+};
+
 window.PO.toggleSettings = function () {
   var state = window.PO.state;
   var els = window.PO.elements;
@@ -1832,10 +1843,28 @@ window.PO.toggleSettings = function () {
     els.settingsOverlay.hidden = false;
     els.settingsDrawer.hidden = false;
     els.settingsDrawer.setAttribute("aria-hidden", "false");
+
+    /* 锁定主内容区 + 根节点滚动 */
+    if (els.mainEl) {
+      els.mainEl.style.overflowY = "hidden";
+    }
+    document.documentElement.style.overflow = "hidden";
+
+    /* 窗口级捕获阶段拦截滚轮事件（capture: true 确保在到达任何 DOM 元素之前拦截） */
+    window.addEventListener("wheel", window.PO._settingsWheelCapture, { capture: true, passive: false });
   } else {
     els.settingsOverlay.hidden = true;
     els.settingsDrawer.hidden = true;
     els.settingsDrawer.setAttribute("aria-hidden", "true");
+
+    /* 恢复滚动 */
+    if (els.mainEl) {
+      els.mainEl.style.overflowY = "";
+    }
+    document.documentElement.style.overflow = "";
+
+    /* 移除滚轮拦截 */
+    window.removeEventListener("wheel", window.PO._settingsWheelCapture, { capture: true });
   }
 };
 
@@ -1874,9 +1903,7 @@ window.PO.initSettings = function () {
 
   /* ── Log settings ── */
   var logToggleBtn = document.getElementById("log-toggle-btn");
-  var logLevelSelect = document.getElementById("log-level-select");
-  var logClearBtn = document.getElementById("log-clear-btn");
-  var logPathNode = document.getElementById("log-path-display");
+  var logOpenBtn = document.getElementById("log-open-btn");
 
   if (logToggleBtn) {
     logToggleBtn.setAttribute("aria-pressed", window.PO.state.logging.enabled ? "true" : "false");
@@ -1887,29 +1914,20 @@ window.PO.initSettings = function () {
     });
   }
 
-  if (logLevelSelect) {
-    logLevelSelect.value = window.PO.state.logging.level || "info";
-    logLevelSelect.addEventListener("change", function () {
-      window.PO.state.logging.level = logLevelSelect.value;
-      window.PO.showTransientStatus("日志级别: " + logLevelSelect.value);
-    });
-  }
-
-  if (logClearBtn) {
-    logClearBtn.addEventListener("click", async function () {
+  if (logOpenBtn) {
+    logOpenBtn.addEventListener("click", async function () {
       try {
-        await window.PO.Logger.clearLogs();
-        window.PO.showTransientStatus("日志已清空");
+        var filePath = await window.PO.Logger.getLogFilePath();
+        if (filePath && filePath !== "(unavailable)" && filePath !== "(error)" && filePath !== "(unknown)") {
+          var uxp = window.require("uxp");
+          await uxp.shell.openPath(filePath);
+          window.PO.showTransientStatus("已打开日志文件");
+        } else {
+          window.PO.showTransientStatus("日志文件不可用");
+        }
       } catch (e) {
-        window.PO.showTransientStatus("清空日志失败: " + (e.message || e));
+        window.PO.showTransientStatus("打开日志文件失败: " + (e.message || e));
       }
-    });
-  }
-
-  /* Display log path */
-  if (logPathNode) {
-    window.PO.Logger.getLogPath().then(function (p) {
-      logPathNode.textContent = p;
     });
   }
 };
@@ -2400,6 +2418,7 @@ window.PO.bindEvents = function () {
 
     /* ── Query DOM elements ── */
     window.PO.elements = {
+      mainEl: document.querySelector(".po-main"),
       settingsButton: document.getElementById("settings-btn"),
       settingsOverlay: document.getElementById("settings-overlay"),
       settingsDrawer: document.getElementById("settings-drawer"),

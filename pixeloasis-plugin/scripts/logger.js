@@ -301,6 +301,17 @@ window.PO.Logger = (function () {
     }
   }
 
+  /* Get log file path for opening */
+  async function getLogFilePath() {
+    try {
+      var file = await ensureLogFile();
+      if (!file) return "(unavailable)";
+      return file.nativePath || "(unknown)";
+    } catch (e) {
+      return "(error)";
+    }
+  }
+
   /* Export recent log entries as text (for copy/debug) */
   async function exportRecent(maxLines) {
     maxLines = maxLines || 50;
@@ -322,6 +333,7 @@ window.PO.Logger = (function () {
     error: errorLog,
     clearLogs: clearLogs,
     getLogPath: getLogPath,
+    getLogFilePath: getLogFilePath,
     exportRecent: exportRecent,
   };
 })();

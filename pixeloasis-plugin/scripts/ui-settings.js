@@ -1,5 +1,16 @@
 window.PO = window.PO || {};
 
+/* 窗口级捕获阶段滚轮拦截 —— 这是唯一能阻止 UXP 事件穿透到 Photoshop 的方式 */
+window.PO._settingsWheelCapture = function (e) {
+  if (!window.PO.state.settingsOpen) return;
+  e.preventDefault();
+  e.stopPropagation();
+  var body = document.querySelector(".po-settings-drawer__body");
+  if (body) {
+    body.scrollTop += e.deltaY;
+  }
+};
+
 window.PO.toggleSettings = function () {
   var state = window.PO.state;
   var els = window.PO.elements;
@@ -10,10 +21,28 @@ window.PO.toggleSettings = function () {
     els.settingsOverlay.hidden = false;
     els.settingsDrawer.hidden = false;
     els.settingsDrawer.setAttribute("aria-hidden", "false");
+
+    /* 锁定主内容区 + 根节点滚动 */
+    if (els.mainEl) {
+      els.mainEl.style.overflowY = "hidden";
+    }
+    document.documentElement.style.overflow = "hidden";
+
+    /* 窗口级捕获阶段拦截滚轮事件（capture: true 确保在到达任何 DOM 元素之前拦截） */
+    window.addEventListener("wheel", window.PO._settingsWheelCapture, { capture: true, passive: false });
   } else {
     els.settingsOverlay.hidden = true;
     els.settingsDrawer.hidden = true;
     els.settingsDrawer.setAttribute("aria-hidden", "true");
+
+    /* 恢复滚动 */
+    if (els.mainEl) {
+      els.mainEl.style.overflowY = "";
+    }
+    document.documentElement.style.overflow = "";
+
+    /* 移除滚轮拦截 */
+    window.removeEventListener("wheel", window.PO._settingsWheelCapture, { capture: true });
   }
 };
 
@@ -52,9 +81,7 @@ window.PO.initSettings = function () {
 
   /* ── Log settings ── */
   var logToggleBtn = document.getElementById("log-toggle-btn");
-  var logLevelSelect = document.getElementById("log-level-select");
-  var logClearBtn = document.getElementById("log-clear-btn");
-  var logPathNode = document.getElementById("log-path-display");
+  var logOpenBtn = document.getElementById("log-open-btn");
 
   if (logToggleBtn) {
     logToggleBtn.setAttribute("aria-pressed", window.PO.state.logging.enabled ? "true" : "false");
@@ -65,29 +92,20 @@ window.PO.initSettings = function () {
     });
   }
 
-  if (logLevelSelect) {
-    logLevelSelect.value = window.PO.state.logging.level || "info";
-    logLevelSelect.addEventListener("change", function () {
-      window.PO.state.logging.level = logLevelSelect.value;
-      window.PO.showTransientStatus("日志级别: " + logLevelSelect.value);
-    });
-  }
-
-  if (logClearBtn) {
-    logClearBtn.addEventListener("click", async function () {
+  if (logOpenBtn) {
+    logOpenBtn.addEventListener("click", async function () {
       try {
-        await window.PO.Logger.clearLogs();
-        window.PO.showTransientStatus("日志已清空");
+        var filePath = await window.PO.Logger.getLogFilePath();
+        if (filePath && filePath !== "(unavailable)" && filePath !== "(error)" && filePath !== "(unknown)") {
+          var uxp = window.require("uxp");
+          await uxp.shell.openPath(filePath);
+          window.PO.showTransientStatus("已打开日志文件");
+        } else {
+          window.PO.showTransientStatus("日志文件不可用");
+        }
       } catch (e) {
-        window.PO.showTransientStatus("清空日志失败: " + (e.message || e));
+        window.PO.showTransientStatus("打开日志文件失败: " + (e.message || e));
       }
-    });
-  }
-
-  /* Display log path */
-  if (logPathNode) {
-    window.PO.Logger.getLogPath().then(function (p) {
-      logPathNode.textContent = p;
     });
   }
 };

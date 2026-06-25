@@ -100,7 +100,7 @@ const manifest = {
     localFileSystem: "fullAccess",
     launchProcess: {
       schemes: ["https", "http", "file", "ws"],
-      extensions: [".png", ".jpg", ".jpeg"],
+      extensions: [".png", ".jpg", ".jpeg", ".jsonl"],
     },
     network: {
       domains: "all",

@@ -30,6 +30,7 @@
 
     /* ── Query DOM elements ── */
     window.PO.elements = {
+      mainEl: document.querySelector(".po-main"),
       settingsButton: document.getElementById("settings-btn"),
       settingsOverlay: document.getElementById("settings-overlay"),
       settingsDrawer: document.getElementById("settings-drawer"),

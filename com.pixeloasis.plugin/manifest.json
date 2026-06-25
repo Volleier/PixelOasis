@@ -57,7 +57,8 @@
       "extensions": [
         ".png",
         ".jpg",
-        ".jpeg"
+        ".jpeg",
+        ".jsonl"
       ]
     },
     "network": {

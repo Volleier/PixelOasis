@@ -29,6 +29,7 @@ body {
   font-family: "Adobe Clean", "Segoe UI", sans-serif;
   cursor: default;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
@@ -58,6 +59,7 @@ body {
   min-height: 0;
   padding: var(--space-sm) var(--space-md) var(--space-md);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .po-section {
@@ -235,7 +237,9 @@ body {
   background: var(--bg-surface);
   border-top: 1px solid var(--border-strong);
   max-height: 60%;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overscroll-behavior: contain;
 }
 
 .po-settings-drawer[hidden] {
@@ -243,7 +247,11 @@ body {
 }
 
 .po-settings-drawer__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: scroll;
   padding: var(--space-sm);
+  overscroll-behavior: contain;
 }
 
 /* ── Setting row ── */
