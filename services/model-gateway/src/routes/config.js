@@ -11,15 +11,25 @@
 import { loadConfig } from "../config/config-loader.js";
 import { writeJson } from "../utils/errors.js";
 
+/* P2-2 placeholder detector */
+function isPlaceholder(val) {
+  if (typeof val !== "string" || val.trim().length === 0) return true;
+  return /Your[\/\\]Path[\/\\]To/i.test(val.trim());
+}
+
 export function handleConfig(_request, response) {
   const { config } = loadConfig();
 
+  var cr = config.comfyui.root;
+  var md = config.comfyui.models_dir;
+  var pp = config.photoshop.plugin_path;
+
   const comfyuiRootConfigured =
-    typeof config.comfyui.root === "string" && config.comfyui.root.trim().length > 0;
+    typeof cr === "string" && cr.trim().length > 0 && !isPlaceholder(cr);
   const modelsDirConfigured =
-    typeof config.comfyui.models_dir === "string" && config.comfyui.models_dir.trim().length > 0;
+    typeof md === "string" && md.trim().length > 0 && !isPlaceholder(md);
   const pluginPathConfigured =
-    typeof config.photoshop.plugin_path === "string" && config.photoshop.plugin_path.trim().length > 0;
+    typeof pp === "string" && pp.trim().length > 0 && !isPlaceholder(pp);
 
   const payload = {
     gateway: {

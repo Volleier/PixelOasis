@@ -345,40 +345,44 @@ export function validateGenerateRequest(body) {
   var maskForbidden = inputPolicy && inputPolicy.mask === "forbidden";
   var sourceKind = inputPolicy ? inputPolicy.source : "selection";
 
-  /* ── selection ── */
+  /* ── selection (P2-4: conditional on source) ── */
   var selection = body.selection;
-  if (!selection || typeof selection !== "object") {
-    return invalid("Missing selection.");
+
+  if (sourceKind === "selection") {
+    if (!selection || typeof selection !== "object") {
+      return invalid("Missing selection — required when inputPolicy.source is 'selection'.");
+    }
+  } else if (sourceKind === "activeLayer" || sourceKind === "document") {
+    /* Phase 1: source=activeLayer/document are reserved but not yet supported.
+     * Fail early with a clear message instead of silently ignoring. */
+    return invalid(
+      "inputPolicy.source '" + sourceKind + "' is not yet supported in Phase 1. " +
+      "Only 'selection' is available."
+    );
   }
 
   /* Source image — PNG only, no JPEG (always required) */
-  var imageValidation = validatePngField(
-    selection.imagePngBase64 || selection.imageBase64,
-    "selection.imagePngBase64",
-  );
+  var selImage = selection ? (selection.imagePngBase64 || selection.imageBase64) : null;
+  var imageValidation = validatePngField(selImage, "selection.imagePngBase64");
   if (!imageValidation.valid) return imageValidation;
+
+  var selMask = selection ? (selection.maskPngBase64 || selection.maskBase64) : null;
 
   /* Mask — conditional on inputPolicy.mask */
   if (maskForbidden) {
-    if (selection.maskPngBase64 || selection.maskBase64) {
+    if (selMask) {
       return invalid(
         "selection.maskPngBase64 is forbidden for workflow " + body.workflowId +
         " (inputPolicy.mask = forbidden)."
       );
     }
   } else if (maskRequired) {
-    var maskValidation = validatePngField(
-      selection.maskPngBase64 || selection.maskBase64,
-      "selection.maskPngBase64",
-    );
+    var maskValidation = validatePngField(selMask, "selection.maskPngBase64");
     if (!maskValidation.valid) return maskValidation;
   }
   /* mask=optional: validate if present, but don't require it */
-  if (!maskRequired && !maskForbidden && (selection.maskPngBase64 || selection.maskBase64)) {
-    var optMaskValidation = validatePngField(
-      selection.maskPngBase64 || selection.maskBase64,
-      "selection.maskPngBase64",
-    );
+  if (!maskRequired && !maskForbidden && selMask) {
+    var optMaskValidation = validatePngField(selMask, "selection.maskPngBase64");
     if (!optMaskValidation.valid) return optMaskValidation;
   }
 

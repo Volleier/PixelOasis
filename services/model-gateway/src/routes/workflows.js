@@ -1,68 +1,54 @@
 /* routes/workflows.js — GET /workflows
  *
- * DevList §9 — Phase G3: Workflow Registry And Metadata.
+ * ImplList §8.1 — Returns full workflow summaries including policy fields
+ * so the plugin can render buttons and configure parameters correctly.
  *
- * Returns the public PixelOasis workflow catalogue.
  * Uses the file-backed workflow registry when available, with a hardcoded
  * fallback for when the registry fails to load. */
 
 import { writeJson } from "../utils/errors.js";
 import { getRegistry } from "../adapters/registry-instance.js";
 
-/* Hardcoded fallback — used when the file-backed registry is unavailable.
- * Must stay in sync with KNOWN_WORKFLOWS in validation/generate-request.js. */
+/* Hardcoded fallback — used when the file-backed registry is unavailable. */
 var FALLBACK_WORKFLOWS = [
-  { id: "composition.remove.basic", title: "移除", category: "composition", defaults: { steps: 28, cfg: 6.5, denoise: 0.85, sampler: "dpmpp_2m", scheduler: "karras" } },
-  { id: "composition.outpaint.basic", title: "扩图", category: "composition", defaults: { steps: 30, cfg: 7, denoise: 0.9, sampler: "dpmpp_2m", scheduler: "karras" } },
-  { id: "composition.inpaint.basic", title: "局部修复", category: "composition", defaults: { steps: 28, cfg: 7, denoise: 0.75, sampler: "dpmpp_2m", scheduler: "karras" } },
-  { id: "quality.upscale.basic", title: "超分放大", category: "quality", defaults: { steps: 18, cfg: 5, denoise: 0.25, sampler: "dpmpp_2m", scheduler: "karras" } },
-  { id: "quality.realism-enhance.basic", title: "真实感增强", category: "quality", defaults: { steps: 24, cfg: 5.5, denoise: 0.35, sampler: "dpmpp_2m", scheduler: "karras" } },
-  { id: "quality.denoise.basic", title: "去噪", category: "quality", defaults: { steps: 15, cfg: 5, denoise: 0.3, sampler: "dpmpp_2m", scheduler: "karras" } },
-  { id: "portrait.skin-retouch.basic", title: "皮肤精修", category: "portrait", defaults: { steps: 28, cfg: 7, denoise: 0.75, sampler: "dpmpp_2m", scheduler: "karras" } },
-  { id: "portrait.face-restore.basic", title: "面部修复", category: "portrait", defaults: { steps: 28, cfg: 7, denoise: 0.65, sampler: "dpmpp_2m", scheduler: "karras" } },
-  { id: "lighting.relight.basic", title: "光影调整", category: "lighting", defaults: { steps: 20, cfg: 7, denoise: 0.6, sampler: "dpmpp_2m", scheduler: "karras" } },
-  { id: "lighting.color-grade.basic", title: "色调调整", category: "lighting", defaults: { steps: 22, cfg: 6.5, denoise: 0.55, sampler: "dpmpp_2m", scheduler: "karras" } },
-  { id: "effects.style-transfer.basic", title: "风格迁移", category: "effects", defaults: { steps: 30, cfg: 7, denoise: 0.8, sampler: "euler", scheduler: "normal" } },
-  { id: "effects.background-effect.basic", title: "背景特效", category: "effects", defaults: { steps: 28, cfg: 7, denoise: 0.75, sampler: "dpmpp_2m", scheduler: "karras" } },
+  { id: "composition.inpaint.basic", title: "局部修复", category: "composition", defaults: { steps: 28, cfg: 7, denoise: 0.75, sampler: "euler", scheduler: "karras" }, stage: 0, inputPolicy: null, sizePolicyMode: null, placementPolicyType: null },
+  { id: "composition.remove.basic", title: "移除", category: "composition", defaults: { steps: 28, cfg: 6.5, denoise: 0.85, sampler: "euler", scheduler: "karras" }, stage: 0, inputPolicy: null, sizePolicyMode: null, placementPolicyType: null },
+  { id: "quality.upscale.basic", title: "超分放大", category: "quality", defaults: { steps: 18, cfg: 5, denoise: 0.25, sampler: "dpmpp_2m", scheduler: "karras" }, stage: 0, inputPolicy: null, sizePolicyMode: null, placementPolicyType: null },
+  { id: "quality.realism-enhance.basic", title: "真实感增强", category: "quality", defaults: { steps: 24, cfg: 5.5, denoise: 0.35, sampler: "dpmpp_2m", scheduler: "karras" }, stage: 0, inputPolicy: null, sizePolicyMode: null, placementPolicyType: null },
 ];
 
-export function handleWorkflows(request, response, _params) {
+export function handleWorkflows(_request, response, _params) {
   var workflows;
 
   try {
     var registry = getRegistry();
     var summaries = registry.listWorkflows();
 
-    /* Build a map from file-backed summaries */
-    var fileBackedMap = {};
-    for (var i = 0; i < summaries.length; i++) {
-      fileBackedMap[summaries[i].id] = summaries[i];
-    }
-
-    /* Start with all fallback entries, overwriting with file-backed data
-     * when the same workflowId exists in both sources. */
-    workflows = FALLBACK_WORKFLOWS.map(function (fb) {
-      var fbFile = fileBackedMap[fb.id];
+    /* Pass through file-backed summaries with full policy fields */
+    workflows = summaries.map(function (s) {
       return {
-        id: fb.id,
-        title: fbFile ? fbFile.title : fb.title,
-        category: fbFile ? fbFile.category : fb.category,
-        description: fb.title,
-        defaults: fbFile ? fbFile.defaults : fb.defaults,
+        id: s.id,
+        title: s.title,
+        category: s.category,
+        description: s.title,
+        stage: s.stage !== undefined ? s.stage : 0,
+        defaults: s.defaults || {},
+        inputPolicy: s.inputPolicy || null,
+        sizePolicyMode: s.sizePolicyMode || null,
+        placementPolicyType: s.placementPolicyType || null,
+        variantCount: s.variantCount || 1,
+        activeVariant: s.activeVariant || null,
       };
     });
 
-    /* Add file-backed workflows that are NOT in the fallback list */
-    var fallbackIds = FALLBACK_WORKFLOWS.map(function (w) { return w.id; });
-    for (var j = 0; j < summaries.length; j++) {
-      if (fallbackIds.indexOf(summaries[j].id) === -1) {
-        workflows.push({
-          id: summaries[j].id,
-          title: summaries[j].title,
-          category: summaries[j].category,
-          description: summaries[j].title,
-          defaults: summaries[j].defaults,
-        });
+    /* Merge in fallback entries that have no file-backed equivalent */
+    var fileIds = {};
+    for (var i = 0; i < workflows.length; i++) {
+      fileIds[workflows[i].id] = true;
+    }
+    for (var j = 0; j < FALLBACK_WORKFLOWS.length; j++) {
+      if (!fileIds[FALLBACK_WORKFLOWS[j].id]) {
+        workflows.push(FALLBACK_WORKFLOWS[j]);
       }
     }
   } catch (_) {
@@ -73,7 +59,13 @@ export function handleWorkflows(request, response, _params) {
         title: w.title,
         category: w.category,
         description: w.title,
-        defaults: w.defaults,
+        stage: w.stage || 0,
+        defaults: w.defaults || {},
+        inputPolicy: w.inputPolicy || null,
+        sizePolicyMode: w.sizePolicyMode || null,
+        placementPolicyType: w.placementPolicyType || null,
+        variantCount: 1,
+        activeVariant: null,
       };
     });
   }

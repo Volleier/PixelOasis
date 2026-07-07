@@ -83,6 +83,22 @@
     /* ── Init parameter page ── */
     window.PO.initParameterPage();
 
+    /* ── Load workflows from backend, then re-render buttons ── (ImplList §8.1) */
+    window.PO.loadWorkflowsFromBackend().then(function () {
+      /* Re-render section bodies with backend-driven workflow buttons */
+      var sections = document.querySelectorAll(".po-section__body");
+      if (window.PO.renderWorkflowButtons) {
+        var buttons = window.PO.renderWorkflowButtons();
+        for (var si = 0; si < sections.length; si++) {
+          sections[si].innerHTML = buttons;
+        }
+      }
+      /* Re-bind events for new buttons */
+      if (window.PO.bindEvents) window.PO.bindEvents();
+    }).catch(function () {
+      /* Backend unreachable — local WORKFLOWS already rendered as fallback */
+    });
+
     /* ── Startup ── */
     try {
       var photoshop = window.require("photoshop");

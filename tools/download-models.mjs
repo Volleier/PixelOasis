@@ -9,7 +9,7 @@
  *   With model-id: download only that model.
  */
 
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { resolve, join, basename } from "node:path";
 import { loadConfig, PROJECT_ROOT } from "./lib/config.mjs";
 import { downloadFile } from "./lib/download.mjs";
@@ -113,13 +113,12 @@ for (const model of models) {
         const actualHash = await hashFile(cachePath);
         if (actualHash !== model.sha256.toLowerCase()) {
           console.error("  Hash mismatch! Removing cached file.");
-          try { require("fs").unlinkSync(cachePath); } catch (_) {}
+          try { unlinkSync(cachePath); } catch (_) {}
           continue;
         }
       }
 
       /* Copy to ComfyUI models directory */
-      const { copyFileSync } = require("node:fs");
       copyFileSync(cachePath, destPath);
       console.log("  [OK] Downloaded to " + destPath);
       downloaded++;

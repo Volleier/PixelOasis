@@ -149,7 +149,8 @@ window.PO.GatewayClient = (function () {
       var resp = await fetch(base + "/workflows", { method: "GET" });
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       var data = await resp.json();
-      return data;
+      /* Response is { workflows: [...] } — extract the array */
+      return (data && Array.isArray(data.workflows)) ? data.workflows : null;
     } catch (e) {
       window.PO.Logger.warn("gateway.workflows.failed", {
         component: "gateway",

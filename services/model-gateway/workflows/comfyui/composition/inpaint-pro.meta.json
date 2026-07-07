@@ -9,7 +9,9 @@
   "enabled": true,
   "priority": 100,
 
-  "requiredModels": [],
+  "requiredModels": [
+    { "folder": "checkpoints", "name": "sd_xl_base_1.0.safetensors" }
+  ],
 
   "inputs": {
     "sourceImage": { "nodeId": "10", "input": "image" },
@@ -77,6 +79,8 @@
   "modelManifest": {
     "profile": "quality",
     "vramTier": "high",
-    "models": []
+    "models": [
+      { "id": "sd_xl_base", "name": "sd_xl_base_1.0.safetensors", "folder": "checkpoints", "required": true }
+    ]
   }
 }

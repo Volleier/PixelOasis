@@ -27,18 +27,26 @@ const nodeVersion = process.version;
 const major = parseInt(nodeVersion.replace("v", "").split(".")[0], 10);
 check("Node.js >= 18", major >= 18, nodeVersion);
 
+/* P2-2: Placeholder detection */
+function isPlaceholder(p) {
+  if (!p || typeof p !== "string" || p.trim().length === 0) return true;
+  return /Your[\/\\]Path[\/\\]To/i.test(p.trim());
+}
+
 /* ── Photoshop plugin path ── */
 const psPath = config.photoshop?.plugin_path || "";
-check("photoshop.plugin_path configured", psPath.length > 0,
-  psPath || "not set — configure in config.yaml");
+check("photoshop.plugin_path configured",
+  psPath.length > 0 && !isPlaceholder(psPath),
+  isPlaceholder(psPath) ? "placeholder detected — update config.yaml" : (psPath || "not set"));
 if (psPath) {
   check("  plugin directory exists", existsSync(psPath), psPath);
 }
 
 /* ── ComfyUI ── */
 const comfyRoot = config.comfyui?.root || "";
-check("comfyui.root configured", comfyRoot.length > 0,
-  comfyRoot || "not set — configure in config.yaml");
+check("comfyui.root configured",
+  comfyRoot.length > 0 && !isPlaceholder(comfyRoot),
+  isPlaceholder(comfyRoot) ? "placeholder detected — update config.yaml" : (comfyRoot || "not set"));
 if (comfyRoot) {
   check("  ComfyUI root exists", existsSync(comfyRoot), comfyRoot);
 }

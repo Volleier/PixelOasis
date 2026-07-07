@@ -23,7 +23,7 @@ import { validateModels } from "./workflow-loader.js";
 import { patchWorkflow, validateBindings, WorkflowBindingError } from "./workflow-bindings.js";
 import { createComfyUIClient, ComfyUIError, ComfyUIOfflineError, ComfyUIValidationError, ComfyUITimeoutError, ComfyUINoOutputError } from "./client.js";
 import { readOutputImages, detectImageDimensions } from "./result-reader.js";
-import { scaleImageDown, resizeToExact, getPngDimensions } from "../../utils/images.js";
+import { scaleImageDown, resizeToExact, padImage, cropToBounds, getPngDimensions } from "../../utils/images.js";
 import { applySizePolicy } from "./size-policy.js";
 import { applyMaskPolicy } from "./mask-policy.js";
 import logger from "../../utils/logger.js";
@@ -186,6 +186,33 @@ export default {
     console.log("[comfyui] Source: " + origDims.width + "x" + origDims.height +
       (sourceScaled.scaled ? " → " + sourceScaled.width + "x" + sourceScaled.height : " (no scaling)"));
 
+    /* P1-1: expandThenCrop — pad source image for context */
+    var sourceForUpload = sourceScaled.base64;
+    var maskForUpload = maskScaled ? maskScaled.base64 : null;
+    var sourceUploadWidth = sourceScaled.width;
+    var sourceUploadHeight = sourceScaled.height;
+
+    if (sizeResult.contextPaddingPx > 0 && sizeResult.policy.mode === "expandThenCrop") {
+      var padPx = sizeResult.contextPaddingPx;
+      /* Pad source image — use reflect mode to extend edges naturally */
+      var sourceBuf = Buffer.from(sourceScaled.base64, "base64");
+      var paddedSourceBuf = await padImage(sourceBuf, padPx, { mode: "reflect" });
+      sourceForUpload = paddedSourceBuf.toString("base64");
+      /* Dimensions after padding */
+      sourceUploadWidth = sourceScaled.width + padPx * 2;
+      sourceUploadHeight = sourceScaled.height + padPx * 2;
+
+      /* Pad mask to match (if present) */
+      if (maskForUpload) {
+        var maskBuf = Buffer.from(maskForUpload, "base64");
+        var paddedMaskBuf = await padImage(maskBuf, padPx, { mode: "reflect" });
+        maskForUpload = paddedMaskBuf.toString("base64");
+      }
+
+      console.log("[comfyui] Padded source: " + sourceUploadWidth + "x" + sourceUploadHeight +
+        " (+" + padPx + "px per side)");
+    }
+
     /* Scale mask (if present) to match source dimensions */
     var maskScaled = null;
     if (maskPolicyResult && maskPolicyResult.maskForWorkflow) {
@@ -210,9 +237,9 @@ export default {
 
     var uniqueId = request.correlationId || ("po-" + Date.now());
 
-    /* Upload source */
+    /* Upload source (may be padded for expandThenCrop) */
     var sourceUpload = await client.uploadImage({
-      bytes: Buffer.from(sourceScaled.base64, "base64"),
+      bytes: Buffer.from(sourceForUpload, "base64"),
       filename: "po-src-" + uniqueId + ".png",
       overwrite: true,
     });
@@ -224,11 +251,11 @@ export default {
       data: { filename: sourceUpload.name },
     });
 
-    /* Upload mask */
+    /* Upload mask (may be padded for expandThenCrop) */
     var maskUpload = null;
-    if (maskScaled) {
+    if (maskForUpload) {
       maskUpload = await client.uploadImage({
-        bytes: Buffer.from(maskScaled.base64, "base64"),
+        bytes: Buffer.from(maskForUpload, "base64"),
         filename: "po-msk-" + uniqueId + ".png",
         overwrite: true,
       });
@@ -403,25 +430,52 @@ export default {
     });
 
     /* ═══════════════════════════════════════════════════════════════
-     * Step 10: Finalize dimensions via size-policy
+     * Step 10: Finalize dimensions via size-policy (P1-1: crop-then-resize)
      * ═══════════════════════════════════════════════════════════════ */
 
     var finalBase64;
     var finalWidth = sizeResult.finalWidth;
     var finalHeight = sizeResult.finalHeight;
+    var processedPng = outputPng;
 
-    /* If ComfyUI output dimensions differ from policy target, resize */
-    if (outputDims.width !== finalWidth || outputDims.height !== finalHeight) {
-      var resizedBuffer = await resizeToExact(outputPng, finalWidth, finalHeight, {
+    /* P1-1: expandThenCrop — crop back to original selection area */
+    if (sizeResult.cropToBounds && sizeResult.contextPaddingPx > 0) {
+      var cropPad = sizeResult.contextPaddingPx;
+      /* Account for scaling when computing crop rect */
+      var cropScale = sizeResult.scaled ? sizeResult.scale : 1.0;
+      var cropLeft = Math.round(cropPad * cropScale);
+      var cropTop = Math.round(cropPad * cropScale);
+      var cropW = outputDims.width - cropLeft * 2;
+      var cropH = outputDims.height - cropTop * 2;
+
+      if (cropW > 0 && cropH > 0) {
+        processedPng = await cropToBounds(processedPng, {
+          left: cropLeft, top: cropTop, width: cropW, height: cropH,
+        });
+        console.log("[comfyui] Cropped output: " + outputDims.width + "x" + outputDims.height +
+          " → " + cropW + "x" + cropH + " (removed " + cropPad + "px padding)");
+      } else {
+        console.warn("[comfyui] expandThenCrop: skipping crop — output too small (" +
+          outputDims.width + "x" + outputDims.height + ")");
+      }
+    }
+
+    /* Resize to exact final dimensions if needed */
+    var cropDims = detectImageDimensions(processedPng);
+    if (cropDims.width !== finalWidth || cropDims.height !== finalHeight) {
+      if (sizeResult.policy.mode === "expandThenCrop") {
+        /* For expandThenCrop, warn on mismatch instead of blindly resizing */
+        console.warn("[comfyui] Warning: output " + cropDims.width + "x" + cropDims.height +
+          " ≠ target " + finalWidth + "x" + finalHeight + " (expandThenCrop)");
+      }
+      processedPng = await resizeToExact(processedPng, finalWidth, finalHeight, {
         fit: "fill",
         kernel: "lanczos3",
       });
-      finalBase64 = resizedBuffer.toString("base64");
-      console.log("[comfyui] Resized output: " + outputDims.width + "x" + outputDims.height +
-        " → " + finalWidth + "x" + finalHeight);
-    } else {
-      finalBase64 = outputPng.toString("base64");
+      console.log("[comfyui] Resized output to final: " + finalWidth + "x" + finalHeight);
     }
+
+    finalBase64 = processedPng.toString("base64");
 
     /* Log dimension chain */
     logger.info("result.finalized", {
@@ -456,13 +510,13 @@ export default {
         width: finalWidth,
         height: finalHeight,
         seed: request.parameters ? request.parameters.seed : -1,
-        placement: maskPolicyResult ? {
+        placement: {
           type: variant.placementPolicy ? variant.placementPolicy.type : "smartObjectMaskedExact",
           targetBounds: selection.bounds,
-          maskPngBase64: maskPolicyResult.finalPlacementMask || null,
+          maskPngBase64: maskPolicyResult ? (maskPolicyResult.finalPlacementMask || null) : null,
           featherPixels: variant.placementPolicy ? (variant.placementPolicy.featherPixels || 0) : 0,
           createLayerGroup: variant.placementPolicy ? variant.placementPolicy.createLayerGroup !== false : true,
-        } : null,
+        },
         metadata: {
           provider: "comfyui",
           workflowId: request.workflowId,

@@ -1,24 +1,32 @@
 window.PO = window.PO || {};
 
+/* ── Render workflow buttons dynamically from the registry (ImplList §8.1) ── */
+window.PO.renderWorkflowButtons = function () {
+  var ids = window.PO.PHASE1_WORKFLOW_IDS || [];
+  var html = ['<div class="po-action-row">'];
+
+  for (var i = 0; i < ids.length; i++) {
+    var wf = window.PO.WORKFLOWS[ids[i]];
+    var title = wf ? wf.title : ids[i];
+    html.push(
+      '<button class="po-button" type="button" data-workflow="' +
+      ids[i] + '">' + title + '</button>'
+    );
+  }
+
+  html.push('</div>');
+  return html.join("");
+};
+
 window.PO.buildSections = function () {
   var TEXT = window.PO.TEXT;
 
   function sectionBody(section) {
     if (section.id === "composition") {
-      return [
-        '<div class="po-action-row">',
-        '<button class="po-button" type="button" data-workflow="composition.remove.basic">移除</button>',
-        '<button class="po-button" type="button" data-workflow="composition.outpaint.basic">扩图</button>',
-        "</div>",
-      ].join("");
+      return window.PO.renderWorkflowButtons();
     }
     if (section.id === "quality") {
-      return [
-        '<div class="po-action-row">',
-        '<button class="po-button" type="button" data-workflow="quality.upscale.basic">超分放大</button>',
-        '<button class="po-button" type="button" data-workflow="quality.realism-enhance.basic">真实感增强</button>',
-        "</div>",
-      ].join("");
+      return window.PO.renderWorkflowButtons();
     }
     return '<div class="po-section__placeholder">' + section.hint + "</div>";
   }
@@ -69,7 +77,7 @@ window.PO.buildTemplate = function () {
     '<button id="settings-btn" class="po-bottom-button" type="button">' + TEXT.settings + "</button>",
     "</footer>",
 
-    /* ── 设置区 (overlay + drawer, root-level, covers main + preview) ── */
+    /* ── 设置区 (overlay + drawer) ── */
     '<div id="settings-overlay" class="po-settings-overlay" hidden></div>',
     '<aside id="settings-drawer" class="po-settings-drawer" hidden>',
     '<div class="po-settings-drawer__body">',
@@ -103,7 +111,7 @@ window.PO.buildTemplate = function () {
     "</div>",
     "</aside>",
 
-    /* ── 参数页 (full-screen overlay, covers main + preview, not bottom bar) ── */
+    /* ── 参数页 (full-screen overlay) ── */
     window.PO.buildParameterPage ? window.PO.buildParameterPage() : "",
 
     "</div>",

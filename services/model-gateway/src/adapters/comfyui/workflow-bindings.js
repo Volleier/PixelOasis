@@ -269,11 +269,23 @@ export function validateBindings(variant) {
     return { valid: false, errors: errors };
   }
 
+  /* Resolve inputPolicy for optional binding awareness */
+  var inputPolicy = variant.inputPolicy || null;
+
   /* Check each input binding */
   var inputKeys = Object.keys(inputs);
   for (var i = 0; i < inputKeys.length; i++) {
     var key = inputKeys[i];
     var binding = inputs[key];
+
+    /* Skip optional mask bindings when inputPolicy.mask is 'optional' or 'forbidden'
+     * — the mask node may not exist in the workflow (P0-2 fix) */
+    if (key === "maskImage" && inputPolicy) {
+      if (inputPolicy.mask === "optional" || inputPolicy.mask === "forbidden") {
+        /* Optional mask: only validate if the node actually exists */
+        if (!workflow[binding.nodeId]) continue;
+      }
+    }
 
     if (!workflow[binding.nodeId]) {
       errors.push(

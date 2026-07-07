@@ -50,7 +50,7 @@ export default {
   logging: {
     enabled: process.env.PO_LOG_ENABLED !== "0",
     level: loaded.model_gateway.log_level || "info",
-    dir: process.env.PO_LOG_DIR || "logs",
+    dir: (loaded.logging && loaded.logging.dir) || process.env.PO_LOG_DIR || "logs",
     maxFileBytes: 5 * 1024 * 1024,
     retainFiles: 10,
     logPromptText: process.env.PO_LOG_PROMPT_TEXT === "1",

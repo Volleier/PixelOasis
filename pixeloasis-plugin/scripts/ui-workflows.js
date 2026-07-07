@@ -179,7 +179,7 @@ window.PO.PHASE1_WORKFLOW_IDS = [
 window.PO.loadWorkflowsFromBackend = async function () {
   try {
     var data = await window.PO.GatewayClient.getWorkflows();
-    if (!data || !Array.isArray(data)) {
+    if (!data) {
       window.PO.Logger.info("workflows.backend_empty", {
         component: "workflows",
         data: { reason: "no data from gateway, using local fallback" },

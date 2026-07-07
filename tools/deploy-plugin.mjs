@@ -1,5 +1,5 @@
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import { copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
@@ -143,14 +143,43 @@ const manifest = {
 
 await writeFile(resolve(deployDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
+import { cp } from "node:fs/promises";
+
 console.log("Prepared deployable Photoshop plugin.");
 console.log(`  Directory: ${deployDir}`);
 console.log(`  Host minVersion: ${psMinHostVersion}`);
 console.log("  Files: manifest.json, index.html, main.js, panel.css, icons/");
 
+/* P2-2: Detect placeholder paths */
+function isPlaceholderPath(p) {
+  if (!p || typeof p !== "string") return true;
+  var trimmed = p.trim();
+  if (trimmed.length === 0) return true;
+  if (/Your[\/\\]Path[\/\\]To/i.test(trimmed)) return true;
+  return false;
+}
+
+/* P2-1: Auto-deploy to photoshop.plugin_path */
 if (psPluginPath) {
-  console.log(`\nTo deploy, copy the PixelOasis/ folder to:`);
-  console.log(`  ${psPluginPath}/PixelOasis`);
+  if (isPlaceholderPath(psPluginPath)) {
+    console.warn("\nWarning: photoshop.plugin_path appears to be a placeholder value.");
+    console.warn("  Update config.yaml with your real Photoshop Plug-ins path.");
+  } else {
+    var targetDir = resolve(psPluginPath, "PixelOasis");
+    console.log(`\nDeploying to: ${targetDir}`);
+
+    try {
+      if (!existsSync(psPluginPath)) {
+        console.warn("  Target directory does not exist — creating it.");
+        mkdirSync(psPluginPath, { recursive: true });
+      }
+      await cp(deployDir, targetDir, { recursive: true, force: true });
+      console.log("  Deployment complete.");
+    } catch (err) {
+      console.error("  Deployment failed:", err.message);
+      console.error("  Please manually copy PixelOasis/ to your Photoshop Plug-ins directory.");
+    }
+  }
 } else {
   console.warn("\nWarning: photoshop.plugin_path is not set in config.yaml.");
   console.warn("  Set it to enable automatic plugin deployment.");
