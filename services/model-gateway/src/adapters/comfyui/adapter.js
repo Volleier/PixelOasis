@@ -15,6 +15,8 @@
  * 10. Return normalized PixelOasis response with placement info
  */
 
+import fs from "node:fs";
+import path from "node:path";
 import config from "../../config.js";
 import { getRegistry } from "../registry-instance.js";
 import { validateModels } from "./workflow-loader.js";
@@ -119,6 +121,24 @@ export default {
     }
 
     var origDims = getPngDimensions(sourceB64);
+
+    logger.info("image.source.decoded", {
+      component: "adapter",
+      correlationId: request.correlationId,
+      workflowId: request.workflowId,
+      data: { width: origDims.width, height: origDims.height, hasMask: !!maskB64 },
+    });
+
+    if (maskB64) {
+      var maskOrigDims = getPngDimensions(maskB64);
+      logger.info("image.mask.decoded", {
+        component: "adapter",
+        correlationId: request.correlationId,
+        workflowId: request.workflowId,
+        data: { width: maskOrigDims.width, height: maskOrigDims.height },
+      });
+    }
+
     var sizeResult = applySizePolicy(selection.bounds, origDims, variant);
 
     console.log("[comfyui] Size policy: mode=" + sizeResult.policy.mode +
@@ -237,6 +257,54 @@ export default {
       sourceImageFilename: sourceUpload.name,
       maskImageFilename: maskUpload ? maskUpload.name : null,
     });
+
+    /* Log workflow patch summary */
+    var nodeIds = Object.keys(patchedWorkflow);
+    var nodeTypes = [];
+    for (var ni = 0; ni < nodeIds.length; ni++) {
+      var node = patchedWorkflow[nodeIds[ni]];
+      if (node && node.class_type) nodeTypes.push(node.class_type);
+    }
+
+    logger.info("comfyui.workflow.patched", {
+      component: "adapter",
+      correlationId: request.correlationId,
+      workflowId: request.workflowId,
+      data: {
+        variantId: variant.variantId,
+        nodeCount: nodeIds.length,
+        nodeTypes: nodeTypes,
+        sourceFilename: sourceUpload.name,
+        maskFilename: maskUpload ? maskUpload.name : null,
+      },
+    });
+
+    /* Save debug workflow copy if enabled (ImplList §9.2) */
+    if (config.pixelOasis && config.pixelOasis.debugWorkflows) {
+      try {
+        var debugDir = path.resolve(config.logging.dir || "logs", "debug-workflows");
+        if (!fs.existsSync(debugDir)) {
+          fs.mkdirSync(debugDir, { recursive: true });
+        }
+        var debugPath = path.join(debugDir, (request.correlationId || "unknown") + ".api.json");
+        /* Sanitise: strip base64 image data from debug copy */
+        var sanitized = JSON.parse(JSON.stringify(patchedWorkflow));
+        for (var dk = 0; dk < nodeIds.length; dk++) {
+          var dn = sanitized[nodeIds[dk]];
+          if (dn && dn.widgets_values && Array.isArray(dn.widgets_values)) {
+            for (var dw = 0; dw < dn.widgets_values.length; dw++) {
+              if (typeof dn.widgets_values[dw] === "string" && dn.widgets_values[dw].length > 200) {
+                dn.widgets_values[dw] = "[redacted, length=" + dn.widgets_values[dw].length + "]";
+              }
+            }
+          }
+        }
+        fs.writeFileSync(debugPath, JSON.stringify(sanitized, null, 2), "utf-8");
+        console.log("[comfyui] Debug workflow saved: " + debugPath);
+      } catch (debugErr) {
+        console.warn("[comfyui] Failed to save debug workflow: " + debugErr.message);
+      }
+    }
 
     /* ═══════════════════════════════════════════════════════════════
      * Step 7: Submit to ComfyUI

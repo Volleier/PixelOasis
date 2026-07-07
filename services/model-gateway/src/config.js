@@ -55,4 +55,15 @@ export default {
     retainFiles: 10,
     logPromptText: process.env.PO_LOG_PROMPT_TEXT === "1",
   },
+
+  /* ── PixelOasis debug & behaviour ───────────────── */
+  pixelOasis: {
+    debugWorkflows: loaded.pixel_oasis.debug_workflows !== false,
+    keepIntermediateImages: loaded.pixel_oasis.keep_intermediate_images === true,
+    defaultResultLayerGroup: loaded.pixel_oasis.default_result_layer_group || "PixelOasis",
+  },
+
+  /* ── ComfyUI root path (for debug/model checks) ──── */
+  comfyuiRoot: loaded.comfyui.root || "",
+  comfyuiModelsDir: loaded.comfyui.models_dir || "",
 };
