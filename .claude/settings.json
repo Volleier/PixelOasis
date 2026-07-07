@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node deploy-plugin.mjs)",
+      "Bash(ls -la \"D:/Adobe/Adobe Photoshop 2025/Plug-ins/com.pixeloasis.plugin/\")",
+      "Read(//d/Adobe/Adobe Photoshop 2025/Plug-ins/com.pixeloasis.plugin/**)"
+    ]
+  }
+}

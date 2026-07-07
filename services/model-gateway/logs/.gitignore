@@ -1,0 +1,4 @@
+# Gateway logs — never commit
+*.jsonl
+*.log
+!.gitignore

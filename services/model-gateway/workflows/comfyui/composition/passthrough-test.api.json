@@ -1,0 +1,15 @@
+{
+  "1": {
+    "inputs": { "image": "SOURCE_PLACEHOLDER" },
+    "class_type": "LoadImage",
+    "_meta": { "title": "Load Source Image" }
+  },
+  "2": {
+    "inputs": {
+      "images": ["1", 0],
+      "filename_prefix": "po-out"
+    },
+    "class_type": "SaveImage",
+    "_meta": { "title": "Save Output" }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "workflowId": "composition.inpaint.basic",
+  "variantId": "sdxl-inpaint-basic",
+  "title": "SDXL Inpaint Basic",
+  "category": "composition",
+  "provider": "comfyui",
+  "apiWorkflowFile": "sdxl-inpaint-basic.api.json",
+  "enabled": true,
+  "priority": 20,
+
+  "requiredModels": [
+    {
+      "folder": "checkpoints",
+      "name": "sd_xl_base_1.0.safetensors"
+    }
+  ],
+
+  "inputs": {
+    "sourceImage": { "nodeId": "10", "input": "image" },
+    "maskImage": { "nodeId": "11", "input": "image" },
+    "positivePrompt": { "nodeId": "6", "input": "text" },
+    "negativePrompt": { "nodeId": "7", "input": "text" },
+    "seed": { "nodeId": "3", "input": "seed" },
+    "steps": { "nodeId": "3", "input": "steps" },
+    "cfg": { "nodeId": "3", "input": "cfg" },
+    "denoise": { "nodeId": "3", "input": "denoise" },
+    "sampler": { "nodeId": "3", "input": "sampler_name" },
+    "scheduler": { "nodeId": "3", "input": "scheduler" }
+  },
+
+  "outputs": {
+    "images": { "nodeId": "9" }
+  },
+
+  "defaults": {
+    "prompt": "",
+    "negativePrompt": "",
+    "seed": -1,
+    "steps": 28,
+    "cfg": 7,
+    "denoise": 0.75,
+    "sampler": "euler",
+    "scheduler": "karras"
+  },
+
+  "sizePolicy": {
+    "mode": "matchSelection",
+    "allowResize": true,
+    "maxSourceDimension": 1024,
+    "note": "Source images larger than 1024px in either dimension are auto-scaled down before generation and upscaled back to original size after."
+  },
+
+  "maskPolicy": {
+    "invertBeforeUpload": false,
+    "polarity": "white-editable",
+    "note": "White pixels = editable/generated area. Black pixels = preserved area. The mask is used directly — no inversion needed."
+  }
+}

@@ -4,6 +4,10 @@
   "name": "PixelOasis",
   "version": "0.1.0",
   "main": "index.html",
+  "icons": [
+    { "width": 32, "height": 32, "path": "icons/icon@1x.png" },
+    { "width": 64, "height": 64, "path": "icons/icon@2x.png" }
+  ],
   "host": [
     {
       "app": "PS",

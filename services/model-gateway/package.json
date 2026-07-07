@@ -1,0 +1,17 @@
+{
+  "name": "pixeloasis-model-gateway",
+  "version": "0.1.0",
+  "description": "PixelOasis local model gateway — routes Photoshop plugin requests to ComfyUI",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "sharp": "^0.35.0"
+  }
+}

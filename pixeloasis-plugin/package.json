@@ -4,27 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bolt-uxp dev",
-    "build": "bolt-uxp build",
-    "package": "bolt-uxp package",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@spectrum-web-components/button": "^1.9.0",
-    "@spectrum-web-components/card": "^1.9.0",
-    "@spectrum-web-components/divider": "^1.9.0",
-    "@spectrum-web-components/progress-circle": "^1.9.0",
-    "@spectrum-web-components/theme": "^1.9.0",
-    "@spectrum-web-components/typography": "^1.9.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
-  },
-  "devDependencies": {
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
-    "bolt-uxp": "^0.2.0",
-    "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "build": "node ./scripts/prepare-udt-dist.mjs"
   }
 }
