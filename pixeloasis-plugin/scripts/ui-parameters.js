@@ -399,11 +399,12 @@ window.PO.initParameterPage = function () {
 
         var placeStart = Date.now();
         try {
-          var placeInfo = await window.PO.placeGeneratedLayer(
-            returnedImage,
-            capture ? capture.maskPngBase64 : null,
-            placeBounds,
-            workflowTitle,
+          /* Use policy-aware placement engine (ImplList §7.4)
+           * result.placement.maskPngBase64 takes priority over capture mask. */
+          var placeInfo = await window.PO.placeResultWithPolicy(
+            result,
+            capture,
+            { workflowId: req.workflowId, title: workflowTitle },
           );
           window.PO.Logger.info("placement.completed", {
             component: "parameters",

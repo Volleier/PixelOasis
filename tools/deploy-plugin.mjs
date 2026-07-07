@@ -36,6 +36,7 @@ const scriptFiles = [
   "scripts/gateway-client.js",
   "scripts/photoshop.js",
   "scripts/photoshop-place-layer.js",
+  "scripts/placement-engine.js",
   "scripts/ui-status.js",
   "scripts/ui-preview.js",
   "scripts/ui-settings.js",
