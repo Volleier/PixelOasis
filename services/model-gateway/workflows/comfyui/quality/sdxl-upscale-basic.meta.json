@@ -1,12 +1,14 @@
 {
   "workflowId": "quality.upscale.basic",
   "variantId": "sdxl-upscale-basic",
-  "title": "SDXL Upscale Basic",
+  "title": "SDXL Img2Img Enhance Basic (Legacy — not true upscale)",
   "category": "quality",
   "provider": "comfyui",
+  "stage": 0,
   "apiWorkflowFile": "sdxl-upscale-basic.api.json",
   "enabled": true,
-  "priority": 20,
+  "priority": 5,
+  "note": "This is an img2img detail enhancement workflow. It does NOT produce 2x/4x pixel upscaling. The output is resized back to selection dimensions. For true upscaling, see quality.upscale.2x and quality.upscale.4x (Phase 2).",
 
   "requiredModels": [
     {
@@ -42,10 +44,35 @@
     "scheduler": "karras"
   },
 
+  "inputPolicy": {
+    "source": "selection",
+    "mask": "optional",
+    "referenceImages": "none",
+    "prompt": "optional",
+    "negativePrompt": "optional"
+  },
+
   "sizePolicy": {
-    "mode": "matchSelection",
+    "mode": "selectionExact",
     "allowResize": true,
     "maxSourceDimension": 1024,
-    "note": "Source images larger than 1024px in either dimension are auto-scaled down before generation and upscaled back to original size after."
+    "note": "Output is resized to match selection dimensions exactly. This workflow is img2img enhance, NOT true upscale (2x/4x)."
+  },
+
+  "maskPolicy": {
+    "polarity": "white-editable",
+    "note": "Mask is optional for img2img enhance. If provided, it limits the enhancement area."
+  },
+
+  "placementPolicy": {
+    "type": "layerMaskedExact",
+    "bounds": "selection",
+    "createLayerGroup": false,
+    "createSmartObject": false,
+    "maskSource": "originalMask",
+    "preserveOriginalSelectionMask": true,
+    "featherPixels": 0,
+    "opacity": 100,
+    "blendMode": "normal"
   }
 }

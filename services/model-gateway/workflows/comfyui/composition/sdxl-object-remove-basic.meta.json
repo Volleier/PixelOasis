@@ -1,12 +1,13 @@
 {
   "workflowId": "composition.remove.basic",
   "variantId": "sdxl-object-remove-basic",
-  "title": "SDXL Object Remove Basic",
+  "title": "SDXL Object Remove Basic (Legacy)",
   "category": "composition",
   "provider": "comfyui",
+  "stage": 0,
   "apiWorkflowFile": "sdxl-object-remove-basic.api.json",
   "enabled": true,
-  "priority": 20,
+  "priority": 10,
 
   "requiredModels": [
     {
@@ -43,8 +44,16 @@
     "scheduler": "karras"
   },
 
+  "inputPolicy": {
+    "source": "selection",
+    "mask": "required",
+    "referenceImages": "none",
+    "prompt": "optional",
+    "negativePrompt": "optional"
+  },
+
   "sizePolicy": {
-    "mode": "matchSelection",
+    "mode": "selectionExact",
     "allowResize": true,
     "maxSourceDimension": 1024,
     "note": "Source images larger than 1024px in either dimension are auto-scaled down before generation and upscaled back to original size after."
@@ -54,5 +63,17 @@
     "invertBeforeUpload": false,
     "polarity": "white-editable",
     "note": "White pixels = selected object/removal area. Black pixels = preserved area."
+  },
+
+  "placementPolicy": {
+    "type": "layerMaskedExact",
+    "bounds": "selection",
+    "createLayerGroup": false,
+    "createSmartObject": false,
+    "maskSource": "originalMask",
+    "preserveOriginalSelectionMask": true,
+    "featherPixels": 0,
+    "opacity": 100,
+    "blendMode": "normal"
   }
 }
