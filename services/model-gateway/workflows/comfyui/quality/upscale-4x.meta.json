@@ -1,0 +1,31 @@
+{
+  "workflowId": "quality.upscale.4x",
+  "variantId": "upscale-4x-placeholder",
+  "title": "Upscale 4x (Phase 2 — disabled)",
+  "category": "quality",
+  "provider": "comfyui",
+  "stage": 2,
+  "apiWorkflowFile": "upscale-4x.api.json",
+  "enabled": false,
+  "priority": 100,
+  "note": "True 4x upscale. Not implemented in Phase 1.",
+
+  "inputs": {},
+  "outputs": { "images": { "nodeId": "0" } },
+  "defaults": {},
+
+  "inputPolicy": {
+    "source": "selection",
+    "mask": "optional",
+    "referenceImages": "none"
+  },
+
+  "sizePolicy": {
+    "mode": "upscaleMultiplier",
+    "multiplier": 4
+  },
+
+  "placementPolicy": {
+    "type": "smartObjectMaskedExact"
+  }
+}

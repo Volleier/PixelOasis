@@ -1,0 +1,31 @@
+{
+  "workflowId": "quality.upscale.2x",
+  "variantId": "upscale-2x-placeholder",
+  "title": "Upscale 2x (Phase 2 — disabled)",
+  "category": "quality",
+  "provider": "comfyui",
+  "stage": 2,
+  "apiWorkflowFile": "upscale-2x.api.json",
+  "enabled": false,
+  "priority": 100,
+  "note": "True 2x upscale. Not implemented in Phase 1. sizePolicy.mode=upscaleMultiplier ensures the result is NOT resized back to selection dimensions.",
+
+  "inputs": {},
+  "outputs": { "images": { "nodeId": "0" } },
+  "defaults": {},
+
+  "inputPolicy": {
+    "source": "selection",
+    "mask": "optional",
+    "referenceImages": "none"
+  },
+
+  "sizePolicy": {
+    "mode": "upscaleMultiplier",
+    "multiplier": 2
+  },
+
+  "placementPolicy": {
+    "type": "smartObjectMaskedExact"
+  }
+}

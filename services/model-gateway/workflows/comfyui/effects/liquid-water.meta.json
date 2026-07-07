@@ -1,0 +1,30 @@
+{
+  "workflowId": "effects.liquid.water",
+  "variantId": "liquid-water-placeholder",
+  "title": "Water Flow (Phase 2 — disabled)",
+  "category": "effects",
+  "provider": "comfyui",
+  "stage": 2,
+  "apiWorkflowFile": "liquid-water.api.json",
+  "enabled": false,
+  "priority": 100,
+  "note": "Local water/fluid generation. Not implemented in Phase 1. Requires ControlNet/depth support.",
+
+  "inputs": {},
+  "outputs": { "images": { "nodeId": "0" } },
+  "defaults": {},
+
+  "inputPolicy": {
+    "source": "selection",
+    "mask": "required",
+    "referenceImages": "optional"
+  },
+
+  "sizePolicy": {
+    "mode": "selectionExact"
+  },
+
+  "placementPolicy": {
+    "type": "smartObjectMaskedExact"
+  }
+}

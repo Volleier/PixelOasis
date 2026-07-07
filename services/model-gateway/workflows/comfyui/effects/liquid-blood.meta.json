@@ -1,0 +1,30 @@
+{
+  "workflowId": "effects.liquid.blood",
+  "variantId": "liquid-blood-placeholder",
+  "title": "Blood Effect (Phase 2 — disabled)",
+  "category": "effects",
+  "provider": "comfyui",
+  "stage": 2,
+  "apiWorkflowFile": "liquid-blood.api.json",
+  "enabled": false,
+  "priority": 100,
+  "note": "Local blood/fluid generation. Not implemented in Phase 1. Requires ControlNet/depth support.",
+
+  "inputs": {},
+  "outputs": { "images": { "nodeId": "0" } },
+  "defaults": {},
+
+  "inputPolicy": {
+    "source": "selection",
+    "mask": "required",
+    "referenceImages": "optional"
+  },
+
+  "sizePolicy": {
+    "mode": "selectionExact"
+  },
+
+  "placementPolicy": {
+    "type": "smartObjectMaskedExact"
+  }
+}
