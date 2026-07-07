@@ -396,5 +396,16 @@ export function validateGenerateRequest(body) {
   var paramsValidation = validateParameters(body.parameters);
   if (!paramsValidation.valid) return paramsValidation;
 
+  /* ── clientCapabilities (loose validation) ── */
+  if (body.clientCapabilities !== undefined) {
+    var cc = body.clientCapabilities;
+    if (cc && typeof cc !== "object") {
+      return invalid("clientCapabilities must be an object.");
+    }
+    if (cc && cc.placement !== undefined && !Array.isArray(cc.placement)) {
+      return invalid("clientCapabilities.placement must be an array.");
+    }
+  }
+
   return { valid: true };
 }

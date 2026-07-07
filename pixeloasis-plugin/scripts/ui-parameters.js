@@ -241,6 +241,10 @@ window.PO.assembleGenerateRequest = function () {
       sampler: params.sampler,
       scheduler: params.scheduler,
     },
+    clientCapabilities: {
+      photoshopHostVersion: "",
+      placement: ["smartObjectMaskedExact"],
+    },
   };
 
   window.PO.Logger.info("request.assembled", {
