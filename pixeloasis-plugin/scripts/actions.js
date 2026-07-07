@@ -39,12 +39,43 @@ window.PO.captureAndPreview = async function () {
 /* Workflow button handler — capture → preview → open param page */
 window.PO.handleWorkflowButton = async function (workflowId) {
   var startTime = Date.now();
-  window.PO.Logger.info("workflow.clicked", {
+  var workflow = window.PO.WORKFLOWS[workflowId];
+  var workflowTitle = workflow ? workflow.title : workflowId;
+
+  window.PO.Logger.info("workflow.button.clicked", {
+    component: "actions",
+    workflowId: workflowId,
+    data: {
+      workflowTitle: workflowTitle,
+      category: workflow ? workflow.category : "unknown",
+    },
+  });
+
+  window.PO.Logger.info("workflow.capture.starting", {
     component: "actions",
     workflowId: workflowId,
   });
 
-  await window.PO.captureAndPreview();
+  var capture = await window.PO.captureAndPreview();
+
+  if (!capture) {
+    window.PO.Logger.warn("workflow.capture.failed", {
+      component: "actions",
+      workflowId: workflowId,
+      durationMs: Date.now() - startTime,
+      data: { workflowTitle: workflowTitle },
+    });
+    window.PO.showTransientStatus("抓取选区失败 — 请确保有活动选区");
+    return;
+  }
+
+  window.PO.Logger.info("workflow.parameter_page.opening", {
+    component: "actions",
+    workflowId: workflowId,
+    durationMs: Date.now() - startTime,
+    data: { workflowTitle: workflowTitle },
+  });
+
   window.PO.openParameterPage(workflowId);
 };
 

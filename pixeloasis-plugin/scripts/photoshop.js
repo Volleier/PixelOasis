@@ -388,7 +388,7 @@ window.PO.captureSelectionData = async function () {
           imagePngBase64: imagePngBase64,
           maskPngBase64: maskPngBase64,
           previewJpegBase64: previewJpegBase64,
-          colorMode: String(documentRef.mode),
+          colorMode: String(documentRef.mode).replace(/ColorMode$/i, ""),
           resolution: documentRef.resolution,
         };
       } finally {

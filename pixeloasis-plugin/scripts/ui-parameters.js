@@ -115,13 +115,36 @@ window.PO.populateSelectOptions = function (selectEl, options, selectedValue) {
 window.PO.openParameterPage = function (workflowId) {
   /* Check both WORKFLOWS and ENTRY_WORKFLOWS registries */
   var workflow = window.PO.WORKFLOWS[workflowId] || (window.PO.ENTRY_WORKFLOWS || {})[workflowId];
-  if (!workflow) return;
+  if (!workflow) {
+    window.PO.Logger.warn("parameter_page.workflow_not_found", {
+      component: "parameters",
+      workflowId: workflowId,
+    });
+    return;
+  }
 
   window.PO.activeWorkflowId = workflowId;
 
   /* Load persisted params or defaults */
   var saved = window.PO.workflowParams[workflowId];
   var params = saved || Object.assign({}, workflow.defaults);
+
+  window.PO.Logger.info("parameter_page.opened", {
+    component: "parameters",
+    workflowId: workflowId,
+    data: {
+      workflowTitle: workflow.title,
+      category: workflow.category,
+      usingSavedParams: !!saved,
+      prompt: params.prompt,
+      seed: params.seed,
+      steps: params.steps,
+      cfg: params.cfg,
+      denoise: params.denoise,
+      sampler: params.sampler,
+      scheduler: params.scheduler,
+    },
+  });
 
   /* Populate UI */
   var els = window.PO.paramElements;
@@ -146,6 +169,17 @@ window.PO.openParameterPage = function (workflowId) {
 /* ── Close parameter page (save current values first) ── */
 
 window.PO.closeParameterPage = function () {
+  var workflowId = window.PO.activeWorkflowId;
+  var workflow = workflowId ? (window.PO.WORKFLOWS[workflowId] || (window.PO.ENTRY_WORKFLOWS || {})[workflowId]) : null;
+
+  window.PO.Logger.info("parameter_page.closed", {
+    component: "parameters",
+    workflowId: workflowId,
+    data: {
+      workflowTitle: workflow ? workflow.title : "unknown",
+    },
+  });
+
   window.PO.saveParameterPage();
   window.PO.activeWorkflowId = null;
   if (window.PO.paramElements) {
@@ -244,6 +278,11 @@ window.PO.initParameterPage = function () {
   els.randomSeedBtn.addEventListener("click", function () {
     var randomSeed = Math.floor(Math.random() * 2147483647);
     els.seed.value = randomSeed;
+    window.PO.Logger.info("parameter.random_seed", {
+      component: "parameters",
+      workflowId: window.PO.activeWorkflowId,
+      data: { seed: randomSeed },
+    });
   });
 
   /* Range sliders → value display */
@@ -264,10 +303,19 @@ window.PO.initParameterPage = function () {
     window.PO.saveParameterPage();
     var req = window.PO.assembleGenerateRequest();
     if (!req) {
+      window.PO.Logger.error("generation.request_assembly_failed", {
+        component: "parameters",
+        workflowId: window.PO.activeWorkflowId,
+      });
       window.PO.showTransientStatus("无法组装请求");
       return;
     }
     if (!req.selection) {
+      window.PO.Logger.warn("generation.no_selection", {
+        component: "parameters",
+        correlationId: req.correlationId,
+        workflowId: req.workflowId,
+      });
       window.PO.showTransientStatus("请先抓取选区再生成");
       return;
     }
@@ -283,14 +331,17 @@ window.PO.initParameterPage = function () {
       workflowId: req.workflowId,
     });
 
+    var healthCheckStart = Date.now();
     var healthy = await window.PO.GatewayClient.health();
     if (!healthy) {
-      window.PO.showTransientStatus("网关不可达 — 请确认 " + (window.PO.state.gatewayUrl || "http://127.0.0.1:8787") + " 已启动");
-      window.PO.Logger.error("generation.failed", {
+      var gwUrl = window.PO.state.gatewayUrl || "http://127.0.0.1:8787";
+      window.PO.showTransientStatus("网关不可达 — 请确认 " + gwUrl + " 已启动");
+      window.PO.Logger.error("generation.gateway_unreachable", {
         component: "parameters",
         correlationId: corrId,
         workflowId: req.workflowId,
-        error: { message: "Gateway unreachable" },
+        durationMs: Date.now() - genStart,
+        data: { gatewayUrl: gwUrl, healthCheckMs: Date.now() - healthCheckStart },
       });
       return;
     }
@@ -299,6 +350,13 @@ window.PO.initParameterPage = function () {
     window.PO.setStatus("sending request...");
     els.runBtn.disabled = true;
     els.runBtn.textContent = "生成中...";
+
+    window.PO.Logger.info("generation.request_sending", {
+      component: "parameters",
+      correlationId: corrId,
+      workflowId: req.workflowId,
+      data: { gatewayUrl: window.PO.state.gatewayUrl || "http://127.0.0.1:8787" },
+    });
 
     try {
       var result = await window.PO.GatewayClient.generate(req);
@@ -323,12 +381,19 @@ window.PO.initParameterPage = function () {
 
         /* P4 — Place returned image as a new layer in Photoshop */
         window.PO.setStatus("placing layer...");
+        window.PO.Logger.info("placement.started", {
+          component: "parameters",
+          correlationId: corrId,
+          workflowId: req.workflowId,
+        });
+
         var capture = window.PO.state.capture;
         var placeBounds = capture
           ? { left: capture.bounds.left, top: capture.bounds.top, width: capture.bounds.width, height: capture.bounds.height }
           : null;
         var workflowTitle = (window.PO.WORKFLOWS[req.workflowId] || {}).title || req.workflowId;
 
+        var placeStart = Date.now();
         try {
           var placeInfo = await window.PO.placeGeneratedLayer(
             returnedImage,
@@ -336,6 +401,17 @@ window.PO.initParameterPage = function () {
             placeBounds,
             workflowTitle,
           );
+          window.PO.Logger.info("placement.completed", {
+            component: "parameters",
+            correlationId: corrId,
+            workflowId: req.workflowId,
+            durationMs: Date.now() - placeStart,
+            data: {
+              layerName: placeInfo.layerName,
+              layerId: placeInfo.layerId,
+              placedAtBounds: !!placeBounds,
+            },
+          });
           window.PO.showTransientStatus("生成完成 — " + placeInfo.layerName);
         } catch (placeErr) {
           window.PO.showTransientStatus("生成完成但置入失败: " + (placeErr.message || placeErr));
@@ -343,6 +419,7 @@ window.PO.initParameterPage = function () {
             component: "parameters",
             correlationId: corrId,
             workflowId: req.workflowId,
+            durationMs: Date.now() - placeStart,
             error: placeErr,
           });
         }
@@ -355,7 +432,10 @@ window.PO.initParameterPage = function () {
           correlationId: corrId,
           workflowId: req.workflowId,
           durationMs: Date.now() - genStart,
-          error: { message: errMsg },
+          error: {
+            code: result && result.error && result.error.code,
+            message: errMsg,
+          },
         });
         window.PO.showTransientStatus(errMsg);
       }

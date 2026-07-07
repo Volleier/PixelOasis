@@ -45,10 +45,41 @@ export default {
     try {
       variant = registry.resolveVariant(request.workflowId);
     } catch (err) {
-      throw new ComfyUIError(
-        "Workflow resolution failed: " + err.message,
-        { workflowId: request.workflowId },
-      );
+      /* Fallback: try any enabled variant in the same category.
+       * This lets fallback-list workflows (e.g. composition.outpaint.basic)
+       * reuse the same API workflow as their siblings (e.g. sdxl-inpaint-basic). */
+      var parts = request.workflowId.split(".");
+      var categoryPrefix = parts[0];
+      var allIds = registry.getAllWorkflowIds();
+      var fallbackVariant = null;
+
+      for (var f = 0; f < allIds.length; f++) {
+        if (allIds[f].startsWith(categoryPrefix + ".")) {
+          try {
+            fallbackVariant = registry.resolveVariant(allIds[f]);
+            break;
+          } catch (_) { /* try next */ }
+        }
+      }
+
+      if (fallbackVariant) {
+        logger.info("workflow.variant_fallback", {
+          component: "adapter",
+          correlationId: request.correlationId,
+          workflowId: request.workflowId,
+          data: {
+            originalError: err.message,
+            fallbackWorkflowId: fallbackVariant.workflowId,
+            fallbackVariantId: fallbackVariant.variantId,
+          },
+        });
+        variant = fallbackVariant;
+      } else {
+        throw new ComfyUIError(
+          "Workflow resolution failed: " + err.message,
+          { workflowId: request.workflowId },
+        );
+      }
     }
 
     console.log("[comfyui] Resolved workflow " + request.workflowId +

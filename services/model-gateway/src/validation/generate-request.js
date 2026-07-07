@@ -28,7 +28,18 @@ const FALLBACK_WORKFLOWS = [
 
 function getKnownWorkflows() {
   try {
-    return getRegistry().getAllWorkflowIds();
+    var fileBacked = getRegistry().getAllWorkflowIds();
+    /* Merge file-backed with fallback — file-backed IDs are authoritative,
+     * but all fallback IDs are always accepted (even without file-backed variants).
+     * If a fallback workflow has no file-backed variant, the adapter will resolve
+     * it to the default variant for its category. */
+    var merged = FALLBACK_WORKFLOWS.slice();
+    for (var i = 0; i < fileBacked.length; i++) {
+      if (merged.indexOf(fileBacked[i]) === -1) {
+        merged.push(fileBacked[i]);
+      }
+    }
+    return merged;
   } catch (_) {
     return FALLBACK_WORKFLOWS;
   }
