@@ -1,6 +1,6 @@
 /* adapters/comfyui/workflow-loader.js — File-backed workflow registry
  *
- * DevList §9 — Phase G3: Workflow Registry And Metadata.
+ * ImplList §3.1 — Extended metadata schema with policy fields.
  *
  * Recursively scans the workflows directory for *.meta.json files, validates
  * each against the metadata schema, loads the matching *.api.json, and
@@ -30,7 +30,15 @@ var VALID_CATEGORIES = ["composition", "portrait", "lighting", "effects", "quali
 
 var VALID_PROVIDERS = ["comfyui"];
 
-var VALID_SIZE_MODES = ["matchSelection", "allowResize", "allowAny"];
+var VALID_INPUT_SOURCES = ["selection", "activeLayer", "document"];
+
+var VALID_MASK_MODES = ["required", "optional", "forbidden"];
+
+var VALID_REF_MODES = ["none", "optional", "required"];
+
+var VALID_SIZE_MODES = ["selectionExact", "expandThenCrop", "upscaleMultiplier", "allowAny", "matchSelection", "allowResize"];
+
+var VALID_PLACEMENT_TYPES = ["smartObjectMaskedExact", "layerMaskedExact", "none"];
 
 /* ═══════════════════════════════════════════════════════════════════════
  * Schema validation
@@ -126,6 +134,64 @@ function validateMetaSchema(meta, filePath) {
       }
       if (sp.allowResize !== undefined && typeof sp.allowResize !== "boolean") {
         errors.push("sizePolicy.allowResize must be a boolean.");
+      }
+    }
+  }
+
+  /* ── New Phase 1 fields (ImplList §3.1) ── */
+
+  /* stage */
+  if (meta.stage !== undefined && typeof meta.stage !== "number") {
+    errors.push("stage must be a number.");
+  }
+
+  /* inputPolicy */
+  if (meta.inputPolicy !== undefined && meta.inputPolicy !== null) {
+    var ip = meta.inputPolicy;
+    if (typeof ip !== "object") {
+      errors.push("inputPolicy must be an object.");
+    } else {
+      if (ip.source !== undefined && VALID_INPUT_SOURCES.indexOf(ip.source) === -1) {
+        errors.push("inputPolicy.source must be one of: " + VALID_INPUT_SOURCES.join(", ") + ".");
+      }
+      if (ip.mask !== undefined && VALID_MASK_MODES.indexOf(ip.mask) === -1) {
+        errors.push("inputPolicy.mask must be one of: " + VALID_MASK_MODES.join(", ") + ".");
+      }
+      if (ip.referenceImages !== undefined && VALID_REF_MODES.indexOf(ip.referenceImages) === -1) {
+        errors.push("inputPolicy.referenceImages must be one of: " + VALID_REF_MODES.join(", ") + ".");
+      }
+    }
+  }
+
+  /* maskPolicy */
+  if (meta.maskPolicy !== undefined && meta.maskPolicy !== null) {
+    if (typeof meta.maskPolicy !== "object") {
+      errors.push("maskPolicy must be an object.");
+    }
+  }
+
+  /* placementPolicy */
+  if (meta.placementPolicy !== undefined && meta.placementPolicy !== null) {
+    var pp = meta.placementPolicy;
+    if (typeof pp !== "object") {
+      errors.push("placementPolicy must be an object.");
+    } else {
+      if (pp.type !== undefined && VALID_PLACEMENT_TYPES.indexOf(pp.type) === -1) {
+        errors.push("placementPolicy.type must be one of: " + VALID_PLACEMENT_TYPES.join(", ") + ".");
+      }
+    }
+  }
+
+  /* modelManifest */
+  if (meta.modelManifest !== undefined && meta.modelManifest !== null) {
+    var mm = meta.modelManifest;
+    if (typeof mm !== "object") {
+      errors.push("modelManifest must be an object.");
+    } else {
+      if (mm.models !== undefined) {
+        if (!Array.isArray(mm.models)) {
+          errors.push("modelManifest.models must be an array.");
+        }
       }
     }
   }
@@ -293,11 +359,16 @@ export async function loadWorkflows(workflowsDir) {
       provider: meta.provider,
       enabled: enabled,
       priority: priority,
+      stage: typeof meta.stage === "number" ? meta.stage : 0,
       requiredModels: meta.requiredModels || [],
       inputs: meta.inputs,
       outputs: meta.outputs,
       defaults: meta.defaults || {},
       sizePolicy: meta.sizePolicy || { mode: "matchSelection", allowResize: false },
+      inputPolicy: meta.inputPolicy || null,
+      maskPolicy: meta.maskPolicy || null,
+      placementPolicy: meta.placementPolicy || null,
+      modelManifest: meta.modelManifest || null,
       apiWorkflow: apiWorkflow,
       apiWorkflowFile: meta.apiWorkflowFile,
       apiLoadError: apiLoadError,
@@ -346,7 +417,11 @@ export async function loadWorkflows(workflowsDir) {
           title: ref ? ref.title : id,
           category: ref ? ref.category : "",
           description: ref ? ref.title : "",
+          stage: ref ? ref.stage : 0,
           defaults: ref ? ref.defaults : {},
+          inputPolicy: ref ? ref.inputPolicy : null,
+          sizePolicyMode: ref && ref.sizePolicy ? ref.sizePolicy.mode : null,
+          placementPolicyType: ref && ref.placementPolicy ? ref.placementPolicy.type : null,
           variantCount: byWorkflowId[id].length,
           activeVariant: best ? best.variantId : null,
         });
