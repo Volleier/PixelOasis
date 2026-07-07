@@ -155,10 +155,166 @@ export function getPngDimensions(base64Png) {
   };
 }
 
+/* ── ImplList §5.2 additions ── */
+
+/**
+ * Resize an image to exact target dimensions.
+ *
+ * @param {Buffer|string} input  PNG buffer or base64 string
+ * @param {number} width
+ * @param {number} height
+ * @param {object}   [options]
+ * @param {string}   [options.fit="fill"]   sharp fit mode
+ * @param {string}   [options.kernel="lanczos3"]
+ * @returns {Promise<Buffer>}  resized PNG buffer
+ */
+export async function resizeToExact(input, width, height, options) {
+  var opts = options || {};
+  var fit = opts.fit || "fill";
+  var kernel = opts.kernel || "lanczos3";
+
+  var buffer;
+  if (Buffer.isBuffer(input)) {
+    buffer = input;
+  } else if (typeof input === "string") {
+    var payload = input.replace(/^data:image\/\w+;base64,/, "");
+    buffer = Buffer.from(payload, "base64");
+  } else {
+    throw new Error("resizeToExact: input must be Buffer or base64 string.");
+  }
+
+  return sharp(buffer)
+    .resize(width, height, { fit: fit, kernel: kernel })
+    .png()
+    .toBuffer();
+}
+
+/**
+ * Crop an image to a rectangle.
+ *
+ * @param {Buffer|string} input   PNG buffer or base64 string
+ * @param {object} cropRect       { left, top, width, height }
+ * @returns {Promise<Buffer>}     cropped PNG buffer
+ */
+export async function cropToBounds(input, cropRect) {
+  var buffer;
+  if (Buffer.isBuffer(input)) {
+    buffer = input;
+  } else if (typeof input === "string") {
+    var payload = input.replace(/^data:image\/\w+;base64,/, "");
+    buffer = Buffer.from(payload, "base64");
+  } else {
+    throw new Error("cropToBounds: input must be Buffer or base64 string.");
+  }
+
+  return sharp(buffer)
+    .extract({
+      left: Math.max(0, cropRect.left || 0),
+      top: Math.max(0, cropRect.top || 0),
+      width: cropRect.width,
+      height: cropRect.height,
+    })
+    .png()
+    .toBuffer();
+}
+
+/**
+ * Pad an image with a solid color border.
+ *
+ * @param {Buffer|string} input
+ * @param {number} padding         pixels to add on each side
+ * @param {object} [options]
+ * @param {string} [options.mode="reflect"]  sharp extend mode
+ * @returns {Promise<Buffer>}
+ */
+export async function padImage(input, padding, options) {
+  var opts = options || {};
+  var mode = opts.mode || "reflect";
+
+  var buffer;
+  if (Buffer.isBuffer(input)) {
+    buffer = input;
+  } else if (typeof input === "string") {
+    var payload = input.replace(/^data:image\/\w+;base64,/, "");
+    buffer = Buffer.from(payload, "base64");
+  } else {
+    throw new Error("padImage: input must be Buffer or base64 string.");
+  }
+
+  var meta = await sharp(buffer).metadata();
+  var paddedWidth = meta.width + padding * 2;
+  var paddedHeight = meta.height + padding * 2;
+
+  return sharp(buffer)
+    .extend({
+      top: padding,
+      bottom: padding,
+      left: padding,
+      right: padding,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .resize(paddedWidth, paddedHeight, { fit: "fill" })
+    .png()
+    .toBuffer();
+}
+
+/**
+ * Blur a mask image (Gaussian blur).
+ *
+ * @param {Buffer} maskBuffer  raw PNG buffer
+ * @param {number} pixels      blur radius
+ * @returns {Promise<Buffer>}  blurred PNG buffer
+ */
+export async function blurMask(maskBuffer, pixels) {
+  if (!pixels || pixels <= 0) return maskBuffer;
+
+  return sharp(maskBuffer)
+    .blur(pixels)
+    .png()
+    .toBuffer();
+}
+
+/**
+ * Grow (dilate) a mask by N pixels.
+ * Approximated via blur + threshold — full morphological dilation
+ * would require a more complex pipeline.
+ *
+ * @param {Buffer} maskBuffer
+ * @param {number} pixels
+ * @returns {Promise<Buffer>}
+ */
+export async function growMask(maskBuffer, pixels) {
+  if (!pixels || pixels <= 0) return maskBuffer;
+
+  /* Blur to expand edges outward, then threshold to harden */
+  return sharp(maskBuffer)
+    .blur(pixels * 2)
+    .threshold(1)
+    .png()
+    .toBuffer();
+}
+
+/**
+ * Ensure a value is a clean PNG base64 string (no data: prefix).
+ *
+ * @param {string} input  base64 with or without data: prefix
+ * @returns {string}      clean base64 string
+ */
+export function ensurePngBase64(input) {
+  if (typeof input !== "string") return "";
+  return input.replace(/^data:image\/\w+;base64,/, "");
+}
+
 export default {
   scaleImageDown,
   scaleImageUp,
   getPngDimensions,
   decodePng,
   encodePngBase64,
+  resizeToExact,
+  cropToBounds,
+  padImage,
+  blurMask,
+  growMask,
+  ensurePngBase64,
 };
