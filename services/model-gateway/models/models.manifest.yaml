@@ -1,0 +1,56 @@
+# PixelOasis Model Manifest
+# ImplList §10.1 — Declares all models required by Phase 1 workflows.
+#
+# Profile: quality (target: RTX 5080 class GPU)
+# Models are downloaded by tools/download-models.mjs
+
+profiles:
+  quality:
+    description: "Quality-first profile for high-VRAM GPUs (24 GB+)"
+    vramTier: "high"
+
+models:
+  # ── Phase 1 model entries (placeholder — real models TBD) ──
+
+  - id: "sd_xl_base"
+    name: "sd_xl_base_1.0.safetensors"
+    folder: "checkpoints"
+    required: true
+    license: "openrail++"
+    sizeGb: 6.94
+    sha256: ""
+    sources:
+      - type: "huggingface"
+        url: "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors"
+      - type: "huggingface-mirror"
+        url: ""
+      - type: "modelscope"
+        url: ""
+      - type: "manual"
+        note: "Place sd_xl_base_1.0.safetensors in ComfyUI/models/checkpoints/"
+    usedBy:
+      - "composition.inpaint.basic"
+      - "composition.remove.basic"
+      - "quality.upscale.basic"
+
+  # Future Phase 1 pro models (to be filled after model research)
+  - id: "flux-kontext-inpaint"
+    name: ""
+    folder: "checkpoints"
+    required: false
+    license: ""
+    sizeGb: 0
+    sha256: ""
+    sources:
+      - type: "huggingface"
+        url: ""
+      - type: "huggingface-mirror"
+        url: ""
+      - type: "modelscope"
+        url: ""
+      - type: "manual"
+        note: "TBD after model research — ImplList §15 item 4"
+    usedBy:
+      - "composition.inpaint.pro"
+      - "composition.remove.pro"
+      - "quality.realism.pro"
