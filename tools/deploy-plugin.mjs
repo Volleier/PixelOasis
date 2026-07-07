@@ -1,11 +1,30 @@
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pluginRoot = resolve(projectRoot, "pixeloasis-plugin");
 const deployDir = resolve(projectRoot, "PixelOasis");
 const legacyDeployDir = resolve(projectRoot, "com.pixeloasis.plugin");
+
+/* ── Read config.yaml ── */
+let config = {};
+const configPath = resolve(projectRoot, "config.yaml");
+if (existsSync(configPath)) {
+  try {
+    const raw = readFileSync(configPath, "utf-8");
+    config = parseYaml(raw) || {};
+  } catch (err) {
+    console.warn("Warning: failed to parse config.yaml:", err.message);
+  }
+} else {
+  console.warn("Warning: config.yaml not found — using defaults.");
+}
+
+const psMinHostVersion = config.photoshop?.min_host_version || "27.0.0";
+const psPluginPath = config.photoshop?.plugin_path || "";
 
 const scriptFiles = [
   "scripts/ui-text.js",
@@ -72,7 +91,7 @@ const manifest = {
   ],
   host: {
     app: "PS",
-    minVersion: "23.0.0",
+    minVersion: psMinHostVersion,
   },
   entrypoints: [
     {
@@ -125,4 +144,13 @@ await writeFile(resolve(deployDir, "manifest.json"), `${JSON.stringify(manifest,
 
 console.log("Prepared deployable Photoshop plugin.");
 console.log(`  Directory: ${deployDir}`);
+console.log(`  Host minVersion: ${psMinHostVersion}`);
 console.log("  Files: manifest.json, index.html, main.js, panel.css, icons/");
+
+if (psPluginPath) {
+  console.log(`\nTo deploy, copy the PixelOasis/ folder to:`);
+  console.log(`  ${psPluginPath}/PixelOasis`);
+} else {
+  console.warn("\nWarning: photoshop.plugin_path is not set in config.yaml.");
+  console.warn("  Set it to enable automatic plugin deployment.");
+}
