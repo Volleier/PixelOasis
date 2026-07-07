@@ -7,7 +7,10 @@ const MAX_PIXEL_COUNT = 4096 * 4096;             // ≈ 16.8 Mpix
 /* ── Known workflow IDs (public PixelOasis workflowId) ──
  *
  * When the file-backed registry (G3) is loaded, workflow IDs are read from
- * the registry.  Otherwise the hardcoded fallback list is used. */
+ * the registry.  Otherwise the hardcoded fallback list is used.
+ *
+ * ImplList §4.1 — Validation reads workflow inputPolicy to decide whether
+ * selection and mask are required. */
 
 import { getRegistry } from "../adapters/registry-instance.js";
 
@@ -296,6 +299,20 @@ function validateParameters(parameters) {
   return { valid: true };
 }
 
+/* ── Resolve the inputPolicy for a workflowId ── */
+function getWorkflowInputPolicy(wfId) {
+  try {
+    var registry = getRegistry();
+    var workflow = registry.getWorkflow(wfId);
+    if (workflow && workflow.best) {
+      return workflow.best.inputPolicy || null;
+    }
+  } catch (_) {
+    /* registry not available — use legacy rules */
+  }
+  return null;
+}
+
 export function validateGenerateRequest(body) {
   /* ── Top-level shape ── */
   if (!body || typeof body !== "object") {
@@ -320,29 +337,56 @@ export function validateGenerateRequest(body) {
     );
   }
 
+  /* ── Resolve workflow input policy ── */
+  var inputPolicy = getWorkflowInputPolicy(body.workflowId);
+
+  /* If policy declares mask=forbidden, no mask should be sent */
+  var maskRequired = !inputPolicy || inputPolicy.mask !== "optional" && inputPolicy.mask !== "forbidden";
+  var maskForbidden = inputPolicy && inputPolicy.mask === "forbidden";
+  var sourceKind = inputPolicy ? inputPolicy.source : "selection";
+
   /* ── selection ── */
   var selection = body.selection;
   if (!selection || typeof selection !== "object") {
     return invalid("Missing selection.");
   }
 
-  /* Formal image — PNG only, no JPEG */
+  /* Source image — PNG only, no JPEG (always required) */
   var imageValidation = validatePngField(
     selection.imagePngBase64 || selection.imageBase64,
     "selection.imagePngBase64",
   );
   if (!imageValidation.valid) return imageValidation;
 
-  /* Formal mask — PNG only, no JPEG */
-  var maskValidation = validatePngField(
-    selection.maskPngBase64 || selection.maskBase64,
-    "selection.maskPngBase64",
-  );
-  if (!maskValidation.valid) return maskValidation;
+  /* Mask — conditional on inputPolicy.mask */
+  if (maskForbidden) {
+    if (selection.maskPngBase64 || selection.maskBase64) {
+      return invalid(
+        "selection.maskPngBase64 is forbidden for workflow " + body.workflowId +
+        " (inputPolicy.mask = forbidden)."
+      );
+    }
+  } else if (maskRequired) {
+    var maskValidation = validatePngField(
+      selection.maskPngBase64 || selection.maskBase64,
+      "selection.maskPngBase64",
+    );
+    if (!maskValidation.valid) return maskValidation;
+  }
+  /* mask=optional: validate if present, but don't require it */
+  if (!maskRequired && !maskForbidden && (selection.maskPngBase64 || selection.maskBase64)) {
+    var optMaskValidation = validatePngField(
+      selection.maskPngBase64 || selection.maskBase64,
+      "selection.maskPngBase64",
+    );
+    if (!optMaskValidation.valid) return optMaskValidation;
+  }
 
-  /* Bounds — includes pixel-count ceiling */
-  var boundsValidation = validateBounds(selection.bounds);
-  if (!boundsValidation.valid) return boundsValidation;
+  /* Bounds — required when source=selection */
+  if (sourceKind === "selection") {
+    var boundsValidation = validateBounds(selection.bounds);
+    if (!boundsValidation.valid) return boundsValidation;
+  }
 
   /* Optional selection metadata (documentId, colorMode, resolution, previewJpegBase64) */
   var metaValidation = validateSelectionMeta(selection);
