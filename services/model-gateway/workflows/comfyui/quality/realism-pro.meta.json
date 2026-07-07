@@ -1,0 +1,81 @@
+{
+  "workflowId": "quality.realism.pro",
+  "variantId": "realism-pro-v1",
+  "title": "Realism Enhance Pro",
+  "category": "quality",
+  "provider": "comfyui",
+  "stage": 1,
+  "apiWorkflowFile": "realism-pro.api.json",
+  "enabled": true,
+  "priority": 100,
+
+  "requiredModels": [],
+
+  "inputs": {
+    "sourceImage": { "nodeId": "10", "input": "image" },
+    "maskImage": { "nodeId": "11", "input": "image" },
+    "positivePrompt": { "nodeId": "6", "input": "text" },
+    "negativePrompt": { "nodeId": "7", "input": "text" },
+    "seed": { "nodeId": "3", "input": "seed" },
+    "steps": { "nodeId": "3", "input": "steps" },
+    "cfg": { "nodeId": "3", "input": "cfg" },
+    "denoise": { "nodeId": "3", "input": "denoise" },
+    "sampler": { "nodeId": "3", "input": "sampler_name" },
+    "scheduler": { "nodeId": "3", "input": "scheduler" }
+  },
+
+  "outputs": {
+    "images": { "nodeId": "9" }
+  },
+
+  "defaults": {
+    "prompt": "photorealistic, high detail, natural skin texture, soft cinematic lighting, sharp focus, 8k",
+    "negativePrompt": "cartoon, painting, plastic skin, over-saturated, distorted face, changed identity, different person, body horror",
+    "seed": -1,
+    "steps": 24,
+    "cfg": 4.5,
+    "denoise": 0.35,
+    "sampler": "dpmpp_2m",
+    "scheduler": "karras"
+  },
+
+  "inputPolicy": {
+    "source": "selection",
+    "mask": "optional",
+    "referenceImages": "none",
+    "prompt": "optional",
+    "negativePrompt": "optional"
+  },
+
+  "sizePolicy": {
+    "mode": "selectionExact",
+    "maxSourceDimension": 1536
+  },
+
+  "maskPolicy": {
+    "polarity": "white-editable",
+    "invertBeforeUpload": false,
+    "growPixels": 0,
+    "blurPixels": 0,
+    "edgeMode": "soft",
+    "note": "Mask is optional for realism enhance. If provided, limits the enhancement area."
+  },
+
+  "placementPolicy": {
+    "type": "smartObjectMaskedExact",
+    "bounds": "selection",
+    "createLayerGroup": true,
+    "createSmartObject": true,
+    "maskSource": "finalSoftMask",
+    "preserveOriginalSelectionMask": true,
+    "featherPixels": 2,
+    "opacity": 100,
+    "blendMode": "normal"
+  },
+
+  "modelManifest": {
+    "profile": "quality",
+    "vramTier": "high",
+    "models": []
+  }
+}
