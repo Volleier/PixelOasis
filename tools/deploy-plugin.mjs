@@ -1,7 +1,8 @@
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const projectRoot = process.cwd();
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pluginRoot = resolve(projectRoot, "pixeloasis-plugin");
 const deployDir = resolve(projectRoot, "PixelOasis");
 const legacyDeployDir = resolve(projectRoot, "com.pixeloasis.plugin");

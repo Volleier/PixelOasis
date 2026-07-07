@@ -1,0 +1,72 @@
+# PixelOasis Configuration
+# Fill in your local paths below.
+#
+# Every tool, the gateway, and the deploy pipeline read from this file.
+# Paths use forward slashes (e.g. D:/Adobe/Adobe Photoshop 2026/Plug-ins).
+
+# ── Photoshop ─────────────────────────────────────────────
+photoshop:
+  # Absolute path to the Photoshop 2026 Plug-ins directory.
+  # The deploy script will copy the plugin here.
+  plugin_path: "Your/Path/To/Adobe/Adobe Photoshop 2026/Plug-ins"
+
+  # Minimum Photoshop version enforced by the plugin manifest.
+  # Only Photoshop 2026 (host >= 27.0.0) is supported.
+  min_major_version: 2026
+  min_host_version: "27.0.0"
+
+# ── ComfyUI ───────────────────────────────────────────────
+comfyui:
+  # Absolute path to the ComfyUI Desktop (or manual ComfyUI) root directory.
+  root: "Your/Path/To/ComfyUI_windows_portable"
+
+  # HTTP endpoint of the running ComfyUI instance.
+  # ComfyUI Desktop defaults to port 8000; manual installs often use 8188.
+  url: "http://127.0.0.1:8000"
+
+  # Explicit path to ComfyUI models directory.
+  # Leave empty to derive from comfyui.root (e.g. <root>/models).
+  models_dir: "Your/Path/To/ComfyUI_windows_portable/models"
+
+# ── Model Gateway ─────────────────────────────────────────
+model_gateway:
+  # Host and port the local gateway server binds to.
+  host: "127.0.0.1"
+  port: 8787
+
+  # AI backend provider. Only "comfyui" is supported.
+  provider: "comfyui"
+
+  # Gateway log level: debug | info | warn | error
+  log_level: "info"
+
+# ── Model Download & Verification ─────────────────────────
+models:
+  # Mirror priority order for downloading model files.
+  # "manual" means the user downloads the file themselves.
+  mirrors:
+    - "modelscope"
+    - "huggingface-mirror"
+    - "huggingface"
+    - "manual"
+
+  # Allow downloading large model files (> 5 GB).
+  allow_large_models: true
+
+  # Verify SHA-256 hash after download.
+  verify_hash: true
+
+  # Shared download cache directory.
+  # Leave empty to use the default <project>/tools/cache/models.
+  cache_dir: "PixelOasis/tools/cache/models"
+
+# ── PixelOasis Debug & Behaviour ──────────────────────────
+pixel_oasis:
+  # Save a copy of every patched ComfyUI API workflow for debugging.
+  debug_workflows: true
+
+  # Save intermediate source / mask / output images for debugging.
+  keep_intermediate_images: false
+
+  # Name of the top-level Photoshop layer group that holds all results.
+  default_result_layer_group: "PixelOasis"

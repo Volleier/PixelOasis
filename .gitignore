@@ -5,3 +5,4 @@ pixeloasis-plugin/dist
 coverage
 *.log
 PixelOasis/
+docs/

@@ -1,9 +1,9 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 echo Building PixelOasis deployable Photoshop plugin...
-node deploy-plugin.mjs
+node "%~dp0deploy-plugin.mjs"
 if errorlevel 1 (
   echo.
   echo Build failed. Make sure Node.js is installed and available in PATH.
