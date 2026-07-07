@@ -4,3 +4,4 @@ pixeloasis-plugin/dist
 .DS_Store
 coverage
 *.log
+PixelOasis/

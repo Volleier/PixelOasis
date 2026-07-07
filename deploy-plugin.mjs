@@ -3,7 +3,8 @@ import { resolve } from "node:path";
 
 const projectRoot = process.cwd();
 const pluginRoot = resolve(projectRoot, "pixeloasis-plugin");
-const deployDir = resolve(projectRoot, "com.pixeloasis.plugin");
+const deployDir = resolve(projectRoot, "PixelOasis");
+const legacyDeployDir = resolve(projectRoot, "com.pixeloasis.plugin");
 
 const scriptFiles = [
   "scripts/ui-text.js",
@@ -24,6 +25,7 @@ const scriptFiles = [
 ];
 
 await rm(deployDir, { recursive: true, force: true });
+await rm(legacyDeployDir, { recursive: true, force: true });
 await mkdir(deployDir, { recursive: true });
 await mkdir(resolve(deployDir, "icons"), { recursive: true });
 

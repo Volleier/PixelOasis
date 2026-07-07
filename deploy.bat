@@ -14,6 +14,6 @@ if errorlevel 1 (
 
 echo.
 echo Done. Deployable plugin directory:
-echo %~dp0com.pixeloasis.plugin
+echo %~dp0PixelOasis
 echo.
 pause

@@ -41,7 +41,7 @@ pixeloasis-plugin/                  ← 插件源码目录
 ```
 prepare-deploy-plugin.mjs           ← 直接部署版生成脚本
 build-deploy-plugin.bat             ← Windows 一键生成脚本
-com.pixeloasis.plugin/              ← 直接部署版输出目录
+PixelOasis/                         ← 直接部署版输出目录
 ```
 
 ### 1.1 关键依赖关系（加载顺序）
@@ -137,7 +137,7 @@ node prepare-deploy-plugin.mjs
 
 该脚本会：
 
-1. 清空并重建根目录 `com.pixeloasis.plugin/`
+1. 清空并重建根目录 `PixelOasis/`
 2. 按 §1.1 的加载顺序捆绑所有 JS 到 `main.js`
 3. 生成只引用 `main.js` 的部署版 `index.html`
 4. 生成 v6 格式 `manifest.json`
@@ -146,7 +146,7 @@ node prepare-deploy-plugin.mjs
 输出结构：
 
 ```
-com.pixeloasis.plugin/
+PixelOasis/
 ├── manifest.json        ← v6 格式
 ├── index.html           ← 只加载 main.js
 ├── main.js              ← 捆绑后的单文件
@@ -172,7 +172,7 @@ com.pixeloasis.plugin/
 
 ```bash
 # 将单文件构建输出打包为 .ccx（实质是 ZIP）
-cd com.pixeloasis.plugin
+cd PixelOasis
 powershell -Command "Compress-Archive -Path '*' -DestinationPath '../PixelOasis-v0.1.0.zip' -Force"
 ren ..\PixelOasis-v0.1.0.zip PixelOasis-v0.1.0.ccx
 ```
@@ -186,7 +186,7 @@ ren ..\PixelOasis-v0.1.0.zip PixelOasis-v0.1.0.ccx
 ```
 %APPDATA%\Adobe\UXP\PluginsStorage\PHSP\<version>\
 ├── External\                       ← 用户外部插件（可直接放置）
-│   └── com.pixeloasis.plugin\      ← 插件目录（以 plugin id 命名）
+│   └── PixelOasis\                 ← 外部部署目录（推荐与对外产品名一致）
 │       ├── manifest.json
 │       ├── index.html
 │       ├── main.js
@@ -214,7 +214,7 @@ D:\Adobe\Adobe Photoshop 2026\Plug-ins
 ### 3.2 手动安装步骤
 
 1. **停止 Photoshop**
-2. 将根目录下的 `com.pixeloasis.plugin` 复制到 `\Adobe\Adobe Photoshop 2026\Plug-ins`
+2. 将根目录下的 `PixelOasis` 复制到 `\Adobe\Adobe Photoshop 2026\Plug-ins`
 3. **重启 Photoshop**
 4. 检查 `插件` 菜单 → **PixelOasis** 面板
 
