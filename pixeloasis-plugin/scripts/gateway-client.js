@@ -141,8 +141,46 @@ window.PO.GatewayClient = (function () {
     }
   }
 
+  /* ── Get workflows ── (ImplList §8.1) */
+
+  async function getWorkflows() {
+    var base = getBaseUrl();
+    try {
+      var resp = await fetch(base + "/workflows", { method: "GET" });
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      var data = await resp.json();
+      return data;
+    } catch (e) {
+      window.PO.Logger.warn("gateway.workflows.failed", {
+        component: "gateway",
+        error: e,
+      });
+      return null;
+    }
+  }
+
+  /* ── Get config summary ── (ImplList §1.5) */
+
+  async function getConfig() {
+    var base = getBaseUrl();
+    try {
+      var resp = await fetch(base + "/config", { method: "GET" });
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      var data = await resp.json();
+      return data;
+    } catch (e) {
+      window.PO.Logger.warn("gateway.config.failed", {
+        component: "gateway",
+        error: e,
+      });
+      return null;
+    }
+  }
+
   return {
     health: health,
     generate: generate,
+    getWorkflows: getWorkflows,
+    getConfig: getConfig,
   };
 })();

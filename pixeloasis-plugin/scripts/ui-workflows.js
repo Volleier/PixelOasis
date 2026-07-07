@@ -161,3 +161,78 @@ window.PO.WORKFLOWS = {
     },
   },
 };
+
+/* ── Phase 1 visible workflow IDs (ImplList §8.1) ── */
+window.PO.PHASE1_WORKFLOW_IDS = [
+  "composition.inpaint.pro",
+  "composition.remove.pro",
+  "quality.realism.pro",
+];
+
+/* ── Backend-driven workflow loading (ImplList §8.1) ──
+ *
+ * On startup, tries to fetch /workflows from the gateway.
+ * Backend data (title, defaults, inputPolicy) is merged into the
+ * local WORKFLOWS registry.  Falls back to local definitions if
+ * the gateway is unreachable. */
+
+window.PO.loadWorkflowsFromBackend = async function () {
+  try {
+    var data = await window.PO.GatewayClient.getWorkflows();
+    if (!data || !Array.isArray(data)) {
+      window.PO.Logger.info("workflows.backend_empty", {
+        component: "workflows",
+        data: { reason: "no data from gateway, using local fallback" },
+      });
+      return;
+    }
+
+    var merged = 0;
+    for (var i = 0; i < data.length; i++) {
+      var wf = data[i];
+      var id = wf.id;
+
+      /* Only care about Phase 1 pro workflows for the primary UI */
+      if (window.PO.PHASE1_WORKFLOW_IDS.indexOf(id) === -1) continue;
+
+      if (window.PO.WORKFLOWS[id]) {
+        /* Merge backend defaults into existing local entry */
+        if (wf.defaults && typeof wf.defaults === "object") {
+          var existing = window.PO.WORKFLOWS[id].defaults || {};
+          var keys = Object.keys(wf.defaults);
+          for (var k = 0; k < keys.length; k++) {
+            existing[keys[k]] = wf.defaults[keys[k]];
+          }
+          window.PO.WORKFLOWS[id].defaults = existing;
+        }
+        if (wf.title) window.PO.WORKFLOWS[id].title = wf.title;
+        if (wf.category) window.PO.WORKFLOWS[id].category = wf.category;
+        if (wf.inputPolicy) window.PO.WORKFLOWS[id].inputPolicy = wf.inputPolicy;
+        if (wf.sizePolicyMode) window.PO.WORKFLOWS[id].sizePolicyMode = wf.sizePolicyMode;
+        merged++;
+      } else {
+        /* Create new entry from backend data */
+        window.PO.WORKFLOWS[id] = {
+          id: id,
+          title: wf.title || id,
+          category: wf.category || "",
+          defaults: wf.defaults || {},
+          inputPolicy: wf.inputPolicy || null,
+          sizePolicyMode: wf.sizePolicyMode || null,
+          _fromBackend: true,
+        };
+        merged++;
+      }
+    }
+
+    window.PO.Logger.info("workflows.backend_loaded", {
+      component: "workflows",
+      data: { total: data.length, merged: merged },
+    });
+  } catch (e) {
+    window.PO.Logger.warn("workflows.backend_failed", {
+      component: "workflows",
+      data: { reason: e.message || String(e) },
+    });
+  }
+};
