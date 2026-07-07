@@ -10,6 +10,7 @@
 
 import { createServer } from "node:http";
 import config from "./config.js";
+import { handleConfig } from "./routes/config.js";
 import { handleHealth } from "./routes/health.js";
 import { handleWorkflows } from "./routes/workflows.js";
 import { handleGenerate } from "./routes/generate.js";
@@ -22,6 +23,7 @@ logger.init(config);
 
 /* Route table — keyed by "METHOD:pathname" */
 var ROUTES = {
+  "GET:/config": handleConfig,
   "GET:/health": handleHealth,
   "GET:/workflows": handleWorkflows,
   "POST:/generate": handleGenerate,
@@ -86,6 +88,7 @@ server.listen(config.port, config.host, function () {
   console.log("PixelOasis model-gateway listening at http://" + config.host + ":" + config.port);
   console.log("  Provider: " + config.modelProvider);
   console.log("  ComfyUI:  " + config.comfyui.baseUrl);
+  console.log("  GET  /config     → non-sensitive config summary");
   console.log("  GET  /health     → health check (?upstream=1 for ComfyUI status)");
   console.log("  GET  /workflows  → workflow registry (file-backed)");
   console.log("  POST /generate   → submit generation");
