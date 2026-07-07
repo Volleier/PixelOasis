@@ -1,18 +1,18 @@
-/* adapters/comfyui/adapter.js — ComfyUI adapter with auto-scaling pipeline
+/* adapters/comfyui/adapter.js — ComfyUI adapter with policy-driven pipeline
  *
- * DevList §9 — Phase G5 + §6 auto-scaling.
+ * ImplList §5.3 + §6.2 — Size and mask processing delegated to policy modules.
  *
  * Full execution flow:
- *  1. Resolve public workflowId → best variant from file-backed registry
- *  2. Validate required models are available
- *  3. Auto-scale source + mask images to fit the workflow's max dimension
- *  4. Upload scaled images to ComfyUI
- *  5. Patch workflow with uploaded filenames + parameters
- *  6. Submit prompt
- *  7. Poll until completion
- *  8. Download output image
- *  9. Upscale result back to original selection dimensions
- * 10. Return normalized PixelOasis response
+ *  1. Resolve public workflowId → best variant
+ *  2. Validate required models
+ *  3. Apply size-policy → compute dimensions
+ *  4. Apply mask-policy → process mask
+ *  5. Scale + upload images to ComfyUI
+ *  6. Patch workflow with uploaded filenames + parameters
+ *  7. Submit prompt
+ *  8. Poll until completion
+ *  9. Download output, finalize dimensions via size-policy
+ * 10. Return normalized PixelOasis response with placement info
  */
 
 import config from "../../config.js";
@@ -21,11 +21,10 @@ import { validateModels } from "./workflow-loader.js";
 import { patchWorkflow, validateBindings, WorkflowBindingError } from "./workflow-bindings.js";
 import { createComfyUIClient, ComfyUIError, ComfyUIOfflineError, ComfyUIValidationError, ComfyUITimeoutError, ComfyUINoOutputError } from "./client.js";
 import { readOutputImages, detectImageDimensions } from "./result-reader.js";
-import { scaleImageDown, scaleImageUp, getPngDimensions } from "../../utils/images.js";
+import { scaleImageDown, resizeToExact, getPngDimensions } from "../../utils/images.js";
+import { applySizePolicy } from "./size-policy.js";
+import { applyMaskPolicy } from "./mask-policy.js";
 import logger from "../../utils/logger.js";
-
-/* Default max source dimension per workflow type (overridden by variant metadata) */
-var DEFAULT_MAX_SOURCE_DIMENSION = 1024;
 
 export default {
   id: "comfyui",
@@ -108,17 +107,7 @@ export default {
     }
 
     /* ═══════════════════════════════════════════════════════════════
-     * Step 3: Get max source dimension from variant metadata
-     * ═══════════════════════════════════════════════════════════════ */
-
-    var maxDim = DEFAULT_MAX_SOURCE_DIMENSION;
-    if (variant.sizePolicy && typeof variant.sizePolicy.maxSourceDimension === "number") {
-      maxDim = variant.sizePolicy.maxSourceDimension;
-    }
-    console.log("[comfyui] Max source dimension: " + maxDim + "px");
-
-    /* ═══════════════════════════════════════════════════════════════
-     * Step 4: Auto-scale source + mask images
+     * Step 3: Apply size-policy
      * ═══════════════════════════════════════════════════════════════ */
 
     var selection = request.selection;
@@ -129,24 +118,69 @@ export default {
       throw new ComfyUIError("Missing source image (imagePngBase64).");
     }
 
-    /* Get original dimensions */
     var origDims = getPngDimensions(sourceB64);
+    var sizeResult = applySizePolicy(selection.bounds, origDims, variant);
 
-    /* Scale source */
-    var sourceScaled = await scaleImageDown(sourceB64, maxDim);
-    console.log("[comfyui] Source: " + sourceScaled.originalWidth + "x" + sourceScaled.originalHeight +
-      (sourceScaled.scaled ? " → " + sourceScaled.width + "x" + sourceScaled.height +
-        " (scale: " + sourceScaled.scale.toFixed(3) + ")" : " (no scaling needed)"));
+    console.log("[comfyui] Size policy: mode=" + sizeResult.policy.mode +
+      ", maxDim=" + sizeResult.policy.maxSourceDimension +
+      ", internal=" + sizeResult.internalWidth + "x" + sizeResult.internalHeight +
+      (sizeResult.scaled ? " (scale: " + sizeResult.scale.toFixed(3) + ")" : ""));
 
-    /* Scale mask with the same factor (if present) */
-    var maskScaled = null;
+    logger.info("image.size_policy.applied", {
+      component: "adapter",
+      correlationId: request.correlationId,
+      workflowId: request.workflowId,
+      data: sizeResult.metadata,
+    });
+
+    /* ═══════════════════════════════════════════════════════════════
+     * Step 4: Apply mask-policy + scale images
+     * ═══════════════════════════════════════════════════════════════ */
+
+    /* Process mask through mask-policy */
+    var maskPolicyResult = null;
     if (maskB64) {
-      /* For mask, use the same scale factor as the source image to keep alignment */
-      if (sourceScaled.scaled) {
-        var maskDown = await scaleImageDown(maskB64, maxDim);
+      maskPolicyResult = await applyMaskPolicy(maskB64, variant);
+      logger.info("image.mask_policy.applied", {
+        component: "adapter",
+        correlationId: request.correlationId,
+        workflowId: request.workflowId,
+        data: maskPolicyResult.metadata,
+      });
+    }
+
+    /* Scale source to internal dimensions */
+    var sourceScaled;
+    if (sizeResult.scaled) {
+      sourceScaled = await scaleImageDown(sourceB64, sizeResult.policy.maxSourceDimension);
+    } else {
+      sourceScaled = {
+        base64: sourceB64.replace(/^data:image\/\w+;base64,/, ""),
+        width: origDims.width,
+        height: origDims.height,
+        scaled: false,
+        scale: 1.0,
+      };
+    }
+
+    console.log("[comfyui] Source: " + origDims.width + "x" + origDims.height +
+      (sourceScaled.scaled ? " → " + sourceScaled.width + "x" + sourceScaled.height : " (no scaling)"));
+
+    /* Scale mask (if present) to match source dimensions */
+    var maskScaled = null;
+    if (maskPolicyResult && maskPolicyResult.maskForWorkflow) {
+      var maskDims = getPngDimensions(maskPolicyResult.maskForWorkflow);
+      if (sizeResult.scaled) {
+        var maskDown = await scaleImageDown(maskPolicyResult.maskForWorkflow, sizeResult.policy.maxSourceDimension);
         maskScaled = maskDown;
       } else {
-        maskScaled = await scaleImageDown(maskB64, maxDim);
+        maskScaled = {
+          base64: maskPolicyResult.maskForWorkflow,
+          width: maskDims.width,
+          height: maskDims.height,
+          scaled: false,
+          scale: 1.0,
+        };
       }
     }
 
@@ -301,23 +335,45 @@ export default {
     });
 
     /* ═══════════════════════════════════════════════════════════════
-     * Step 10: Upscale result back to original dimensions
+     * Step 10: Finalize dimensions via size-policy
      * ═══════════════════════════════════════════════════════════════ */
 
     var finalBase64;
-    var finalWidth = outputDims.width;
-    var finalHeight = outputDims.height;
+    var finalWidth = sizeResult.finalWidth;
+    var finalHeight = sizeResult.finalHeight;
 
-    if (sourceScaled.scaled) {
-      var targetW = sourceScaled.originalWidth;
-      var targetH = sourceScaled.originalHeight;
-      finalBase64 = await scaleImageUp(outputPng, targetW, targetH);
-      finalWidth = targetW;
-      finalHeight = targetH;
-      console.log("[comfyui] Upscaled result to original: " + targetW + "x" + targetH);
+    /* If ComfyUI output dimensions differ from policy target, resize */
+    if (outputDims.width !== finalWidth || outputDims.height !== finalHeight) {
+      var resizedBuffer = await resizeToExact(outputPng, finalWidth, finalHeight, {
+        fit: "fill",
+        kernel: "lanczos3",
+      });
+      finalBase64 = resizedBuffer.toString("base64");
+      console.log("[comfyui] Resized output: " + outputDims.width + "x" + outputDims.height +
+        " → " + finalWidth + "x" + finalHeight);
     } else {
       finalBase64 = outputPng.toString("base64");
     }
+
+    /* Log dimension chain */
+    logger.info("result.finalized", {
+      component: "adapter",
+      correlationId: request.correlationId,
+      workflowId: request.workflowId,
+      data: {
+        sourceWidth: sizeResult.metadata.originalWidth,
+        sourceHeight: sizeResult.metadata.originalHeight,
+        internalWidth: sizeResult.internalWidth,
+        internalHeight: sizeResult.internalHeight,
+        comfyuiOutputWidth: outputDims.width,
+        comfyuiOutputHeight: outputDims.height,
+        finalWidth: finalWidth,
+        finalHeight: finalHeight,
+        promptId: promptId,
+        variantId: variant.variantId,
+        sizePolicyMode: sizeResult.policy.mode,
+      },
+    });
 
     /* ═══════════════════════════════════════════════════════════════
      * Step 11: Return normalized PixelOasis response
@@ -332,14 +388,25 @@ export default {
         width: finalWidth,
         height: finalHeight,
         seed: request.parameters ? request.parameters.seed : -1,
+        placement: maskPolicyResult ? {
+          type: variant.placementPolicy ? variant.placementPolicy.type : "smartObjectMaskedExact",
+          targetBounds: selection.bounds,
+          maskPngBase64: maskPolicyResult.finalPlacementMask || null,
+          featherPixels: variant.placementPolicy ? (variant.placementPolicy.featherPixels || 0) : 0,
+          createLayerGroup: variant.placementPolicy ? variant.placementPolicy.createLayerGroup !== false : true,
+        } : null,
         metadata: {
           provider: "comfyui",
           workflowId: request.workflowId,
           variantId: variant.variantId,
           promptId: promptId,
-          scaled: sourceScaled.scaled,
-          originalWidth: sourceScaled.originalWidth,
-          originalHeight: sourceScaled.originalHeight,
+          sourceWidth: sizeResult.metadata.originalWidth,
+          sourceHeight: sizeResult.metadata.originalHeight,
+          internalWidth: sizeResult.internalWidth,
+          internalHeight: sizeResult.internalHeight,
+          outputWidth: finalWidth,
+          outputHeight: finalHeight,
+          contextPadding: sizeResult.contextPaddingPx || 0,
         },
       },
     };
