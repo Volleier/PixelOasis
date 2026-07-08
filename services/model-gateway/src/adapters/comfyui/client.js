@@ -120,7 +120,7 @@ function sleep(ms) {
 /**
  * Create a ComfyUI HTTP client.
  *
- * @param {string}  baseUrl  e.g. "http://127.0.0.1:8000"
+ * @param {string}  baseUrl  e.g. "http://127.0.0.1:51818"
  * @param {object}  [options]
  * @param {number}  [options.healthTimeout=10000]    timeout for health/info calls
  * @param {number}  [options.uploadTimeout=30000]    timeout for image uploads

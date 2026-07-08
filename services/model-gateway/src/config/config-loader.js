@@ -30,7 +30,7 @@ const DEFAULTS = {
   },
   comfyui: {
     root: "",
-    url: "http://127.0.0.1:8000",
+    url: "http://127.0.0.1:51818",
     models_dir: "",
   },
   model_gateway: {

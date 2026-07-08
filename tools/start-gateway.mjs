@@ -33,7 +33,7 @@ env.PO_LOG_ENABLED = "1";
 
 console.log("  Gateway: http://" + (env.PO_HOST || "127.0.0.1") + ":" + (env.PO_PORT || "8787"));
 console.log("  Provider: " + (env.PO_MODEL_PROVIDER || "comfyui"));
-console.log("  ComfyUI: " + (env.COMFYUI_URL || "http://127.0.0.1:8000"));
+console.log("  ComfyUI: " + (env.COMFYUI_URL || "http://127.0.0.1:51818"));
 console.log("");
 
 const serverPath = resolve(PROJECT_ROOT, "services", "model-gateway", "src", "server.js");

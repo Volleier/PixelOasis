@@ -39,9 +39,9 @@ if exist "%LOCAL_CONFIG%" (
     exit /b 1
 )
 
-:: ── Step 2: Parse plugins_path from YAML ──
+:: ── Step 2: Parse plugin_path from YAML ──
 set "PS_PATH="
-for /f "usebackq tokens=1,* delims=: " %%a in (`type "!CONFIG_FILE!" ^| findstr "plugins_path:"`) do (
+for /f "usebackq tokens=1,* delims=: " %%a in (`type "!CONFIG_FILE!" ^| findstr "plugin_path:"`) do (
     set "PS_PATH=%%b"
 )
 :: Strip surrounding quotes and trailing spaces
@@ -51,8 +51,8 @@ set PS_PATH=!PS_PATH:'=!
 for /f "tokens=*" %%a in ("!PS_PATH!") do set PS_PATH=%%a
 
 if "!PS_PATH!"=="" (
-    echo ERROR: Could not parse plugins_path from !CONFIG_FILE!
-    echo Expected line like:   plugins_path: "D:/Adobe/Adobe Photoshop 2026/Plug-ins"
+    echo ERROR: Could not parse plugin_path from !CONFIG_FILE!
+    echo Expected line like:   plugin_path: "D:/Adobe/Adobe Photoshop 2026/Plug-ins"
     pause
     exit /b 1
 )
@@ -62,7 +62,7 @@ echo [Config] Photoshop Plug-ins: !PS_PATH!
 if not exist "!PS_PATH!\" (
     echo.
     echo ERROR: Directory does not exist: !PS_PATH!
-    echo Open config.local.yaml and update plugins_path with the correct Photoshop Plug-ins folder.
+    echo Open config.local.yaml and update plugin_path with the correct Photoshop Plug-ins folder.
     pause
     exit /b 1
 )

@@ -58,7 +58,7 @@ if (comfyModels) {
 }
 
 /* ── ComfyUI URL reachable ── */
-const comfyUrl = config.comfyui?.url || "http://127.0.0.1:8000";
+const comfyUrl = config.comfyui?.url || "http://127.0.0.1:51818";
 try {
   const resp = await fetch(comfyUrl + "/system_stats", { signal: AbortSignal.timeout(5000) });
   check("ComfyUI reachable at " + comfyUrl, resp.ok,
