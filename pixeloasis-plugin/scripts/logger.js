@@ -1,6 +1,6 @@
 /* logger.js — PixelOasis plugin-side JSONL logger
  *
- * Writes structured log entries to <UXP data folder>/logs/pixeloasis-plugin.jsonl.
+ * Writes structured log entries to <UXP data folder>/logs/pixeloasis-logs-YYYY-MM-DD-HH-mm-ss.jsonl.
  * One JSON object per line.  Never logs base64 image data.
  *
  * API:
@@ -107,6 +107,22 @@ window.PO.Logger = (function () {
     return state.logging;
   }
 
+  /* ── Get log file name (cached per session, seconds precision) ── */
+  var cachedLogName = null;
+
+  function getLogFileName() {
+    if (cachedLogName) return cachedLogName;
+    var now = new Date();
+    var ts = now.getFullYear() + "-" +
+      String(now.getMonth() + 1).padStart(2, "0") + "-" +
+      String(now.getDate()).padStart(2, "0") + "-" +
+      String(now.getHours()).padStart(2, "0") + "-" +
+      String(now.getMinutes()).padStart(2, "0") + "-" +
+      String(now.getSeconds()).padStart(2, "0");
+    cachedLogName = "pixeloasis-logs-" + ts + ".jsonl";
+    return cachedLogName;
+  }
+
   /* ── Check log level ── */
   function shouldLog(level) {
     var cfg = getConfig();
@@ -153,12 +169,17 @@ window.PO.Logger = (function () {
     var dir = await ensureLogDir();
     if (!dir) return null;
 
+    var targetName = getLogFileName();
+
+    /* If already holding the session file, reuse it */
+    if (logFile && logFile.name === targetName) return logFile;
+
     try {
       var entries = await dir.getEntries();
       var existing = null;
 
       for (var i = 0; i < entries.length; i++) {
-        if (!entries[i].isFolder && entries[i].name === "pixeloasis-plugin.jsonl") {
+        if (!entries[i].isFolder && entries[i].name === targetName) {
           existing = entries[i];
           break;
         }
@@ -168,7 +189,7 @@ window.PO.Logger = (function () {
         currentFileSize = existing.length || 0;
         logFile = existing;
       } else {
-        logFile = await dir.createFile("pixeloasis-plugin.jsonl", { overwrite: true });
+        logFile = await dir.createFile(targetName, { overwrite: true });
         currentFileSize = 0;
       }
 
@@ -184,27 +205,34 @@ window.PO.Logger = (function () {
 
     try {
       var cfg = getConfig();
+      var ts = Date.now();
+      var rotatedName = getLogFileName().replace(/\.jsonl$/, "." + ts + ".jsonl");
 
-      /* Shift existing files */
-      for (var n = cfg.retainFiles - 1; n >= 1; n--) {
-        try {
-          var oldFile = await logDir.getEntry("pixeloasis-plugin." + n + ".jsonl");
-          if (oldFile) {
-            await oldFile.moveTo(logDir, "pixeloasis-plugin." + (n + 1) + ".jsonl", { overwrite: true });
-          }
-        } catch (e) { /* file doesn't exist, skip */ }
-      }
-
-      /* Rename current to .1 */
+      /* Rename current to timestamped */
       if (logFile) {
         try {
-          await logFile.moveTo(logDir, "pixeloasis-plugin.1.jsonl", { overwrite: true });
+          await logFile.moveTo(logDir, rotatedName, { overwrite: true });
         } catch (e) { /* ignore */ }
       }
 
       /* Create fresh */
-      logFile = await logDir.createFile("pixeloasis-plugin.jsonl", { overwrite: true });
+      logFile = await logDir.createFile(getLogFileName(), { overwrite: true });
       currentFileSize = 0;
+
+      /* Clean old rotated files */
+      var entries = await logDir.getEntries();
+      var rotatedFiles = [];
+      for (var i = 0; i < entries.length; i++) {
+        if (!entries[i].isFolder && /^pixeloasis-logs-.*\.\d+\.jsonl$/.test(entries[i].name)) {
+          rotatedFiles.push(entries[i]);
+        }
+      }
+      /* Sort by name descending (newer timestamps sort higher) */
+      rotatedFiles.sort(function (a, b) { return b.name.localeCompare(a.name); });
+      /* Delete excess */
+      for (var j = cfg.retainFiles; j < rotatedFiles.length; j++) {
+        try { await rotatedFiles[j].delete(); } catch (e) { /* ignore */ }
+      }
     } catch (e) { /* ignore */ }
   }
 
@@ -276,16 +304,13 @@ window.PO.Logger = (function () {
 
       var entries = await dir.getEntries();
       for (var i = 0; i < entries.length; i++) {
-        if (!entries[i].isFolder && /^pixeloasis-plugin(\.\d+)?\.jsonl$/.test(entries[i].name)) {
+        if (!entries[i].isFolder && /^pixeloasis-logs-.*\.jsonl$/.test(entries[i].name)) {
           try { await entries[i].delete(); } catch (e) { /* ignore */ }
         }
       }
 
       logFile = null;
       currentFileSize = 0;
-
-      /* Create fresh */
-      logFile = await dir.createFile("pixeloasis-plugin.jsonl", { overwrite: true });
       info("log.cleared", { component: "logger", message: "All logs cleared" });
     } catch (e) { /* ignore */ }
   }

@@ -14,7 +14,13 @@
  *   PO_LOG_PROMPT_TEXT — set to "1" to log full prompt text
  */
 
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config/config-loader.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PROJECT_ROOT = path.resolve(__dirname, "..", "..", "..");
 
 const { config: loaded, warnings } = loadConfig();
 
@@ -38,7 +44,7 @@ export default {
     /* Fallback candidates for auto-detection when the primary URL fails.
      * Checked in order by GET /health?upstream=1. */
     fallbackCandidates: [
-      "http://127.0.0.1:8000",   // ComfyUI Desktop
+      "http://127.0.0.1:51818",   // ComfyUI Desktop
       "http://127.0.0.1:8188",   // Manual / portable ComfyUI
     ],
   },
@@ -50,7 +56,7 @@ export default {
   logging: {
     enabled: process.env.PO_LOG_ENABLED !== "0",
     level: loaded.model_gateway.log_level || "info",
-    dir: (loaded.logging && loaded.logging.dir) || process.env.PO_LOG_DIR || "logs",
+    dir: (loaded.logging && loaded.logging.dir) || process.env.PO_LOG_DIR || path.resolve(PROJECT_ROOT, "logs"),
     maxFileBytes: 5 * 1024 * 1024,
     retainFiles: 10,
     logPromptText: process.env.PO_LOG_PROMPT_TEXT === "1",

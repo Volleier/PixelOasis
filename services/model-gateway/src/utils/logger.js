@@ -1,6 +1,6 @@
 /* logger.js — Model Gateway JSONL logger
  *
- * Writes structured log entries to <config.logging.dir>/gateway-YYYY-MM-DD.jsonl.
+ * Writes structured log entries to <config.logging.dir>/pixeloasis-logs-YYYY-MM-DD-HH-mm-ss.jsonl.
  * One JSON object per line.  Never logs base64 image data.
  *
  * API:
@@ -111,10 +111,20 @@ function ensureLogDir() {
   logDirEnsured = true;
 }
 
-/* ── Get today's log file path ── */
+/* ── Get log file path (cached per session, seconds precision) ── */
+let cachedLogPath = null;
+
 function getLogFilePath() {
-  const today = new Date().toISOString().slice(0, 10);
-  return path.resolve(config.dir, "gateway-" + today + ".jsonl");
+  if (cachedLogPath) return cachedLogPath;
+  const now = new Date();
+  const ts = now.getFullYear() + "-" +
+    String(now.getMonth() + 1).padStart(2, "0") + "-" +
+    String(now.getDate()).padStart(2, "0") + "-" +
+    String(now.getHours()).padStart(2, "0") + "-" +
+    String(now.getMinutes()).padStart(2, "0") + "-" +
+    String(now.getSeconds()).padStart(2, "0");
+  cachedLogPath = path.resolve(config.dir, "pixeloasis-logs-" + ts + ".jsonl");
+  return cachedLogPath;
 }
 
 /* ── Check rotation ── */
@@ -130,7 +140,7 @@ function checkRotation(filePath) {
       /* Clean old rotated files */
       const dirPath = path.dirname(filePath);
       const files = fs.readdirSync(dirPath)
-        .filter(function (f) { return /^gateway-.*\.jsonl$/.test(f); })
+        .filter(function (f) { return /^pixeloasis-logs-.*\.jsonl$/.test(f); })
         .map(function (f) { return path.join(dirPath, f); })
         .sort(function (a, b) {
           return fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs;
@@ -197,6 +207,7 @@ function init(cfg) {
     config = Object.assign(config, cfg.logging || cfg);
   }
   logDirEnsured = false;
+  cachedLogPath = null;
 }
 
 /* ── Public API ── */

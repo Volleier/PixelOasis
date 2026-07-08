@@ -8,6 +8,7 @@ PixelOasis/
 docs/
 config.yaml
 tools/cache/
-services/model-gateway/logs/debug-workflows/
-services/model-gateway/logs/debug-images/
+logs/debug-workflows/
+logs/debug-images/
+logs/comfyui-audit/
 logs/

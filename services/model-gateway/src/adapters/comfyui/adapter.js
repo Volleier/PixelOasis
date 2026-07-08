@@ -15,8 +15,6 @@
  * 10. Return normalized PixelOasis response with placement info
  */
 
-import fs from "node:fs";
-import path from "node:path";
 import config from "../../config.js";
 import { getRegistry } from "../registry-instance.js";
 import { validateModels } from "./workflow-loader.js";
@@ -27,6 +25,7 @@ import { scaleImageDown, resizeToExact, padImage, cropToBounds, getPngDimensions
 import { applySizePolicy } from "./size-policy.js";
 import { applyMaskPolicy } from "./mask-policy.js";
 import logger from "../../utils/logger.js";
+import { createAudit } from "../../utils/audit.js";
 
 function resolveMaskPaddingBackground(maskPolicyResult) {
   var polarity = maskPolicyResult &&
@@ -49,6 +48,9 @@ export default {
       generateTimeout: 600000,   /* 10 minutes */
       pollInterval: 1500,
     });
+
+    /* ── Audit tracker: records full generation trace ── */
+    var audit = createAudit(request);
 
     /* ═══════════════════════════════════════════════════════════════
      * Step 1: Resolve workflow variant
@@ -105,6 +107,8 @@ export default {
       data: { variantId: variant.variantId, priority: variant.priority },
     });
 
+    audit.recordVariant(variant.variantId, variant.priority);
+
     /* ═══════════════════════════════════════════════════════════════
      * Step 2: Validate models
      * ═══════════════════════════════════════════════════════════════ */
@@ -141,6 +145,8 @@ export default {
       data: { width: origDims.width, height: origDims.height, hasMask: !!maskB64 },
     });
 
+    audit.recordSource(origDims, sourceB64);
+
     if (maskB64) {
       var maskOrigDims = getPngDimensions(maskB64);
       logger.info("image.mask.decoded", {
@@ -149,6 +155,9 @@ export default {
         workflowId: request.workflowId,
         data: { width: maskOrigDims.width, height: maskOrigDims.height },
       });
+      audit.recordMask(maskOrigDims, maskB64);
+    } else {
+      audit.recordMask(null, null);
     }
 
     var sizeResult = applySizePolicy(selection.bounds, origDims, variant);
@@ -165,6 +174,8 @@ export default {
       data: sizeResult.metadata,
     });
 
+    audit.recordSizePolicy(sizeResult);
+
     /* ═══════════════════════════════════════════════════════════════
      * Step 4: Apply mask-policy + scale images
      * ═══════════════════════════════════════════════════════════════ */
@@ -179,6 +190,7 @@ export default {
         workflowId: request.workflowId,
         data: maskPolicyResult.metadata,
       });
+      audit.recordMaskPolicy(maskPolicyResult);
     }
 
     /* Scale source to internal dimensions */
@@ -293,6 +305,13 @@ export default {
       data: { filename: sourceUpload.name },
     });
 
+    audit.recordSourceUpload(
+      sourceUpload,
+      Buffer.from(sourceForUpload, "base64"),
+      sourceUploadWidth,
+      sourceUploadHeight,
+    );
+
     /* Upload mask (may be padded for expandThenCrop) */
     var maskUpload = null;
     if (maskForUpload) {
@@ -308,6 +327,14 @@ export default {
         workflowId: request.workflowId,
         data: { filename: maskUpload.name },
       });
+
+      audit.recordMaskUpload(maskUpload, Buffer.from(maskForUpload, "base64"));
+    }
+
+    /* Post-upload verification: fetch uploaded images back from ComfyUI */
+    await audit.verifySourceUpload(client);
+    if (maskUpload) {
+      await audit.verifyMaskUpload(client);
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -348,32 +375,14 @@ export default {
       },
     });
 
-    /* Save debug workflow copy if enabled (ImplList §9.2) */
-    if (config.pixelOasis && config.pixelOasis.debugWorkflows) {
-      try {
-        var debugDir = path.resolve(config.logging.dir || "logs", "debug-workflows");
-        if (!fs.existsSync(debugDir)) {
-          fs.mkdirSync(debugDir, { recursive: true });
-        }
-        var debugPath = path.join(debugDir, (request.correlationId || "unknown") + ".api.json");
-        /* Sanitise: strip base64 image data from debug copy */
-        var sanitized = JSON.parse(JSON.stringify(patchedWorkflow));
-        for (var dk = 0; dk < nodeIds.length; dk++) {
-          var dn = sanitized[nodeIds[dk]];
-          if (dn && dn.widgets_values && Array.isArray(dn.widgets_values)) {
-            for (var dw = 0; dw < dn.widgets_values.length; dw++) {
-              if (typeof dn.widgets_values[dw] === "string" && dn.widgets_values[dw].length > 200) {
-                dn.widgets_values[dw] = "[redacted, length=" + dn.widgets_values[dw].length + "]";
-              }
-            }
-          }
-        }
-        fs.writeFileSync(debugPath, JSON.stringify(sanitized, null, 2), "utf-8");
-        console.log("[comfyui] Debug workflow saved: " + debugPath);
-      } catch (debugErr) {
-        console.warn("[comfyui] Failed to save debug workflow: " + debugErr.message);
-      }
-    }
+    /* Save workflow patch to audit trail (handles summary + debug file internally) */
+    audit.recordWorkflowPatch(
+      variant.variantId,
+      nodeTypes,
+      sourceUpload.name,
+      maskUpload ? maskUpload.name : null,
+      patchedWorkflow,
+    );
 
     /* ═══════════════════════════════════════════════════════════════
      * Step 7: Submit to ComfyUI
@@ -403,6 +412,8 @@ export default {
 
     var promptId = submitResult.promptId;
     console.log("[comfyui] Submitted: promptId=" + promptId);
+
+    audit.recordSubmit(promptId, config.comfyui.baseUrl);
 
     /* ═══════════════════════════════════════════════════════════════
      * Step 8: Wait for completion
@@ -434,6 +445,8 @@ export default {
       workflowId: request.workflowId,
       data: { promptId: promptId },
     });
+
+    audit.recordHistory(historyEntry);
 
     /* ═══════════════════════════════════════════════════════════════
      * Step 9: Download output
@@ -470,6 +483,8 @@ export default {
       workflowId: request.workflowId,
       data: { width: outputDims.width, height: outputDims.height, bytes: outputPng.length },
     });
+
+    audit.recordOutput(outputDims, outputPng);
 
     /* ═══════════════════════════════════════════════════════════════
      * Step 10: Finalize dimensions via size-policy (P1-1: crop-then-resize)
@@ -536,6 +551,11 @@ export default {
         sizePolicyMode: sizeResult.policy.mode,
       },
     });
+
+    audit.recordFinal(finalWidth, finalHeight, processedPng.length);
+
+    /* ── Write audit trail to disk ── */
+    audit.finalize();
 
     /* ═══════════════════════════════════════════════════════════════
      * Step 11: Return normalized PixelOasis response
