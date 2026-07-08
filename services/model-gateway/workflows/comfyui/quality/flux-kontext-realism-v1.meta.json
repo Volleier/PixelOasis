@@ -1,0 +1,96 @@
+{
+  "workflowId": "quality.realism.pro",
+  "variantId": "flux-kontext-realism-v1",
+  "title": "Realism Enhance (FLUX Kontext Dev)",
+  "category": "quality",
+  "provider": "comfyui",
+  "stage": 1,
+  "enabled": false,
+  "priority": 200,
+  "note": "Phase 1 recommended realism model — FLUX.1 Kontext Dev FP8. Currently disabled because: (1) FLUX Kontext Dev API workflow JSON not yet built (requires DualCLIPLoader, FluxGuidance, and different node graph than SDXL); (2) model file ~23 GB requires manual download; (3) FP8 variant requires ComfyUI FLUX support. Enable this variant and set priority above the SDXL placeholder once the FLUX workflow is validated and the model is downloaded.",
+
+  "requiredModels": [
+    { "folder": "checkpoints", "name": "flux1-kontext-dev-fp8.safetensors" }
+  ],
+
+  "inputs": {
+    "sourceImage": { "nodeId": "TBD", "input": "image" },
+    "positivePrompt": { "nodeId": "TBD", "input": "text" },
+    "negativePrompt": { "nodeId": "TBD", "input": "text" },
+    "seed": { "nodeId": "TBD", "input": "seed" },
+    "steps": { "nodeId": "TBD", "input": "steps" },
+    "cfg": { "nodeId": "TBD", "input": "guidance" },
+    "denoise": { "nodeId": "TBD", "input": "denoise" }
+  },
+
+  "outputs": {
+    "images": { "nodeId": "TBD" }
+  },
+
+  "defaults": {
+    "prompt": "photorealistic, high detail, natural skin texture, soft cinematic lighting, sharp focus, 8k",
+    "negativePrompt": "cartoon, painting, plastic skin, over-saturated, distorted face, changed identity, different person, body horror",
+    "seed": -1,
+    "steps": 28,
+    "cfg": 3.5,
+    "denoise": 0.5,
+    "sampler": "euler",
+    "scheduler": "simple"
+  },
+
+  "inputPolicy": {
+    "source": "selection",
+    "mask": "optional",
+    "referenceImages": "none",
+    "prompt": "optional",
+    "negativePrompt": "optional"
+  },
+
+  "sizePolicy": {
+    "mode": "selectionExact",
+    "maxSourceDimension": 1536
+  },
+
+  "maskPolicy": {
+    "polarity": "white-editable",
+    "invertBeforeUpload": false,
+    "growPixels": 0,
+    "blurPixels": 0,
+    "edgeMode": "soft",
+    "note": "Mask is optional for FLUX Kontext Dev image editing. When present, use as conditioning context."
+  },
+
+  "placementPolicy": {
+    "type": "smartObjectMaskedExact",
+    "bounds": "selection",
+    "createLayerGroup": true,
+    "createSmartObject": true,
+    "maskSource": "finalSoftMask",
+    "preserveOriginalSelectionMask": true,
+    "featherPixels": 2,
+    "opacity": 100,
+    "blendMode": "normal"
+  },
+
+  "modelManifest": {
+    "profile": "quality",
+    "vramTier": "high",
+    "models": [
+      {
+        "id": "flux-kontext-realism",
+        "name": "flux1-kontext-dev-fp8.safetensors",
+        "folder": "checkpoints",
+        "required": true,
+        "license": "apache-2.0",
+        "sizeGb": 23.0,
+        "sha256": "",
+        "sources": [
+          { "type": "huggingface", "url": "https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev/resolve/main/flux1-kontext-dev-fp8.safetensors" },
+          { "type": "huggingface-mirror", "url": "" },
+          { "type": "modelscope", "url": "" },
+          { "type": "manual", "note": "Place flux1-kontext-dev-fp8.safetensors in ComfyUI/models/checkpoints/" }
+        ]
+      }
+    ]
+  }
+}

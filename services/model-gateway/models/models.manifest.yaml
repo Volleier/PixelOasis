@@ -37,9 +37,27 @@ models:
       - "quality.upscale.basic"
 
   # Future Phase 1 pro models (to be filled after model research)
-  - id: "flux-kontext-inpaint"
-    name: ""
+  - id: "flux-kontext-realism"
+    name: "flux1-kontext-dev-fp8.safetensors"
     folder: "checkpoints"
+    required: false
+    license: "apache-2.0"
+    sizeGb: 23.0
+    sha256: ""
+    sources:
+      - type: "huggingface"
+        url: "https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev/resolve/main/flux1-kontext-dev-fp8.safetensors"
+      - type: "huggingface-mirror"
+        url: ""
+      - type: "modelscope"
+        url: ""
+      - type: "manual"
+        note: "Place flux1-kontext-dev-fp8.safetensors in ComfyUI/models/checkpoints/"
+
+  # Qwen-Image-Edit (future high-quality variant for quality.realism.pro)
+  - id: "qwen-image-edit"
+    name: ""
+    folder: "diffusion_models"
     required: false
     license: ""
     sizeGb: 0
@@ -52,5 +70,5 @@ models:
       - type: "modelscope"
         url: ""
       - type: "manual"
-        note: "TBD after model research — ImplList §15 item 4"
+        note: "TBD after model research — Phase1ImplementationPlan §3.3"
     usedBy: []

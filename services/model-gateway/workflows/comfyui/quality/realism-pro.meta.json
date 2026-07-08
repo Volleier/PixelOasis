@@ -1,14 +1,14 @@
 {
   "workflowId": "quality.realism.pro",
   "variantId": "realism-pro-v1",
-  "title": "Realism Enhance Pro",
+  "title": "Realism Enhance (SDXL Placeholder)",
   "category": "quality",
   "provider": "comfyui",
   "stage": 1,
-  "note": "Phase-1 basic img2img placeholder. Current pipeline is LoadImage → VAEEncode → KSampler(denoise=0.35) → VAEDecode → SaveImage. No mask node, ControlNet, IPAdapter, Reference pipeline, refiner, or tiled detailer. Mask is uploaded for Photoshop placement only — it does not participate in ComfyUI generation. Visual effect may be minimal for textured surfaces. A dedicated realism-enhance workflow with higher denoise and/or conditioning pipelines is planned for a future phase.",
+  "note": "⚠️ SDXL PLACEHOLDER — 不是最终真实感增强方案。当前管线: LoadImage → VAEEncode → KSampler(denoise=0.35) → VAEDecode → SaveImage。无 mask node、ControlNet、IPAdapter、Reference pipeline、refiner 或 tiled detailer。mask 仅用于 Photoshop placement，不参与 ComfyUI 生成。视觉效果对纹理表面可能微弱。优先使用更高优先级的 flux-kontext-realism-v1 变体（FLUX.1 Kontext Dev FP8），或禁用此变体并将其视为临时回退。",
   "apiWorkflowFile": "realism-pro.api.json",
   "enabled": true,
-  "priority": 100,
+  "priority": 50,
 
   "requiredModels": [
     { "folder": "checkpoints", "name": "sd_xl_base_1.0.safetensors" }
