@@ -234,8 +234,15 @@ window.PO.loadWorkflowsFromBackend = async function () {
         component: "workflows",
         data: { reason: "no data from gateway, using local fallback" },
       });
+      window.PO.state._workflowsFromFallback = true;
+      window.PO.Logger.warn("workflows.fallback_active", {
+        component: "workflows",
+        data: { reason: "backend returned no data — UI is using built-in local definitions" },
+      });
       return;
     }
+
+    window.PO.state._workflowsFromFallback = false;
 
     var merged = 0;
     for (var i = 0; i < data.length; i++) {
@@ -279,10 +286,27 @@ window.PO.loadWorkflowsFromBackend = async function () {
       component: "workflows",
       data: { total: data.length, merged: merged },
     });
+
+    /* Surface fallback state in status bar */
+    if (merged < window.PO.PHASE1_WORKFLOW_IDS.length) {
+      window.PO.Logger.warn("workflows.partial_merge", {
+        component: "workflows",
+        data: {
+          merged: merged,
+          expected: window.PO.PHASE1_WORKFLOW_IDS.length,
+          reason: "some Phase 1 workflows missing from backend — UI may use local definitions for missing entries",
+        },
+      });
+    }
   } catch (e) {
+    window.PO.state._workflowsFromFallback = true;
     window.PO.Logger.warn("workflows.backend_failed", {
       component: "workflows",
       data: { reason: e.message || String(e) },
+    });
+    window.PO.Logger.warn("workflows.fallback_active", {
+      component: "workflows",
+      data: { reason: "backend unreachable — UI is using built-in local definitions" },
     });
   }
 };

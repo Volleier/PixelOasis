@@ -11,10 +11,10 @@ import { getRegistry } from "../adapters/registry-instance.js";
 
 /* Hardcoded fallback — used when the file-backed registry is unavailable. */
 var FALLBACK_WORKFLOWS = [
-  { id: "composition.inpaint.basic", title: "局部修复", category: "composition", defaults: { steps: 28, cfg: 7, denoise: 0.75, sampler: "euler", scheduler: "karras" }, stage: 0, inputPolicy: null, sizePolicyMode: null, placementPolicyType: null },
-  { id: "composition.remove.basic", title: "移除", category: "composition", defaults: { steps: 28, cfg: 6.5, denoise: 0.85, sampler: "euler", scheduler: "karras" }, stage: 0, inputPolicy: null, sizePolicyMode: null, placementPolicyType: null },
-  { id: "quality.upscale.basic", title: "超分放大", category: "quality", defaults: { steps: 18, cfg: 5, denoise: 0.25, sampler: "dpmpp_2m", scheduler: "karras" }, stage: 0, inputPolicy: null, sizePolicyMode: null, placementPolicyType: null },
-  { id: "quality.realism-enhance.basic", title: "真实感增强", category: "quality", defaults: { steps: 24, cfg: 5.5, denoise: 0.35, sampler: "dpmpp_2m", scheduler: "karras" }, stage: 0, inputPolicy: null, sizePolicyMode: null, placementPolicyType: null },
+  /* Phase 1 pro workflows — primary Phase 1 buttons */
+  { id: "composition.inpaint.pro", title: "局部修复", category: "composition", description: "局部修复 Pro — 修复选区内瑕疵、破损", defaults: { prompt: "", negativePrompt: "", seed: -1, steps: 28, cfg: 7, denoise: 0.75, sampler: "euler", scheduler: "karras" }, stage: 1, inputPolicy: { source: "selection", mask: "required" }, sizePolicyMode: "selectionExact", placementPolicyType: "smartObjectMaskedExact" },
+  { id: "composition.remove.pro", title: "移除物体", category: "composition", description: "移除物体 Pro — 删除选区内物体，背景自然补全", defaults: { prompt: "clean background, remove selected object, natural continuation, preserve surrounding texture and lighting", negativePrompt: "object remains, blurry, distorted, duplicate object, artifacts, bad texture", seed: -1, steps: 28, cfg: 6.5, denoise: 0.85, sampler: "euler", scheduler: "karras" }, stage: 1, inputPolicy: { source: "selection", mask: "required" }, sizePolicyMode: "expandThenCrop", placementPolicyType: "smartObjectMaskedExact" },
+  { id: "quality.realism.pro", title: "真实感增强", category: "quality", description: "真实感增强 Pro — 提升选区真实感、材质细节、光影层次", defaults: { prompt: "photorealistic, high detail, natural skin texture, soft cinematic lighting, sharp focus, 8k", negativePrompt: "cartoon, painting, plastic skin, over-saturated, distorted face, changed identity, different person, body horror", seed: -1, steps: 24, cfg: 4.5, denoise: 0.35, sampler: "dpmpp_2m", scheduler: "karras" }, stage: 1, inputPolicy: { source: "selection", mask: "optional" }, sizePolicyMode: "selectionExact", placementPolicyType: "smartObjectMaskedExact" },
 ];
 
 export function handleWorkflows(_request, response, _params) {
