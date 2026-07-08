@@ -140,10 +140,18 @@ async function _convertToSmartObject(layerId) {
   }
 
   var converted = _app().activeDocument.activeLayer;
-  var ok = !!(converted && converted.id);
+  var ok = false;
+  try {
+    ok = !!(converted && converted.id && converted.kind === "smartObject");
+  } catch (_) {
+    ok = false;
+  }
   window.PO.Logger.info(ok ? "placement.smart_object_ok" : "placement.smart_object_failed", {
     component: "placement",
-    data: { newLayerId: converted ? String(converted.id) : "null" },
+    data: {
+      newLayerId: converted ? String(converted.id) : "null",
+      layerKind: converted && converted.kind ? String(converted.kind) : "unknown",
+    },
   });
   return ok;
 }
@@ -204,7 +212,7 @@ async function _applySoftMaskViaTempFile(maskB64, resultLayerId) {
 
 /* ── moveLayerToBounds (batchPlay only, NO modal) ── */
 async function _moveLayerToBounds(targetBounds) {
-  if (!targetBounds || typeof targetBounds.left !== "number") return;
+  if (!targetBounds) return;
 
   var layer = _app().activeDocument.activeLayer;
   if (!layer) return;
@@ -212,11 +220,34 @@ async function _moveLayerToBounds(targetBounds) {
   var bounds = layer.bounds;
   if (!bounds) return;
 
-  var curL = typeof bounds.left === "number" ? bounds.left : bounds.left;
-  var curT = typeof bounds.top === "number" ? bounds.top : bounds.top;
+  var curL = window.PO.normalizeNumber(bounds.left);
+  var curT = window.PO.normalizeNumber(bounds.top);
+  var targetL = window.PO.normalizeNumber(targetBounds.left);
+  var targetT = window.PO.normalizeNumber(targetBounds.top);
 
-  var dx = targetBounds.left - curL;
-  var dy = targetBounds.top - curT;
+  if (curL === null || curT === null || targetL === null || targetT === null) {
+    window.PO.Logger.warn("placement.move_failed", {
+      component: "placement",
+      data: {
+        reason: "invalid_bounds",
+        currentLeft: String(bounds.left),
+        currentTop: String(bounds.top),
+        targetLeft: String(targetBounds.left),
+        targetTop: String(targetBounds.top),
+      },
+    });
+    return;
+  }
+
+  var dx = targetL - curL;
+  var dy = targetT - curT;
+  if (!isFinite(dx) || !isFinite(dy)) {
+    window.PO.Logger.warn("placement.move_failed", {
+      component: "placement",
+      data: { reason: "invalid_offset", dx: String(dx), dy: String(dy) },
+    });
+    return;
+  }
   if (dx === 0 && dy === 0) return;
 
   await _action().batchPlay(
@@ -256,6 +287,51 @@ async function _findOrCreateGroup(groupName) {
   var group = _app().activeDocument.activeLayer;
   window.PO.Logger.info("placement.group_created", { component: "placement", data: { name: name, layerId: group ? String(group.id) : "null" } });
   return group;
+}
+
+async function _moveLayerIntoGroup(layerId, groupId) {
+  if (!layerId || !groupId) return false;
+
+  await _action().batchPlay(
+    [{ _obj: "select", _target: [{ _ref: "layer", _id: layerId }], makeVisible: false, _options: { dialogOptions: "dontDisplay" } }],
+    { synchronousExecution: false, modalBehavior: "execute" },
+  );
+
+  try {
+    await _action().batchPlay(
+      [{
+        _obj: "move",
+        _target: [{ _ref: "layer", _id: layerId }],
+        to: { _ref: "layer", _id: groupId },
+        adjustment: false,
+        version: 5,
+        layerID: [layerId],
+        _options: { dialogOptions: "dontDisplay" },
+      }],
+      { synchronousExecution: false, modalBehavior: "execute" },
+    );
+
+    await _action().batchPlay(
+      [{ _obj: "select", _target: [{ _ref: "layer", _id: layerId }], makeVisible: false, _options: { dialogOptions: "dontDisplay" } }],
+      { synchronousExecution: false, modalBehavior: "execute" },
+    );
+
+    window.PO.Logger.info("placement.group_move_completed", {
+      component: "placement",
+      data: { resultLayerId: String(layerId), groupId: String(groupId) },
+    });
+    return true;
+  } catch (err) {
+    window.PO.Logger.warn("placement.group_move_failed", {
+      component: "placement",
+      data: {
+        resultLayerId: String(layerId),
+        groupId: String(groupId),
+        error: err.message || String(err),
+      },
+    });
+    return false;
+  }
 }
 
 /* ── renameLayer (batchPlay only, NO modal) ── */
@@ -299,11 +375,19 @@ window.PO.placeSmartObjectMaskedExact = async function (imageB64, maskB64, bound
 
         /* Step 3: Convert to smart object */
         step = "convert_smart_object";
-        await _convertToSmartObject(resultLayerId);
+        var smartObjectOk = await _convertToSmartObject(resultLayerId);
+        if (!smartObjectOk) {
+          throw new Error("Failed to convert placed result into a smart object.");
+        }
 
         /* After conversion, get the new layer ID (conversion may create a new layer) */
         var smartLayer = _app().activeDocument.activeLayer;
         var smartLayerId = smartLayer ? smartLayer.id : resultLayerId;
+        var isSmartObject = false;
+        try { isSmartObject = !!(smartLayer && smartLayer.kind === "smartObject"); } catch (_) {}
+        if (!isSmartObject) {
+          throw new Error("Placement requires a smart object result layer.");
+        }
 
         /* Step 4: Apply soft mask (P1-5: works even without mask) */
         step = "apply_mask";
@@ -315,20 +399,7 @@ window.PO.placeSmartObjectMaskedExact = async function (imageB64, maskB64, bound
         step = "group_layer";
         var group = await _findOrCreateGroup("PixelOasis");
         if (group) {
-          /* Select the result layer, then move it into the group */
-          await _action().batchPlay(
-            [{ _obj: "select", _target: [{ _ref: "layer", _id: smartLayerId }], makeVisible: false, _options: { dialogOptions: "dontDisplay" } }],
-            { synchronousExecution: false, modalBehavior: "execute" },
-          );
-
-          /* Move layer: cut-paste into group is an approximation.
-           * In Photoshop UXP, moving a layer into a group is typically done by
-           * selecting the layer and using "groupEvent" or drag operations.
-           * For a reliable approach: ungroup if needed, then re-group with target. */
-          window.PO.Logger.info("placement.group_move", {
-            component: "placement",
-            data: { resultLayerId: String(smartLayerId), groupId: String(group.id) },
-          });
+          await _moveLayerIntoGroup(smartLayerId, group.id);
         }
 
         /* Step 6: Rename */
@@ -339,7 +410,12 @@ window.PO.placeSmartObjectMaskedExact = async function (imageB64, maskB64, bound
           component: "placement",
           workflowId: wfTitle,
           durationMs: Date.now() - placeStart,
-          data: { layerName: layerName, layerId: String(smartLayerId), hasMask: !!maskB64 },
+          data: {
+            layerName: layerName,
+            layerId: String(smartLayerId),
+            hasMask: !!maskB64,
+            isSmartObject: true,
+          },
         });
 
         return { layerName: layerName, layerId: String(smartLayerId) };

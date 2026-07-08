@@ -143,8 +143,6 @@ const manifest = {
 
 await writeFile(resolve(deployDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
-import { cp } from "node:fs/promises";
-
 console.log("Prepared deployable Photoshop plugin.");
 console.log(`  Directory: ${deployDir}`);
 console.log(`  Host minVersion: ${psMinHostVersion}`);

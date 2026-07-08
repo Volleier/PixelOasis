@@ -219,17 +219,19 @@ export async function cropToBounds(input, cropRect) {
 }
 
 /**
- * Pad an image with a solid color border.
+ * Pad an image.
  *
  * @param {Buffer|string} input
  * @param {number} padding         pixels to add on each side
  * @param {object} [options]
- * @param {string} [options.mode="reflect"]  sharp extend mode
+ * @param {string} [options.mode="reflect"]  reflect/copy/repeat/mirror/transparent
+ * @param {object} [options.background]      explicit sharp background color
  * @returns {Promise<Buffer>}
  */
 export async function padImage(input, padding, options) {
   var opts = options || {};
   var mode = opts.mode || "reflect";
+  var background = opts.background || null;
 
   var buffer;
   if (Buffer.isBuffer(input)) {
@@ -245,14 +247,27 @@ export async function padImage(input, padding, options) {
   var paddedWidth = meta.width + padding * 2;
   var paddedHeight = meta.height + padding * 2;
 
+  var extendOptions = {
+    top: padding,
+    bottom: padding,
+    left: padding,
+    right: padding,
+  };
+
+  if (background) {
+    extendOptions.extendWith = "background";
+    extendOptions.background = background;
+  } else if (mode === "transparent") {
+    extendOptions.extendWith = "background";
+    extendOptions.background = { r: 0, g: 0, b: 0, alpha: 0 };
+  } else if (mode === "copy" || mode === "repeat" || mode === "mirror") {
+    extendOptions.extendWith = mode;
+  } else {
+    extendOptions.extendWith = "mirror";
+  }
+
   return sharp(buffer)
-    .extend({
-      top: padding,
-      bottom: padding,
-      left: padding,
-      right: padding,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    })
+    .extend(extendOptions)
     .resize(paddedWidth, paddedHeight, { fit: "fill" })
     .png()
     .toBuffer();

@@ -86,15 +86,15 @@
     /* ── Load workflows from backend, then re-render buttons ── (ImplList §8.1) */
     window.PO.loadWorkflowsFromBackend().then(function () {
       /* Re-render section bodies with backend-driven workflow buttons */
-      var sections = document.querySelectorAll(".po-section__body");
       if (window.PO.renderWorkflowButtons) {
-        var buttons = window.PO.renderWorkflowButtons();
-        for (var si = 0; si < sections.length; si++) {
-          sections[si].innerHTML = buttons;
+        var categories = ["composition", "quality"];
+        for (var ci = 0; ci < categories.length; ci++) {
+          var body = document.querySelector('.po-section[data-section="' + categories[ci] + '"] .po-section__body');
+          if (body) body.innerHTML = window.PO.renderWorkflowButtons(categories[ci]);
         }
       }
       /* Re-bind events for new buttons */
-      if (window.PO.bindEvents) window.PO.bindEvents();
+      if (window.PO.bindWorkflowButtons) window.PO.bindWorkflowButtons();
     }).catch(function () {
       /* Backend unreachable — local WORKFLOWS already rendered as fallback */
     });

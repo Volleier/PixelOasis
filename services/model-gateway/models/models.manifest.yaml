@@ -30,7 +30,10 @@ models:
         note: "Place sd_xl_base_1.0.safetensors in ComfyUI/models/checkpoints/"
     usedBy:
       - "composition.inpaint.basic"
+      - "composition.inpaint.pro"
       - "composition.remove.basic"
+      - "composition.remove.pro"
+      - "quality.realism.pro"
       - "quality.upscale.basic"
 
   # Future Phase 1 pro models (to be filled after model research)
@@ -50,7 +53,4 @@ models:
         url: ""
       - type: "manual"
         note: "TBD after model research — ImplList §15 item 4"
-    usedBy:
-      - "composition.inpaint.pro"
-      - "composition.remove.pro"
-      - "quality.realism.pro"
+    usedBy: []

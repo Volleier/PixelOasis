@@ -1,12 +1,14 @@
 window.PO = window.PO || {};
 
 /* ── Render workflow buttons dynamically from the registry (ImplList §8.1) ── */
-window.PO.renderWorkflowButtons = function () {
+window.PO.renderWorkflowButtons = function (category) {
   var ids = window.PO.PHASE1_WORKFLOW_IDS || [];
   var html = ['<div class="po-action-row">'];
 
   for (var i = 0; i < ids.length; i++) {
     var wf = window.PO.WORKFLOWS[ids[i]];
+    var wfCategory = wf ? wf.category : ids[i].split(".")[0];
+    if (category && wfCategory !== category) continue;
     var title = wf ? wf.title : ids[i];
     html.push(
       '<button class="po-button" type="button" data-workflow="' +
@@ -23,10 +25,10 @@ window.PO.buildSections = function () {
 
   function sectionBody(section) {
     if (section.id === "composition") {
-      return window.PO.renderWorkflowButtons();
+      return window.PO.renderWorkflowButtons("composition");
     }
     if (section.id === "quality") {
-      return window.PO.renderWorkflowButtons();
+      return window.PO.renderWorkflowButtons("quality");
     }
     return '<div class="po-section__placeholder">' + section.hint + "</div>";
   }

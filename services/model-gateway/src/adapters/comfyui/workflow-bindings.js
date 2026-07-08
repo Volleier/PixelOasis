@@ -153,6 +153,7 @@ export function patchWorkflow(variant, request, uploadRefs) {
   var inputs = variant.inputs;
   var parameters = request.parameters || {};
   var selection = request.selection;
+  var inputPolicy = variant.inputPolicy || null;
 
   /* Deep clone the API workflow so we never mutate the original */
   var workflow = deepClone(variant.apiWorkflow);
@@ -170,13 +171,21 @@ export function patchWorkflow(variant, request, uploadRefs) {
 
   /* ── Mask image (optional — not all workflows use masks) ── */
   if (inputs.maskImage && uploadRefs && uploadRefs.maskImageFilename) {
-    patchImageFilename(
-      workflow,
-      inputs.maskImage.nodeId,
-      inputs.maskImage.input,
-      uploadRefs.maskImageFilename,
-      "maskImage",
+    var maskNodeExists = !!workflow[inputs.maskImage.nodeId];
+    var maskIsOptional = inputPolicy && (
+      inputPolicy.mask === "optional" ||
+      inputPolicy.mask === "forbidden"
     );
+
+    if (maskNodeExists || !maskIsOptional) {
+      patchImageFilename(
+        workflow,
+        inputs.maskImage.nodeId,
+        inputs.maskImage.input,
+        uploadRefs.maskImageFilename,
+        "maskImage",
+      );
+    }
   }
 
   /* ── Positive prompt ── */

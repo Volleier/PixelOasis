@@ -28,6 +28,18 @@ import { applySizePolicy } from "./size-policy.js";
 import { applyMaskPolicy } from "./mask-policy.js";
 import logger from "../../utils/logger.js";
 
+function resolveMaskPaddingBackground(maskPolicyResult) {
+  var polarity = maskPolicyResult &&
+    maskPolicyResult.metadata &&
+    maskPolicyResult.metadata.polarity;
+
+  if (polarity === "black-editable") {
+    return { r: 255, g: 255, b: 255, alpha: 1 };
+  }
+
+  return { r: 0, g: 0, b: 0, alpha: 1 };
+}
+
 export default {
   id: "comfyui",
 
@@ -188,9 +200,11 @@ export default {
 
     /* P1-1: expandThenCrop — pad source image for context */
     var sourceForUpload = sourceScaled.base64;
-    var maskForUpload = maskScaled ? maskScaled.base64 : null;
+    var maskForUpload = null;
     var sourceUploadWidth = sourceScaled.width;
     var sourceUploadHeight = sourceScaled.height;
+    var sourcePaddingMode = null;
+    var maskPaddingMode = null;
 
     if (sizeResult.contextPaddingPx > 0 && sizeResult.policy.mode === "expandThenCrop") {
       var padPx = sizeResult.contextPaddingPx;
@@ -198,16 +212,10 @@ export default {
       var sourceBuf = Buffer.from(sourceScaled.base64, "base64");
       var paddedSourceBuf = await padImage(sourceBuf, padPx, { mode: "reflect" });
       sourceForUpload = paddedSourceBuf.toString("base64");
+      sourcePaddingMode = "reflect";
       /* Dimensions after padding */
       sourceUploadWidth = sourceScaled.width + padPx * 2;
       sourceUploadHeight = sourceScaled.height + padPx * 2;
-
-      /* Pad mask to match (if present) */
-      if (maskForUpload) {
-        var maskBuf = Buffer.from(maskForUpload, "base64");
-        var paddedMaskBuf = await padImage(maskBuf, padPx, { mode: "reflect" });
-        maskForUpload = paddedMaskBuf.toString("base64");
-      }
 
       console.log("[comfyui] Padded source: " + sourceUploadWidth + "x" + sourceUploadHeight +
         " (+" + padPx + "px per side)");
@@ -222,13 +230,47 @@ export default {
         maskScaled = maskDown;
       } else {
         maskScaled = {
-          base64: maskPolicyResult.maskForWorkflow,
+          base64: maskPolicyResult.maskForWorkflow.replace(/^data:image\/\w+;base64,/, ""),
           width: maskDims.width,
           height: maskDims.height,
           scaled: false,
           scale: 1.0,
         };
       }
+    }
+
+    maskForUpload = maskScaled ? maskScaled.base64 : null;
+    if (maskForUpload && sizeResult.contextPaddingPx > 0 && sizeResult.policy.mode === "expandThenCrop") {
+      var scaledMaskBuf = Buffer.from(maskForUpload, "base64");
+      var maskPaddingBackground = resolveMaskPaddingBackground(maskPolicyResult);
+      var paddedScaledMaskBuf = await padImage(scaledMaskBuf, sizeResult.contextPaddingPx, {
+        background: maskPaddingBackground,
+      });
+      maskForUpload = paddedScaledMaskBuf.toString("base64");
+      maskPaddingMode = "background";
+    }
+
+    if (variant.inputPolicy && variant.inputPolicy.mask === "required" && !maskForUpload) {
+      throw new ComfyUIError(
+        "Missing required mask for workflow " + request.workflowId + ".",
+        { workflowId: request.workflowId, inputPolicy: variant.inputPolicy },
+      );
+    }
+
+    if (sourcePaddingMode || maskPaddingMode) {
+      logger.info("image.padding.applied", {
+        component: "adapter",
+        correlationId: request.correlationId,
+        workflowId: request.workflowId,
+        data: {
+          contextPaddingPx: sizeResult.contextPaddingPx,
+          sourcePaddingMode: sourcePaddingMode,
+          maskPaddingMode: maskPaddingMode,
+          maskPolarity: maskPolicyResult && maskPolicyResult.metadata
+            ? maskPolicyResult.metadata.polarity
+            : null,
+        },
+      });
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -441,10 +483,8 @@ export default {
     /* P1-1: expandThenCrop — crop back to original selection area */
     if (sizeResult.cropToBounds && sizeResult.contextPaddingPx > 0) {
       var cropPad = sizeResult.contextPaddingPx;
-      /* Account for scaling when computing crop rect */
-      var cropScale = sizeResult.scaled ? sizeResult.scale : 1.0;
-      var cropLeft = Math.round(cropPad * cropScale);
-      var cropTop = Math.round(cropPad * cropScale);
+      var cropLeft = cropPad;
+      var cropTop = cropPad;
       var cropW = outputDims.width - cropLeft * 2;
       var cropH = outputDims.height - cropTop * 2;
 

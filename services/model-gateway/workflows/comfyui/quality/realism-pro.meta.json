@@ -15,7 +15,6 @@
 
   "inputs": {
     "sourceImage": { "nodeId": "10", "input": "image" },
-    "maskImage": { "nodeId": "11", "input": "image" },
     "positivePrompt": { "nodeId": "6", "input": "text" },
     "negativePrompt": { "nodeId": "7", "input": "text" },
     "seed": { "nodeId": "3", "input": "seed" },

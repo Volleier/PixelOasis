@@ -79,14 +79,13 @@ window.PO.handleWorkflowButton = async function (workflowId) {
   window.PO.openParameterPage(workflowId);
 };
 
-window.PO.bindEvents = function () {
-  /* Settings (overlay + drawer) */
-  window.PO.initSettings();
-
+window.PO.bindWorkflowButtons = function () {
   /* Workflow buttons — any [data-workflow] element */
   var workflowBtns = document.querySelectorAll("[data-workflow]");
   for (var i = 0; i < workflowBtns.length; i++) {
     (function (btn) {
+      if (btn.getAttribute("data-po-bound") === "workflow") return;
+      btn.setAttribute("data-po-bound", "workflow");
       btn.addEventListener("click", function () {
         var workflowId = btn.getAttribute("data-workflow");
         if (workflowId) {
@@ -95,4 +94,9 @@ window.PO.bindEvents = function () {
       });
     })(workflowBtns[i]);
   }
+};
+
+window.PO.bindEvents = function () {
+  window.PO.initSettings();
+  window.PO.bindWorkflowButtons();
 };

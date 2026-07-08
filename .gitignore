@@ -10,3 +10,4 @@ config.yaml
 tools/cache/
 services/model-gateway/logs/debug-workflows/
 services/model-gateway/logs/debug-images/
+logs/
