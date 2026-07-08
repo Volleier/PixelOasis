@@ -15,6 +15,11 @@ const MAX_PIXEL_COUNT = 4096 * 4096;             // ≈ 16.8 Mpix
 import { getRegistry } from "../adapters/registry-instance.js";
 
 const FALLBACK_WORKFLOWS = [
+  /* Phase 1 pro workflows — primary Phase 1 buttons */
+  "composition.inpaint.pro",
+  "composition.remove.pro",
+  "quality.realism.pro",
+  /* Legacy / basic workflows — debug & fallback */
   "composition.remove.basic",
   "composition.outpaint.basic",
   "composition.inpaint.basic",
@@ -340,9 +345,10 @@ export function validateGenerateRequest(body) {
   /* ── Resolve workflow input policy ── */
   var inputPolicy = getWorkflowInputPolicy(body.workflowId);
 
-  /* If policy declares mask=forbidden, no mask should be sent */
-  var maskRequired = !inputPolicy || inputPolicy.mask !== "optional" && inputPolicy.mask !== "forbidden";
-  var maskForbidden = inputPolicy && inputPolicy.mask === "forbidden";
+  /* If policy declares mask=forbidden, no mask should be sent.
+   * Default (no policy): mask is required (legacy behaviour). */
+  var maskRequired = !inputPolicy || (inputPolicy.mask !== "optional" && inputPolicy.mask !== "forbidden");
+  var maskForbidden = !!(inputPolicy && inputPolicy.mask === "forbidden");
   var sourceKind = inputPolicy ? inputPolicy.source : "selection";
 
   /* ── selection (P2-4: conditional on source) ── */
