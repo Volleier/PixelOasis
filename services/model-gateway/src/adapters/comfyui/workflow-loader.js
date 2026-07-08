@@ -23,8 +23,12 @@ import logger from "../../utils/logger.js";
  * ═══════════════════════════════════════════════════════════════════════ */
 
 var REQUIRED_META_FIELDS = [
-  "workflowId", "variantId", "title", "category", "provider", "apiWorkflowFile",
+  "workflowId", "variantId", "title", "category", "provider",
 ];
+
+/* apiWorkflowFile is only required for enabled variants.
+ * Disabled / future variants may have placeholder metadata without a
+ * working API workflow file (e.g. flux-kontext-realism-v1). */
 
 var VALID_CATEGORIES = ["composition", "portrait", "lighting", "effects", "quality"];
 
@@ -336,12 +340,22 @@ export async function loadWorkflows(workflowsDir) {
     var enabled = meta.enabled !== false;
     var priority = typeof meta.priority === "number" ? meta.priority : 50;
 
-    /* Load API workflow */
-    var apiPath = join(metaDir, meta.apiWorkflowFile);
+    /* Load API workflow (only for enabled variants) */
+    var apiPath = null;
     var apiWorkflow = null;
     var apiLoadError = null;
 
     if (enabled) {
+      /* apiWorkflowFile is mandatory for enabled variants. */
+      if (!meta.apiWorkflowFile || !String(meta.apiWorkflowFile).trim()) {
+        warnings.push(
+          "Skipping " + metaPath + ": enabled variant is missing apiWorkflowFile."
+        );
+        continue;
+      }
+
+      apiPath = join(metaDir, meta.apiWorkflowFile);
+
       try {
         var apiRaw = await readFile(apiPath, "utf-8");
         apiWorkflow = JSON.parse(apiRaw);
@@ -410,7 +424,21 @@ export async function loadWorkflows(workflowsDir) {
       for (var s = 0; s < workflowIds.length; s++) {
         var id = workflowIds[s];
         var best = registry.getBestVariant(id);
-        var ref = best || byWorkflowId[id][0];
+
+        /* Fallback reference variant:
+         * {1} Preferred: best (enabled + apiWorkflow)
+         * {2} Next: any enabled variant (even without apiWorkflow)
+         * {3} Last: first variant in priority order (may be disabled) */
+        var ref = best;
+        if (!ref) {
+          var variants = byWorkflowId[id];
+          if (variants) {
+            for (var rf = 0; rf < variants.length; rf++) {
+              if (variants[rf].enabled) { ref = variants[rf]; break; }
+            }
+            if (!ref) ref = variants[0];
+          }
+        }
 
         summaries.push({
           id: id,

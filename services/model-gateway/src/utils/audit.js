@@ -133,6 +133,15 @@ export function createAudit(request) {
       };
     },
 
+    /* ── Step 4b: workflow-level grow_mask_by (from VAEEncodeForInpaint) ── */
+    recordWorkflowGrowMaskBy: function (growMaskBy) {
+      if (!record.mask || !record.mask.present) return;
+      record.mask.afterPolicy.workflowGrowMaskBy = growMaskBy;
+      record.mask.afterPolicy.note =
+        "Mask is processed at two layers: pixel-level growPixels (mask-policy) + " +
+        "latent-level grow_mask_by (VAEEncodeForInpaint). Combined effect may exceed either alone.";
+    },
+
     /* ── Step 5: source image uploaded ── */
     recordSourceUpload: function (uploadResult, rawBytes, uploadWidth, uploadHeight) {
       record.source.uploadedFilename = uploadResult.name;

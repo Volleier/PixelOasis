@@ -195,6 +195,37 @@ export default {
         data: maskPolicyResult.metadata,
       });
       audit.recordMaskPolicy(maskPolicyResult);
+
+      /* Detect VAEEncodeForInpaint grow_mask_by in the API workflow.
+       * When both the workflow-level grow_mask_by and the mask-policy
+       * growPixels are non-zero, the mask is processed at two layers
+       * (pixel-level via sharp, latent-level via ComfyUI).  Log both
+       * values so operators can correlate the combined effect. */
+      var workflowGrowMaskBy = 0;
+      if (variant.apiWorkflow) {
+        var apiNodeIds = Object.keys(variant.apiWorkflow);
+        for (var gi = 0; gi < apiNodeIds.length; gi++) {
+          var apiNode = variant.apiWorkflow[apiNodeIds[gi]];
+          if (apiNode && apiNode.class_type === "VAEEncodeForInpaint" &&
+              apiNode.inputs && typeof apiNode.inputs.grow_mask_by === "number") {
+            workflowGrowMaskBy = apiNode.inputs.grow_mask_by;
+            break;
+          }
+        }
+      }
+      if (workflowGrowMaskBy > 0 && maskPolicyResult.metadata.growPixels > 0) {
+        logger.info("image.mask_grow_duality", {
+          component: "adapter",
+          correlationId: request.correlationId,
+          workflowId: request.workflowId,
+          data: {
+            maskPolicyGrowPixels: maskPolicyResult.metadata.growPixels,
+            workflowGrowMaskBy: workflowGrowMaskBy,
+            note: "Mask is grown at two layers: pixel-level (mask-policy growPixels) + latent-level (VAEEncodeForInpaint grow_mask_by). Combined effect may exceed either value alone.",
+          },
+        });
+        audit.recordWorkflowGrowMaskBy(workflowGrowMaskBy);
+      }
     }
 
     /* Scale source to internal dimensions */
