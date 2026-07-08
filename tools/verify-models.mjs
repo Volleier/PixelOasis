@@ -36,6 +36,9 @@ if (!comfyModelsDir) {
 let missingCount = 0;
 let hashFailCount = 0;
 let okCount = 0;
+let optionalMissing = 0;
+
+console.log("Required models:\n");
 
 for (const model of models) {
   if (!model.required) continue;
@@ -44,7 +47,8 @@ for (const model of models) {
   const exists = existsSync(modelPath);
 
   console.log((exists ? "  [OK]" : "  [MISSING]") + " " + model.name +
-    " (" + (model.folder || "unknown") + ")");
+    " (" + (model.folder || "unknown") + ")" +
+    (model.usedBy && model.usedBy.length ? " — used by: " + model.usedBy.join(", ") : ""));
 
   if (exists) {
     if (model.sha256 && model.sha256.trim()) {
@@ -80,8 +84,43 @@ for (const model of models) {
   }
 }
 
+/* Also report on optional/future models for visibility */
+console.log("\nOptional / future models:\n");
+
+for (const model of models) {
+  if (model.required) continue;
+  if (!model.name) continue; /* skip placeholder entries with no filename */
+
+  const modelPath = join(comfyModelsDir, model.folder || "", model.name);
+  const exists = existsSync(modelPath);
+
+  if (exists) {
+    console.log("  [OK] " + model.name + " (" + (model.folder || "unknown") + ")" +
+      (model.usedBy && model.usedBy.length ? " — for: " + model.usedBy.join(", ") : ""));
+  } else {
+    optionalMissing++;
+    console.log("  [ABSENT] " + model.name + " (" + (model.folder || "unknown") + ")" +
+      (model.usedBy && model.usedBy.length ? " — for: " + model.usedBy.join(", ") : ""));
+    console.log("    License: " + (model.license || "unknown") + " | Size: " + (model.sizeGb || "?") + " GB");
+    if (model.sources) {
+      for (const src of model.sources) {
+        if (src.type === "manual") {
+          console.log("    → Manual: " + (src.note || ""));
+        } else if (src.url) {
+          console.log("    → " + src.type + ": " + src.url);
+        }
+      }
+    }
+  }
+}
+
+if (optionalMissing === 0) {
+  console.log("  (all optional models present)");
+}
+
 console.log("");
-console.log("Summary: " + okCount + " OK, " + missingCount + " missing, " + hashFailCount + " hash failures");
+console.log("Summary: " + okCount + " required OK, " + missingCount + " required missing, " +
+  hashFailCount + " hash failures, " + optionalMissing + " optional absent");
 
 if (missingCount > 0) {
   console.log("Run: node tools/download-models.mjs");
