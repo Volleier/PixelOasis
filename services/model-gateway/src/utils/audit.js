@@ -161,9 +161,11 @@ export function createAudit(request) {
     },
 
     /* ── Step 5b: mask image uploaded ── */
-    recordMaskUpload: function (uploadResult, rawBytes) {
+    recordMaskUpload: function (uploadResult, rawBytes, uploadWidth, uploadHeight) {
       record.mask.uploadedFilename = uploadResult.name;
       record.mask.uploadedBytes = rawBytes.length;
+      if (uploadWidth !== undefined) record.mask.uploadWidth = uploadWidth;
+      if (uploadHeight !== undefined) record.mask.uploadHeight = uploadHeight;
       record.comfyui.uploadResponses.push({
         type: "mask",
         name: uploadResult.name,
@@ -179,6 +181,29 @@ export function createAudit(request) {
         data: {
           filename: uploadResult.name,
           bytes: rawBytes.length,
+          width: uploadWidth,
+          height: uploadHeight,
+        },
+      });
+    },
+
+    /* ── Step 5c: mask padding applied (expandThenCrop) ── */
+    recordMaskPadding: function (padPixels, paddingMode, polarity) {
+      if (!record.mask || !record.mask.present) return;
+      record.mask.afterPadding = {
+        padPixels: padPixels,
+        mode: paddingMode || "background",
+        polarity: polarity || "white-editable",
+      };
+
+      logger.info("audit.mask_padding.recorded", {
+        component: "audit",
+        correlationId: corrId,
+        workflowId: workflowId,
+        data: {
+          padPixels: padPixels,
+          mode: paddingMode,
+          polarity: polarity,
         },
       });
     },

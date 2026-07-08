@@ -325,14 +325,27 @@ export default {
         overwrite: true,
       });
       console.log("[comfyui] Uploaded mask: " + maskUpload.name);
+      var maskUploadBuf = Buffer.from(maskForUpload, "base64");
+      var maskUploadDims = getPngDimensions("data:image/png;base64," + maskForUpload);
       logger.info("comfyui.upload.mask.completed", {
         component: "adapter",
         correlationId: request.correlationId,
         workflowId: request.workflowId,
-        data: { filename: maskUpload.name },
+        data: { filename: maskUpload.name, width: maskUploadDims.width, height: maskUploadDims.height },
       });
 
-      audit.recordMaskUpload(maskUpload, Buffer.from(maskForUpload, "base64"));
+      audit.recordMaskUpload(maskUpload, maskUploadBuf, maskUploadDims.width, maskUploadDims.height);
+
+      /* Record mask padding details for expandThenCrop (Step 7) */
+      if (maskPaddingMode) {
+        audit.recordMaskPadding(
+          sizeResult.contextPaddingPx,
+          maskPaddingMode,
+          maskPolicyResult && maskPolicyResult.metadata
+            ? maskPolicyResult.metadata.polarity
+            : "white-editable",
+        );
+      }
     }
 
     /* Post-upload verification: fetch uploaded images back from ComfyUI */
