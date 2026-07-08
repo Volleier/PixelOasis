@@ -129,9 +129,25 @@ window.PO.WORKFLOWS = {
     },
   },
 
+  "composition.remove.local": {
+    id: "composition.remove.local",
+    title: "局部移除",
+    category: "composition",
+    defaults: {
+      prompt: "remove small defect, clean repair, seamless blend with surrounding texture and color",
+      negativePrompt: "blurry patch, visible seam, repeated pattern, discoloration, artificial texture",
+      seed: -1,
+      steps: 24,
+      cfg: 6,
+      denoise: 0.7,
+      sampler: "dpmpp_2m",
+      scheduler: "karras",
+    },
+  },
+
   "composition.remove.pro": {
     id: "composition.remove.pro",
-    title: "移除",
+    title: "移除物体",
     category: "composition",
     defaults: {
       prompt: "clean background, remove selected object, natural continuation, preserve surrounding texture and lighting",
@@ -215,6 +231,7 @@ window.PO.WORKFLOWS = {
 /* ── Phase 1 visible workflow IDs (ImplList §8.1) ── */
 window.PO.PHASE1_WORKFLOW_IDS = [
   "composition.inpaint.pro",
+  "composition.remove.local",
   "composition.remove.pro",
   "quality.realism.pro",
 ];

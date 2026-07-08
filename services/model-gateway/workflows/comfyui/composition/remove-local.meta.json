@@ -1,0 +1,87 @@
+{
+  "workflowId": "composition.remove.local",
+  "variantId": "remove-local-v1",
+  "title": "局部移除",
+  "category": "composition",
+  "provider": "comfyui",
+  "stage": 1,
+  "apiWorkflowFile": "remove-pro.api.json",
+  "enabled": true,
+  "priority": 90,
+  "note": "局部移除 — 移除选区内小面积瑕疵、斑点、异物，自然融合周围纹理。复用 remove-pro.api.json (VAEEncodeForInpaint) 但使用更保守的 defaults 和更小的 mask grow/blur，面向小范围精确修复而非大物体移除。",
+
+  "requiredModels": [
+    { "folder": "checkpoints", "name": "sd_xl_base_1.0.safetensors" }
+  ],
+
+  "inputs": {
+    "sourceImage": { "nodeId": "10", "input": "image" },
+    "maskImage": { "nodeId": "11", "input": "image" },
+    "positivePrompt": { "nodeId": "6", "input": "text" },
+    "negativePrompt": { "nodeId": "7", "input": "text" },
+    "seed": { "nodeId": "3", "input": "seed" },
+    "steps": { "nodeId": "3", "input": "steps" },
+    "cfg": { "nodeId": "3", "input": "cfg" },
+    "denoise": { "nodeId": "3", "input": "denoise" },
+    "sampler": { "nodeId": "3", "input": "sampler_name" },
+    "scheduler": { "nodeId": "3", "input": "scheduler" }
+  },
+
+  "outputs": {
+    "images": { "nodeId": "9" }
+  },
+
+  "defaults": {
+    "prompt": "remove small defect, clean repair, seamless blend with surrounding texture and color",
+    "negativePrompt": "blurry patch, visible seam, repeated pattern, discoloration, artificial texture",
+    "seed": -1,
+    "steps": 24,
+    "cfg": 6,
+    "denoise": 0.7,
+    "sampler": "dpmpp_2m",
+    "scheduler": "karras"
+  },
+
+  "inputPolicy": {
+    "source": "selection",
+    "mask": "required",
+    "referenceImages": "none",
+    "prompt": "optional",
+    "negativePrompt": "optional"
+  },
+
+  "sizePolicy": {
+    "mode": "expandThenCrop",
+    "maxSourceDimension": 1536,
+    "contextPadding": 64,
+    "contextPaddingMode": "expandThenCrop"
+  },
+
+  "maskPolicy": {
+    "polarity": "white-editable",
+    "invertBeforeUpload": false,
+    "growPixels": 6,
+    "blurPixels": 3,
+    "edgeMode": "soft"
+  },
+
+  "placementPolicy": {
+    "type": "smartObjectMaskedExact",
+    "bounds": "selection",
+    "createLayerGroup": true,
+    "createSmartObject": true,
+    "maskSource": "finalSoftMask",
+    "preserveOriginalSelectionMask": true,
+    "featherPixels": 2,
+    "opacity": 100,
+    "blendMode": "normal"
+  },
+
+  "modelManifest": {
+    "profile": "quality",
+    "vramTier": "high",
+    "models": [
+      { "id": "sd_xl_base", "name": "sd_xl_base_1.0.safetensors", "folder": "checkpoints", "required": true }
+    ]
+  }
+}

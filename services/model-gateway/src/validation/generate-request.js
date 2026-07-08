@@ -17,6 +17,7 @@ import { getRegistry } from "../adapters/registry-instance.js";
 const FALLBACK_WORKFLOWS = [
   /* Phase 1 pro workflows — primary Phase 1 buttons */
   "composition.inpaint.pro",
+  "composition.remove.local",
   "composition.remove.pro",
   "quality.realism.pro",
   /* Legacy / basic workflows — debug & fallback */
