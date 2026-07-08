@@ -111,6 +111,56 @@ window.PO.WORKFLOWS = {
     },
   },
 
+  /* ═══ Phase 1 Pro 按钮 (本地回退 — 后端提供完整定义) ═══ */
+
+  "composition.inpaint.pro": {
+    id: "composition.inpaint.pro",
+    title: "局部修复",
+    category: "composition",
+    defaults: {
+      prompt: "",
+      negativePrompt: "",
+      seed: -1,
+      steps: 28,
+      cfg: 7,
+      denoise: 0.75,
+      sampler: "dpmpp_2m",
+      scheduler: "karras",
+    },
+  },
+
+  "composition.remove.pro": {
+    id: "composition.remove.pro",
+    title: "移除",
+    category: "composition",
+    defaults: {
+      prompt: "clean background, remove selected object, natural continuation, preserve surrounding texture and lighting",
+      negativePrompt: "object remains, blurry, distorted, duplicate object, artifacts, bad texture",
+      seed: -1,
+      steps: 28,
+      cfg: 6.5,
+      denoise: 0.85,
+      sampler: "dpmpp_2m",
+      scheduler: "karras",
+    },
+  },
+
+  "quality.realism.pro": {
+    id: "quality.realism.pro",
+    title: "真实感增强",
+    category: "quality",
+    defaults: {
+      prompt: "photorealistic, high detail, natural skin texture, soft cinematic lighting, sharp focus, 8k",
+      negativePrompt: "cartoon, painting, plastic skin, over-saturated, distorted face, changed identity, different person, body horror",
+      seed: -1,
+      steps: 24,
+      cfg: 4.5,
+      denoise: 0.35,
+      sampler: "dpmpp_2m",
+      scheduler: "karras",
+    },
+  },
+
   /* ═══ 后续扩展 ═══ */
 
   "portrait.skin-retouch.basic": {

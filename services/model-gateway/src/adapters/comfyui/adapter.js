@@ -78,7 +78,10 @@ export default {
       }
 
       if (fallbackVariant) {
-        logger.info("workflow.variant_fallback", {
+        console.warn("[comfyui] WARNING: category fallback used — " +
+          request.workflowId + " → " + fallbackVariant.workflowId +
+          ". This is a dev-only safety net; production should request the correct workflowId.");
+        logger.warn("workflow.variant_fallback", {
           component: "adapter",
           correlationId: request.correlationId,
           workflowId: request.workflowId,

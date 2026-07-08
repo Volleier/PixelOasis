@@ -258,6 +258,140 @@ async function _moveLayerToBounds(targetBounds) {
   window.PO.Logger.info("placement.moved_to_bounds", { component: "placement", data: { dx: dx, dy: dy } });
 }
 
+/* ── fitLayerToBounds: scale + move to match target bounds (P0-20260708-4) ── */
+async function _fitLayerToBounds(layerId, targetBounds) {
+  if (!targetBounds || !layerId) return false;
+
+  /* Select the target layer */
+  await _action().batchPlay(
+    [{ _obj: "select", _target: [{ _ref: "layer", _id: layerId }], makeVisible: false, _options: { dialogOptions: "dontDisplay" } }],
+    { synchronousExecution: false, modalBehavior: "execute" },
+  );
+
+  var doc = _app().activeDocument;
+  var layer = doc.activeLayer;
+  if (!layer) return false;
+
+  var bounds = layer.bounds;
+  if (!bounds) return false;
+
+  var curL = window.PO.normalizeNumber(bounds.left);
+  var curT = window.PO.normalizeNumber(bounds.top);
+  var curR = window.PO.normalizeNumber(bounds.right);
+  var curB = window.PO.normalizeNumber(bounds.bottom);
+  var targetL = window.PO.normalizeNumber(targetBounds.left);
+  var targetT = window.PO.normalizeNumber(targetBounds.top);
+  var targetW = window.PO.normalizeNumber(targetBounds.width);
+  var targetH = window.PO.normalizeNumber(targetBounds.height);
+
+  if (curL === null || curT === null || curR === null || curB === null ||
+      targetL === null || targetT === null || targetW === null || targetH === null) {
+    throw new Error("Invalid bounds in fitLayerToBounds: cannot normalize layer or target bounds.");
+  }
+
+  var curW = curR - curL;
+  var curH = curB - curT;
+  var tolerancePx = 2;
+
+  window.PO.Logger.info("placement.fit_layer", {
+    component: "placement",
+    data: {
+      placedBoundsBeforeTransform: { left: curL, top: curT, width: curW, height: curH },
+      targetBounds: { left: targetL, top: targetT, width: targetW, height: targetH },
+    },
+  });
+
+  var needsScale = Math.abs(curW - targetW) > tolerancePx || Math.abs(curH - targetH) > tolerancePx;
+
+  if (needsScale) {
+    var scaleX = (targetW / curW) * 100;
+    var scaleY = (targetH / curH) * 100;
+
+    window.PO.Logger.info("placement.scaling", {
+      component: "placement",
+      data: { scaleX: Math.round(scaleX * 100) / 100, scaleY: Math.round(scaleY * 100) / 100 },
+    });
+
+    try {
+      await _action().batchPlay(
+        [{
+          _obj: "transform",
+          _target: [{ _ref: "layer", _enum: "ordinal", _value: "targetEnum" }],
+          freeTransformCenterState: { _enum: "quadCenterState", _value: "QCSIndependent" },
+          width: { _unit: "percentUnit", _value: scaleX },
+          height: { _unit: "percentUnit", _value: scaleY },
+          _options: { dialogOptions: "dontDisplay" },
+        }],
+        { synchronousExecution: false, modalBehavior: "execute" },
+      );
+    } catch (e) {
+      throw new Error("Failed to scale layer to target dimensions: " + (e.message || String(e)));
+    }
+
+    /* Re-read bounds after scaling */
+    layer = doc.activeLayer;
+    if (layer && layer.bounds) {
+      curL = window.PO.normalizeNumber(layer.bounds.left);
+      curT = window.PO.normalizeNumber(layer.bounds.top);
+    }
+  }
+
+  /* Move to target position */
+  if (curL !== null && curT !== null) {
+    var dx = targetL - curL;
+    var dy = targetT - curT;
+
+    if (!isFinite(dx) || !isFinite(dy)) {
+      throw new Error(
+        "Invalid offset in fitLayerToBounds: dx=" + String(dx) + " dy=" + String(dy)
+      );
+    }
+
+    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+      await _action().batchPlay(
+        [{ _obj: "move", _target: [{ _ref: "layer", _enum: "ordinal", _value: "targetEnum" }], to: { _obj: "offset", horizontal: { _unit: "pixelsUnit", _value: dx }, vertical: { _unit: "pixelsUnit", _value: dy } }, _options: { dialogOptions: "dontDisplay" } }],
+        { synchronousExecution: false, modalBehavior: "execute" },
+      );
+    }
+  }
+
+  /* Verify after transform */
+  layer = doc.activeLayer;
+  if (layer && layer.bounds) {
+    var al = window.PO.normalizeNumber(layer.bounds.left);
+    var at = window.PO.normalizeNumber(layer.bounds.top);
+    var ar = window.PO.normalizeNumber(layer.bounds.right);
+    var ab = window.PO.normalizeNumber(layer.bounds.bottom);
+
+    if (al !== null && at !== null && ar !== null && ab !== null) {
+      var afterW = ar - al;
+      var afterH = ab - at;
+      var wOk = Math.abs(afterW - targetW) <= tolerancePx;
+      var hOk = Math.abs(afterH - targetH) <= tolerancePx;
+
+      window.PO.Logger.info("placement.fit_completed", {
+        component: "placement",
+        data: {
+          placedBoundsAfterTransform: { left: al, top: at, width: afterW, height: afterH },
+          targetBounds: { left: targetL, top: targetT, width: targetW, height: targetH },
+          withinTolerance: wOk && hOk,
+        },
+      });
+
+      if (!wOk || !hOk) {
+        throw new Error(
+          "Placement bounds mismatch after transform: " +
+          "after=" + afterW + "x" + afterH +
+          " target=" + targetW + "x" + targetH +
+          " (delta: " + (afterW - targetW) + "x" + (afterH - targetH) + ")"
+        );
+      }
+    }
+  }
+
+  return true;
+}
+
 /* ── createOrFindPixelOasisGroup + moveLayerIntoGroup (batchPlay only, NO modal) ── */
 async function _findOrCreateGroup(groupName) {
   var doc = _app().activeDocument;
@@ -369,11 +503,7 @@ window.PO.placeSmartObjectMaskedExact = async function (imageB64, maskB64, bound
         var resultLayerId = resultLayer ? resultLayer.id : null;
         if (!resultLayerId) throw new Error("Failed to place image — no active layer.");
 
-        /* Step 2: Move to target bounds */
-        step = "move_to_bounds";
-        if (bounds) await _moveLayerToBounds(bounds);
-
-        /* Step 3: Convert to smart object */
+        /* Step 2: Convert to smart object (do this before scaling — conversion may change dimensions) */
         step = "convert_smart_object";
         var smartObjectOk = await _convertToSmartObject(resultLayerId);
         if (!smartObjectOk) {
@@ -388,6 +518,11 @@ window.PO.placeSmartObjectMaskedExact = async function (imageB64, maskB64, bound
         if (!isSmartObject) {
           throw new Error("Placement requires a smart object result layer.");
         }
+
+        /* Step 3: Fit layer to target bounds (scale + move, P0-20260708-4).
+         * Throws on mismatch — placement cannot continue with a misaligned layer. */
+        step = "fit_to_bounds";
+        if (bounds) await _fitLayerToBounds(smartLayerId, bounds);
 
         /* Step 4: Apply soft mask (P1-5: works even without mask) */
         step = "apply_mask";

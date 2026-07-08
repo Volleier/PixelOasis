@@ -5,6 +5,7 @@
   "category": "quality",
   "provider": "comfyui",
   "stage": 1,
+  "note": "Phase-1 basic img2img placeholder. Current pipeline is LoadImage → VAEEncode → KSampler(denoise=0.35) → VAEDecode → SaveImage. No mask node, ControlNet, IPAdapter, Reference pipeline, refiner, or tiled detailer. Mask is uploaded for Photoshop placement only — it does not participate in ComfyUI generation. Visual effect may be minimal for textured surfaces. A dedicated realism-enhance workflow with higher denoise and/or conditioning pipelines is planned for a future phase.",
   "apiWorkflowFile": "realism-pro.api.json",
   "enabled": true,
   "priority": 100,
@@ -59,7 +60,7 @@
     "growPixels": 0,
     "blurPixels": 0,
     "edgeMode": "soft",
-    "note": "Mask is optional for realism enhance. If provided, limits the enhancement area."
+    "note": "Phase-1 limitation: mask is NOT wired into the ComfyUI API workflow (realism-pro.api.json has no mask/LoadMask node). If a mask is provided, it is uploaded to ComfyUI but only used for the final Photoshop placement mask — it does NOT guide or limit the generation area. A future phase should either add a real mask path to the workflow or remove mask upload for this variant."
   },
 
   "placementPolicy": {

@@ -95,8 +95,16 @@
       }
       /* Re-bind events for new buttons */
       if (window.PO.bindWorkflowButtons) window.PO.bindWorkflowButtons();
-    }).catch(function () {
+    }).catch(function (err) {
       /* Backend unreachable — local WORKFLOWS already rendered as fallback */
+      window.PO.Logger.warn("workflows.backend_unreachable", {
+        component: "startup",
+        data: { reason: err ? (err.message || String(err)) : "unknown" },
+      });
+      try {
+        window.PO.setStatus("离线模式 — 使用本地工作流");
+        window.PO.showTransientStatus("无法连接到网关，使用本地工作流");
+      } catch (_) { /* ignore */ }
     });
 
     /* ── Startup ── */
