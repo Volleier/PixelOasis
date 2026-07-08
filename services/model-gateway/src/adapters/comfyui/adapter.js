@@ -24,6 +24,7 @@ import { readOutputImages, detectImageDimensions } from "./result-reader.js";
 import { scaleImageDown, resizeToExact, padImage, cropToBounds, getPngDimensions } from "../../utils/images.js";
 import { applySizePolicy } from "./size-policy.js";
 import { applyMaskPolicy } from "./mask-policy.js";
+import { buildPlacementSummary } from "./placement-policy.js";
 import logger from "../../utils/logger.js";
 import { createAudit } from "../../utils/audit.js";
 
@@ -573,13 +574,7 @@ export default {
         width: finalWidth,
         height: finalHeight,
         seed: request.parameters ? request.parameters.seed : -1,
-        placement: {
-          type: variant.placementPolicy ? variant.placementPolicy.type : "smartObjectMaskedExact",
-          targetBounds: selection.bounds,
-          maskPngBase64: maskPolicyResult ? (maskPolicyResult.finalPlacementMask || null) : null,
-          featherPixels: variant.placementPolicy ? (variant.placementPolicy.featherPixels || 0) : 0,
-          createLayerGroup: variant.placementPolicy ? variant.placementPolicy.createLayerGroup !== false : true,
-        },
+        placement: buildPlacementSummary(variant, selection.bounds, maskPolicyResult),
         metadata: {
           provider: "comfyui",
           workflowId: request.workflowId,
