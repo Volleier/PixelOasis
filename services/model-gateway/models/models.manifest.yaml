@@ -23,9 +23,9 @@ models:
       - type: "huggingface"
         url: "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors"
       - type: "huggingface-mirror"
-        url: ""
+        url: "https://hf-mirror.com/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors"
       - type: "modelscope"
-        url: ""
+        url: "https://modelscope.cn/models/AI-ModelScope/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors"
       - type: "manual"
         note: "Place sd_xl_base_1.0.safetensors in ComfyUI/models/checkpoints/"
     usedBy:
