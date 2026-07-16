@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "2.0",
+  "id": "cleanup.removeLightingGear",
+  "title": {
+    "zh-CN": "消除灯架"
+  },
+  "description": {
+    "zh-CN": "检测并移除灯箱/灯架/三脚架/线缆，自动补全背景"
+  },
+  "section": "lightingCleanup",
+  "input": {
+    "source": "document",
+    "mask": "optional",
+    "points": "none",
+    "editMask": "optional"
+  },
+  "parameterSchema": {},
+  "outputSchema": {},
+  "pipeline": "remove-gear-v1",
+  "variants": [],
+  "policy": {
+    "sensitive": false
+  },
+  "enabled": true,
+  "ui": {
+    "order": 10,
+    "requiresConfirm": true,
+    "icon": "cleanup"
+  }
+}

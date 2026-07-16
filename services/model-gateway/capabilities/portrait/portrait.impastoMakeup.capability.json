@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "2.0",
+  "id": "portrait.impastoMakeup",
+  "title": {
+    "zh-CN": "厚涂妆感"
+  },
+  "description": {
+    "zh-CN": "保身份局部重绘、厚涂高光阴影塑形皮肤"
+  },
+  "section": "portrait",
+  "input": {
+    "source": "selection",
+    "mask": "none",
+    "points": "none",
+    "subjectMask": "none"
+  },
+  "parameterSchema": {},
+  "outputSchema": {},
+  "pipeline": "impasto-makeup-v1",
+  "variants": [],
+  "policy": {
+    "sensitive": false
+  },
+  "enabled": true,
+  "ui": {
+    "order": 10,
+    "requiresConfirm": true,
+    "icon": "portrait"
+  }
+}

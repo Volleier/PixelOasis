@@ -72,4 +72,16 @@ export default {
   /* ── ComfyUI root path (for debug/model checks) ──── */
   comfyuiRoot: loaded.comfyui.root || "",
   comfyuiModelsDir: loaded.comfyui.models_dir || "",
+
+  /* ── v2: Data & persistence ──────────────────────── */
+  dataDir: process.env.PO_DATA_DIR || loaded.model_gateway.data_dir || "E:/PixelOasisData",
+  sqlitePath: process.env.PO_SQLITE_PATH || loaded.model_gateway.sqlite_path || "",
+  sqliteDir: "E:/PixelOasisData",
+  gpuConcurrency: loaded.model_gateway.gpu_concurrency || 1,
+  cpuConcurrency: loaded.model_gateway.cpu_concurrency || 2,
+  maxQueuedPerClient: loaded.model_gateway.max_queued_per_client || 3,
+  jobTtlHours: loaded.model_gateway.job_ttl_hours || 24,
+  artifactTtlHours: loaded.model_gateway.artifact_ttl_hours || 24,
+  uploadMaxMb: loaded.model_gateway.upload_max_mb || 100,
+  jobInputMaxMb: loaded.model_gateway.job_input_max_mb || 300,
 };

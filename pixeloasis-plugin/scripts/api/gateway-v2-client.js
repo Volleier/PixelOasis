@@ -23,6 +23,8 @@ window.PO.GatewayV2Client = (function () {
   var DEFAULT_URL = "http://127.0.0.1:8787";
   var DEFAULT_TIMEOUT_MS = 30000;
   var UPLOAD_TIMEOUT_MS = 120000;
+  var CLIENT_ID_STORAGE_KEY = "po.clientId.v2";
+  var _sessionClientId = null;
 
   /* ── URL validation ── */
   function getBaseUrl() {
@@ -61,6 +63,39 @@ window.PO.GatewayV2Client = (function () {
     return "po-" + ts + "-" + rnd;
   }
 
+  function _createClientId() {
+    var randomPart = "";
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+      randomPart = window.crypto.randomUUID().replace(/-/g, "");
+    } else if (window.crypto && typeof window.crypto.getRandomValues === "function") {
+      var values = new Uint32Array(4);
+      window.crypto.getRandomValues(values);
+      randomPart = Array.prototype.map.call(values, function (value) {
+        return value.toString(36);
+      }).join("");
+    } else {
+      randomPart = Date.now().toString(36) + Math.random().toString(36).slice(2);
+    }
+    return "po-client-" + randomPart;
+  }
+
+  /* A stable local identifier scopes assets, jobs, and artifacts at the
+     loopback gateway. It is not an authentication credential. */
+  function getClientId() {
+    if (_sessionClientId) return _sessionClientId;
+    try {
+      var stored = localStorage.getItem(CLIENT_ID_STORAGE_KEY);
+      if (stored && /^[A-Za-z0-9_-]{8,128}$/.test(stored)) {
+        _sessionClientId = stored;
+        return _sessionClientId;
+      }
+    } catch (_) { /* Use this panel session when localStorage is unavailable. */ }
+
+    _sessionClientId = _createClientId();
+    try { localStorage.setItem(CLIENT_ID_STORAGE_KEY, _sessionClientId); } catch (_) { /* ignore */ }
+    return _sessionClientId;
+  }
+
   /* ═══════════════════════════════════════════════════════════════════
    * requestJson(method, path, options) → response
    * ═══════════════════════════════════════════════════════════════════ */
@@ -92,6 +127,7 @@ window.PO.GatewayV2Client = (function () {
         method: method,
         headers: Object.assign({
           "X-Correlation-Id": corrId,
+          "X-Client-Id": getClientId(),
           "Accept": "application/json",
         }, options.headers || {}),
         signal: controller.signal,
@@ -223,6 +259,7 @@ window.PO.GatewayV2Client = (function () {
       var baseUrl = getBaseUrl();
       var resp = await fetch(baseUrl + "/v2/assets/" + encodeURIComponent(assetId), {
         method: "HEAD",
+        headers: { "X-Client-Id": getClientId() },
       });
       return { exists: resp.ok, status: resp.status };
     } catch (e) {
@@ -248,8 +285,7 @@ window.PO.GatewayV2Client = (function () {
 
   /* List jobs */
   async function listJobs(clientId) {
-    var qs = clientId ? "?clientId=" + encodeURIComponent(clientId) : "";
-    return requestJson("GET", "/v2/jobs" + qs);
+    return requestJson("GET", "/v2/jobs");
   }
 
   /* Cancel job */
@@ -277,7 +313,7 @@ window.PO.GatewayV2Client = (function () {
     if (!_validateId(jobId)) return null;
     try {
       var baseUrl = getBaseUrl();
-      var url = baseUrl + "/v2/jobs/" + encodeURIComponent(jobId) + "/events";
+      var url = baseUrl + "/v2/jobs/" + encodeURIComponent(jobId) + "/events?clientId=" + encodeURIComponent(getClientId());
       var es = new EventSource(url);
       return es;
     } catch (e) {
@@ -299,6 +335,7 @@ window.PO.GatewayV2Client = (function () {
 
   return {
     requestJson:         requestJson,
+    getClientId:         getClientId,
     getHealth:           getHealth,
     getCapabilities:     getCapabilities,
     uploadAsset:         uploadAsset,
