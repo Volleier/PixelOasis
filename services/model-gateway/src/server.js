@@ -32,6 +32,9 @@ try {
   logger.warn("database.init_warning", { component: "server", error: err });
 }
 
+/* Import v2 router */
+import { dispatch as dispatchV2 } from "./api/v2/router.js";
+
 /* Route table — keyed by "METHOD:pathname" */
 var ROUTES = {
   "GET:/config": handleConfig,
@@ -73,6 +76,9 @@ var server = createServer(async function (request, response) {
       data: { method: request.method, path: pathname },
       durationMs: Date.now() - reqStart,
     });
+  } else if (pathname.startsWith("/v2/")) {
+    /* Forward to v2 router */
+    await dispatchV2(request.method, pathname, request, response, params);
   } else {
     logger.debug("request.not_found", {
       component: "server",
