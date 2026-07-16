@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "2.0",
+  "id": "portrait.masculineFace",
+  "title": {
+    "zh-CN": "成男转绘"
+  },
+  "description": {
+    "zh-CN": "受控修改下颌、眉骨、鼻唇明暗，保持身份"
+  },
+  "section": "portrait",
+  "input": {
+    "source": "selection",
+    "mask": "none",
+    "points": "none",
+    "subjectMask": "none"
+  },
+  "parameterSchema": {},
+  "outputSchema": {},
+  "pipeline": "masculine-face-v1",
+  "variants": [],
+  "policy": {
+    "sensitive": false
+  },
+  "enabled": true,
+  "ui": {
+    "order": 10,
+    "requiresConfirm": true,
+    "icon": "portrait"
+  }
+}

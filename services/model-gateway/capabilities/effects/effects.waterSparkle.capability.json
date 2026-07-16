@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "2.0",
+  "id": "effects.waterSparkle",
+  "title": {
+    "zh-CN": "水面波光"
+  },
+  "description": {
+    "zh-CN": "水面高光波纹、闪烁和阈值混合效果"
+  },
+  "section": "sceneEffects",
+  "input": {
+    "source": "document",
+    "mask": "required",
+    "points": "none",
+    "editMask": "required"
+  },
+  "parameterSchema": {},
+  "outputSchema": {},
+  "pipeline": "water-sparkle-v1",
+  "variants": [],
+  "policy": {
+    "sensitive": false
+  },
+  "enabled": true,
+  "ui": {
+    "order": 10,
+    "requiresConfirm": true,
+    "icon": "effects"
+  }
+}

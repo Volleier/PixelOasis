@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "2.0",
+  "id": "effects.lightning",
+  "title": {
+    "zh-CN": "雷电"
+  },
+  "description": {
+    "zh-CN": "分形分支雷电、辉光和场景环境反射"
+  },
+  "section": "sceneEffects",
+  "input": {
+    "source": "document",
+    "mask": "optional",
+    "points": "two",
+    "subjectMask": "optional"
+  },
+  "parameterSchema": {},
+  "outputSchema": {},
+  "pipeline": "lightning-v1",
+  "variants": [],
+  "policy": {
+    "sensitive": false
+  },
+  "enabled": true,
+  "ui": {
+    "order": 10,
+    "requiresConfirm": true,
+    "icon": "effects"
+  }
+}

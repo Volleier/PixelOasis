@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "2.0",
+  "id": "hair.windFlow",
+  "title": {
+    "zh-CN": "氛围飘发"
+  },
+  "description": {
+    "zh-CN": "光流式形变与生成式补全飘发效果"
+  },
+  "section": "hair",
+  "input": {
+    "source": "selection",
+    "mask": "required",
+    "points": "none",
+    "editMask": "required"
+  },
+  "parameterSchema": {},
+  "outputSchema": {},
+  "pipeline": "hair-windflow-v1",
+  "variants": [],
+  "policy": {
+    "sensitive": false
+  },
+  "enabled": true,
+  "ui": {
+    "order": 10,
+    "requiresConfirm": true,
+    "icon": "hair"
+  }
+}

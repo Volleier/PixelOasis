@@ -14,12 +14,46 @@ import { handleConfig } from "./routes/config.js";
 import { handleHealth } from "./routes/health.js";
 import { handleWorkflows } from "./routes/workflows.js";
 import { handleGenerate } from "./routes/generate.js";
+import { handleV1Generate } from "./api/v1-compat.js";
 import { notFound } from "./utils/errors.js";
 import { initRegistry } from "./adapters/registry-instance.js";
+import { getDb } from "./persistence/database.js";
 import logger from "./utils/logger.js";
 
 /* Init logger with config */
 logger.init(config);
+
+/* Init database (v2) — runs migrations on first start */
+try {
+  getDb();
+  console.log("  Database: ready (SQLite WAL)");
+  logger.info("database.initialized", { component: "server" });
+} catch (err) {
+  logger.error("database.init_failed", { component: "server", error: err });
+  throw new Error("Gateway database initialization failed: " + err.message);
+}
+
+/* Init capability registry (v2) — loads *.capability.json files */
+import { initCapabilityRegistry } from "./capabilities/registry-instance.js";
+try {
+  await initCapabilityRegistry();
+  console.log("  Capabilities: registry loaded");
+  logger.info("capabilities.initialized", { component: "server" });
+} catch (err) {
+  logger.error("capabilities.init_failed", { component: "server", error: err });
+  throw new Error("Gateway capability registry initialization failed: " + err.message);
+}
+
+/* Load pipeline definitions (v2 Stage 5-7) */
+import "./pipelines/definitions/all-pipelines.js";
+
+/* Start TTL cleanup worker (v2 Stage 8) */
+import { start as startCleanup } from "./jobs/cleanup-worker.js";
+startCleanup();
+console.log("  Cleanup: TTL worker started");
+
+/* Import v2 router */
+import { dispatch as dispatchV2 } from "./api/v2/router.js";
 
 /* Route table — keyed by "METHOD:pathname" */
 var ROUTES = {
@@ -62,6 +96,9 @@ var server = createServer(async function (request, response) {
       data: { method: request.method, path: pathname },
       durationMs: Date.now() - reqStart,
     });
+  } else if (pathname.startsWith("/v2/")) {
+    /* Forward to v2 router */
+    await dispatchV2(request.method, pathname, request, response, params);
   } else {
     logger.debug("request.not_found", {
       component: "server",

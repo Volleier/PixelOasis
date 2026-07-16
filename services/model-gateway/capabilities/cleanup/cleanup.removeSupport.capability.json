@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "2.0",
+  "id": "cleanup.removeSupport",
+  "title": {
+    "zh-CN": "消除梯子"
+  },
+  "description": {
+    "zh-CN": "检测并移除梯子/凳子，补全被遮挡区域"
+  },
+  "section": "lightingCleanup",
+  "input": {
+    "source": "selection",
+    "mask": "required",
+    "points": "none",
+    "editMask": "required"
+  },
+  "parameterSchema": {},
+  "outputSchema": {},
+  "pipeline": "remove-support-v1",
+  "variants": [],
+  "policy": {
+    "sensitive": false
+  },
+  "enabled": true,
+  "ui": {
+    "order": 10,
+    "requiresConfirm": true,
+    "icon": "cleanup"
+  }
+}

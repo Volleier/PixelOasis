@@ -6,13 +6,17 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "node src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test:lifecycle": "node test/test-lifecycle.mjs"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "busboy": "^1.6.0",
     "sharp": "^0.35.0",
+    "ws": "^8.21.1",
     "yaml": "^2.9.0"
   }
 }

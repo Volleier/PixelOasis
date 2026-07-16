@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "2.0",
+  "id": "lighting.underlight",
+  "title": {
+    "zh-CN": "氛围底光"
+  },
+  "description": {
+    "zh-CN": "底部点/面光照明、主体底光与环境溢光（七色可选）"
+  },
+  "section": "lightingCleanup",
+  "input": {
+    "source": "document",
+    "mask": "none",
+    "points": "none",
+    "subjectMask": "optional"
+  },
+  "parameterSchema": {},
+  "outputSchema": {},
+  "pipeline": "underlight-v1",
+  "variants": [],
+  "policy": {
+    "sensitive": false
+  },
+  "enabled": true,
+  "ui": {
+    "order": 10,
+    "requiresConfirm": true,
+    "icon": "lighting"
+  }
+}

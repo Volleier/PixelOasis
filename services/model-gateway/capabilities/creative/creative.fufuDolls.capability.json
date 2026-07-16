@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "2.0",
+  "id": "creative.fufuDolls",
+  "title": {
+    "zh-CN": "fufu 玩偶"
+  },
+  "description": {
+    "zh-CN": "生成 2-5 个 fufu 风格玩偶透明元素并深度布局"
+  },
+  "section": "studioComposite",
+  "input": {
+    "source": "document",
+    "mask": "none",
+    "points": "none",
+    "subjectMask": "optional"
+  },
+  "parameterSchema": {},
+  "outputSchema": {},
+  "pipeline": "fufu-dolls-v1",
+  "variants": [],
+  "policy": {
+    "sensitive": false
+  },
+  "enabled": true,
+  "ui": {
+    "order": 10,
+    "requiresConfirm": true,
+    "icon": "creative"
+  }
+}
