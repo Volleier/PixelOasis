@@ -64,12 +64,13 @@ window.PO.SubjectCapture = (function () {
       }
     } else {
       /* "auto" — use full document, gateway handles detection */
-      subjectBounds = {
+      subjectBounds = window.PO.CaptureUtils.normalizeBounds({
         left: 0,
         top: 0,
-        width: docInfo.width,
-        height: docInfo.height,
-      };
+        right: docInfo.width,
+        bottom: docInfo.height,
+      });
+      if (!subjectBounds) throw new Error("无法获取文档边界");
       subjectSource = "auto";
     }
 

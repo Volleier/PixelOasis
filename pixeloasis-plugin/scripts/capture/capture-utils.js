@@ -24,13 +24,21 @@ window.PO.CaptureUtils = (function () {
       var doc = photoshop.app.activeDocument;
       if (!doc) return null;
 
+      /* Normalize all numeric fields to plain integers */
+      var width  = Math.round(window.PO.normalizeNumber(doc.width));
+      var height = Math.round(window.PO.normalizeNumber(doc.height));
+      var bitDepth = Math.round(window.PO.normalizeNumber(doc.bitsPerChannel || 8));
+      var resolution = Math.round(window.PO.normalizeNumber(doc.resolution || 72));
+
+      if (!(width >= 1) || !(height >= 1)) return null;
+
       return {
-        id:        String(doc.id),
-        width:     doc.width,
-        height:    doc.height,
-        mode:      String(doc.mode).replace(/ColorMode$/i, ""),
-        bitDepth:  doc.bitsPerChannel || 8,
-        resolution: doc.resolution || 72,
+        id:         String(doc.id),
+        width:      width,
+        height:     height,
+        mode:       String(doc.mode).replace(/ColorMode$/i, ""),
+        bitDepth:   bitDepth,
+        resolution: resolution,
       };
     } catch (e) {
       return null;
