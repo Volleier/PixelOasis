@@ -73,8 +73,11 @@ export async function run(workflowApiJson, meta, inputs, parameters, options = {
     data: { jobId, promptId },
   });
 
+  /* ── 4.5 Build node map for human-readable logging ── */
+  const nodeMap = _buildNodeMap(patched);
+
   /* ── 5. Monitor via WebSocket + polling fallback ── */
-  const historyEntry = await _monitorExecution(promptId, clientId, timeoutMs, options);
+  const historyEntry = await _monitorExecution(promptId, clientId, timeoutMs, options, nodeMap, jobId);
 
   /* ── 6. Collect outputs ── */
   if (options.onStageChange) options.onStageChange("postprocessing");
@@ -115,16 +118,69 @@ export async function cancel(promptId) {
 }
 
 /* ── Monitor: WebSocket preferred, polling fallback ── */
-async function _monitorExecution(promptId, clientId, timeoutMs, options) {
+async function _monitorExecution(promptId, clientId, timeoutMs, options, nodeMap, jobId) {
   const startTime = Date.now();
   const pollInterval = 1500;
   let ws = null;
   let completed = false;
   let historyEntry = null;
+  let wsUsed = false;
 
   /* Try WebSocket */
   try {
-    ws = new ComfyUIWebSocket();
+    ws = new ComfyUIWebSocket(promptId);
+    ws.setNodeMap(nodeMap || {});
+
+    /* ── Wire node-level callbacks to logger ── */
+    ws.onNodeStart(function (evt) {
+      logger.info("comfyui.node.started", {
+        component: "prompt-runner",
+        jobId: jobId,
+        promptId: promptId,
+        data: { nodeId: evt.nodeId, classType: evt.classType, title: evt.title },
+      });
+    });
+
+    ws.onNodeProgress(function (evt) {
+      logger.debug("comfyui.node.progress", {
+        component: "prompt-runner",
+        jobId: jobId,
+        promptId: promptId,
+        data: { nodeId: evt.nodeId, classType: evt.classType, progress: evt.progress },
+      });
+    });
+
+    ws.onNodeComplete(function (evt) {
+      logger.info("comfyui.node.completed", {
+        component: "prompt-runner",
+        jobId: jobId,
+        promptId: promptId,
+        durationMs: evt.durationMs,
+        data: { nodeId: evt.nodeId, classType: evt.classType, title: evt.title },
+      });
+    });
+
+    ws.onNodeCached(function (evt) {
+      logger.info("comfyui.node.cached", {
+        component: "prompt-runner",
+        jobId: jobId,
+        promptId: promptId,
+        data: { nodeId: evt.nodeId, classType: evt.classType, title: evt.title },
+      });
+    });
+
+    ws.onNodeFailed(function (evt) {
+      logger.error("comfyui.node.failed", {
+        component: "prompt-runner",
+        jobId: jobId,
+        promptId: promptId,
+        data: {
+          nodeId: evt.nodeId, classType: evt.classType, title: evt.title,
+          errorType: evt.errorType, errorMessage: evt.errorMessage,
+        },
+      });
+    });
+
     ws.onExecuted((data) => {
       if (data.prompt_id === promptId) {
         logger.info("prompt_runner.ws_executed", { component: "prompt-runner", data: { promptId } });
@@ -134,10 +190,19 @@ async function _monitorExecution(promptId, clientId, timeoutMs, options) {
       logger.warn("prompt_runner.ws_error", { component: "prompt-runner", data: { promptId, error: data } });
     });
     ws.connect(clientId);
+    wsUsed = true;
   } catch (e) {
     logger.info("prompt_runner.ws_unavailable_fallback_polling", {
       component: "prompt-runner",
       data: { promptId },
+    });
+  }
+
+  if (!wsUsed) {
+    logger.info("comfyui.monitor.polling_fallback", {
+      component: "prompt-runner",
+      jobId: jobId,
+      promptId: promptId,
     });
   }
 
@@ -184,5 +249,22 @@ function _saveDebugCopy(jobId, workflow) {
 }
 
 function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* ── Build nodeMap from patched workflow: nodeId -> { classType, title, stage } ── */
+function _buildNodeMap(workflow) {
+  const map = {};
+  if (!workflow || typeof workflow !== "object") return map;
+  const nodes = workflow.nodes || workflow;
+  if (!Array.isArray(nodes)) return map;
+
+  for (const node of nodes) {
+    if (!node || !node.id) continue;
+    map[String(node.id)] = {
+      classType: node.type || node.class_type || null,
+      title: (node._meta && node._meta.title) || node.title || null,
+    };
+  }
+  return map;
+}
 
 export default { run, cancel };
