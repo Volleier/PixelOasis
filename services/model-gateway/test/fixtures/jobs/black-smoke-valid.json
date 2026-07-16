@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "2.0",
+  "capabilityId": "effects.blackSmokeDust",
+  "correlationId": "test-black-smoke-001",
+  "source": {
+    "assetId": "ast_source_test",
+    "scope": "document",
+    "document": { "id": "test-doc", "width": 2048, "height": 1365, "colorMode": "RGB", "bitDepth": 8 },
+    "bounds": { "left": 0, "top": 0, "width": 2048, "height": 1365 }
+  },
+  "inputs": {
+    "editMaskAssetId": null,
+    "subjectMaskAssetId": null,
+    "referenceAssetIds": [],
+    "points": [{ "x": 1180, "y": 980 }]
+  },
+  "parameters": {
+    "density": 0.5,
+    "direction": "upRight",
+    "spread": 0.45,
+    "turbulence": 0.55,
+    "particleAmount": 0.35,
+    "occlusion": "auto",
+    "semanticRefine": false,
+    "seed": 328174119
+  },
+  "options": { "profile": "quality_16gb" }
+}

@@ -183,7 +183,15 @@ window.PO.Preflight = (function () {
     checks.subject = { passed: true, required: needsSubject };
     if (needsSubject) {
       requireSubjectChoice = true;
-      /* Don't fail — subject can be auto-detected by gateway or user can choose */
+    }
+
+    /* ── 4b. Occlusion guidance — when auto + no subjectMask ── */
+    var hasSubjectMask = capability.input && capability.input.subjectMask === "optional";
+    if (hasSubjectMask && !_checkRealSelection(docInfo)) {
+      warnings.push({
+        type: "occlusionInfo",
+        message: "未检测到主体选区 — 将仅生成后景烟雾（occlusion=back）",
+      });
     }
 
     /* ── 5. Input contract — points ── */

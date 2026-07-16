@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "2.0",
+  "id": "effects.blackSmokeDust",
+  "title": "黑色烟尘",
+  "section": "sceneEffects",
+  "input": { "source": "document", "mask": "optional", "points": "optional", "subjectMask": "optional" },
+  "parameterSchema": {
+    "properties": {
+      "density": { "type": "number", "minimum": 0.05, "maximum": 1, "default": 0.5 },
+      "direction": { "type": "string", "enum": ["upRight", "upLeft", "right", "left", "up", "auto"], "default": "upRight" },
+      "spread": { "type": "number", "minimum": 0.1, "maximum": 1, "default": 0.45 },
+      "turbulence": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.55 },
+      "particleAmount": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.35 },
+      "occlusion": { "type": "string", "enum": ["auto", "back", "front"], "default": "auto" },
+      "semanticRefine": { "type": "boolean", "default": false },
+      "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+    }
+  },
+  "availability": { "state": "missing_nodes", "profile": null, "details": { "missingNodes": ["PO_FractalSmokeRGBA", "PO_DustParticlesRGBA", "PO_DepthSplitRGBA", "ImageCompositeMasked"] } }
+}

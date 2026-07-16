@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "2.0",
+  "capabilityId": "effects.blackSmokeDust",
+  "correlationId": "test-black-smoke-invalid",
+  "source": {
+    "assetId": "ast_source_test",
+    "scope": "document",
+    "bounds": { "left": 0, "top": 0, "width": 0, "height": 0 }
+  },
+  "inputs": {},
+  "parameters": { "density": 1.5, "direction": "invalid" },
+  "options": {}
+}
