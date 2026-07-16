@@ -55,6 +55,9 @@ function stripSensitive(obj, depth) {
     const k = keys[i];
     if (SENSITIVE_KEYS.indexOf(k) !== -1) {
       out[k] = "[redacted, length=" + (typeof obj[k] === "string" ? obj[k].length : "?") + "]";
+    } else if (k === "details" && typeof obj[k] === "string") {
+      /* Safety cap: truncate detail strings to 256 chars */
+      out[k] = obj[k].length > 256 ? obj[k].substring(0, 256) + "…" : obj[k];
     } else if (typeof obj[k] === "object" && obj[k] !== null) {
       out[k] = stripSensitive(obj[k], depth + 1);
     } else {

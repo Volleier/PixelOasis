@@ -8,12 +8,12 @@
  * GET    /v2/jobs/{id}/events   → SSE event stream
  */
 
-import { writeJson, v2BadRequest, v2NotFound, v2Conflict, v2Unprocessable, v2ServerError, v2QueueFull, v2DependencyMissing } from "../../utils/errors.js";
+import { writeJson, v2BadRequest, v2NotFound, v2Conflict, v2Unprocessable, v2ServerError, v2QueueFull, v2DependencyMissing, buildV2Error } from "../../utils/errors.js";
 import * as jobRepo from "../../jobs/job-repository.js";
 import * as eventRepo from "../../jobs/event-repository.js";
 import { isActive, isTerminal } from "../../jobs/state-machine.js";
 import { getAsset } from "../../assets/asset-store.js";
-import { getCapability } from "../../capabilities/registry-instance.js";
+import { getCapability, refreshCapabilityReadiness } from "../../capabilities/registry-instance.js";
 import config from "../../config.js";
 import { enqueue, cancelQueued } from "../../jobs/scheduler.js";
 import { getDb } from "../../persistence/database.js";
@@ -21,80 +21,119 @@ import logger from "../../utils/logger.js";
 
 const MAX_JOB_BODY_BYTES = () => (config.jobInputMaxMb || 300) * 1024 * 1024;
 
+/* ── Standardised job rejection: logs + responds in one call ── */
+function respondJobError(res, status, code, message, details, context) {
+  context = context || {};
+  const rejectionStage = context.rejectionStage || "unknown";
+  logger.info("job.create.rejected", {
+    component: "jobs-route",
+    data: {
+      status: status,
+      code: code,
+      rejectionStage: rejectionStage,
+      traceId: context.traceId || null,
+      correlationId: context.correlationId || null,
+      clientId: (context.clientId || "").substring(0, 8) + "...",
+      capabilityId: context.capabilityId || null,
+    },
+  });
+  const err = buildV2Error(code, message, details);
+  writeJson(res, status, { error: err });
+}
+
+/* ── Safe logger details: whitelist field paths, max 256 chars ── */
+const ALLOWED_DETAIL_FIELDS = [
+  "source.bounds", "source.document.width", "source.document.height",
+  "source.document.bitDepth", "source.assetId", "source.scope",
+  "capabilityId", "parameterName", "assetKind", "maskKind",
+];
+function safeDetails(raw) {
+  if (!raw || typeof raw !== "string") return raw;
+  return raw.substring(0, 256);
+}
+
 /* ═══════════════════════════════════════════════════════════════════
  * POST /v2/jobs — create job
  * ═══════════════════════════════════════════════════════════════════ */
 
 export async function handleCreateJob(req, res, params) {
+  const traceId = req.headers["x-correlation-id"] || ("gw-" + Date.now().toString(36));
+  const clientId = req.headers["x-client-id"] || "default";
+  const ctx = { traceId: traceId, clientId: clientId };
+  const startMs = Date.now();
+
   try {
+      await refreshCapabilityReadiness();
       const payload = await readJsonBody(req, MAX_JOB_BODY_BYTES());
+
+      ctx.correlationId = payload.correlationId || traceId;
 
       /* Validate schemaVersion */
       if (payload.schemaVersion !== "2.0") {
-        v2BadRequest(res, "REQUEST_SCHEMA_INVALID", "schemaVersion must be 2.0");
+        respondJobError(res, 400, "REQUEST_SCHEMA_INVALID", "schemaVersion must be 2.0", null, { ...ctx, rejectionStage: "schema" });
         return;
       }
 
       /* Validate required fields */
       if (!payload.capabilityId) {
-        v2BadRequest(res, "REQUEST_SCHEMA_INVALID", "capabilityId is required");
+        respondJobError(res, 400, "REQUEST_SCHEMA_INVALID", "capabilityId is required", null, { ...ctx, rejectionStage: "schema" });
         return;
       }
 
+      ctx.capabilityId = payload.capabilityId;
       const capability = getCapability(payload.capabilityId);
       if (!capability || capability.enabled === false) {
-        v2NotFound(res, "CAPABILITY_NOT_FOUND", "Capability not found or disabled");
+        respondJobError(res, 404, "CAPABILITY_NOT_FOUND", "Capability not found or disabled", null, { ...ctx, rejectionStage: "capability" });
         return;
       }
 
-      const clientId = req.headers["x-client-id"] || "default";
       const requestError = validateRequestShape(payload, clientId);
       if (requestError) {
-        v2BadRequest(res, "REQUEST_SCHEMA_INVALID", requestError);
+        respondJobError(res, 400, "REQUEST_SCHEMA_INVALID", requestError, null, { ...ctx, rejectionStage: "schema" });
         return;
       }
       const activeJobs = jobRepo.getRecoverable(clientId);
       if (activeJobs.length >= (config.maxQueuedPerClient || 3)) {
-        v2QueueFull(res, "QUEUE_LIMIT_EXCEEDED", "Too many active jobs for this client");
+        respondJobError(res, 429, "QUEUE_LIMIT_EXCEEDED", "Too many active jobs for this client", null, { ...ctx, rejectionStage: "queue" });
         return;
       }
 
       if (!payload.source || !payload.source.assetId) {
-        v2BadRequest(res, "REQUEST_SCHEMA_INVALID", "source.assetId is required");
+        respondJobError(res, 400, "REQUEST_SCHEMA_INVALID", "source.assetId is required", null, { ...ctx, rejectionStage: "schema" });
         return;
       }
 
       /* Verify source asset exists */
       const sourceAsset = getAsset(payload.source.assetId);
       if (!sourceAsset) {
-        v2Unprocessable(res, "ASSET_NOT_FOUND", "Source asset not found or expired");
+        respondJobError(res, 422, "ASSET_NOT_FOUND", "Source asset not found or expired", null, { ...ctx, rejectionStage: "asset" });
         return;
       }
 
       if (sourceAsset.clientId !== clientId) {
-        v2Unprocessable(res, "ASSET_NOT_FOUND", "Source asset is not owned by this client");
+        respondJobError(res, 422, "ASSET_NOT_FOUND", "Source asset is not owned by this client", null, { ...ctx, rejectionStage: "asset-owner" });
         return;
       }
       if (sourceAsset.kind !== "source") {
-        v2Unprocessable(res, "ASSET_KIND_INVALID", "source.assetId must reference a source asset");
+        respondJobError(res, 422, "ASSET_KIND_INVALID", "source.assetId must reference a source asset", null, { ...ctx, rejectionStage: "asset-kind" });
         return;
       }
 
       const contractError = validateInputContract(payload, capability, clientId);
       if (contractError) {
-        v2Unprocessable(res, contractError.code, contractError.message);
+        respondJobError(res, 422, contractError.code, contractError.message, null, { ...ctx, rejectionStage: "contract" });
         return;
       }
 
       const parameterError = validateParameters(payload.parameters || {}, capability.parameterSchema || {});
       if (parameterError) {
-        v2BadRequest(res, "REQUEST_SCHEMA_INVALID", parameterError);
+        respondJobError(res, 400, "REQUEST_SCHEMA_INVALID", parameterError, null, { ...ctx, rejectionStage: "parameter" });
         return;
       }
 
       const availability = capability.availability || {};
       if (availability.state !== "ready" && availability.state !== "degraded") {
-        v2DependencyMissing(res, "CAPABILITY_NOT_READY", "Capability dependencies are not ready", availability.details || null);
+        respondJobError(res, 424, "CAPABILITY_NOT_READY", "Capability dependencies are not ready", safeDetails(availability.details), { ...ctx, rejectionStage: "availability" });
         return;
       }
 
@@ -119,7 +158,18 @@ export async function handleCreateJob(req, res, params) {
         }
       }
 
-      /* Create job */
+      /* Create job — log acceptance before writing response */
+      logger.info("job.create.accepted", {
+        component: "jobs-route",
+        data: {
+          capabilityId: payload.capabilityId,
+          correlationId: ctx.correlationId,
+          traceId: traceId,
+          clientId: (clientId || "").substring(0, 8) + "...",
+          durationMs: Date.now() - startMs,
+        },
+      });
+
       const job = jobRepo.create({
         clientId,
         correlationId: payload.correlationId || ("gw-" + Date.now().toString(36)),
@@ -152,13 +202,13 @@ export async function handleCreateJob(req, res, params) {
 
   } catch (e) {
       if (e.code === "INVALID_STATE_TRANSITION") {
-        v2Conflict(res, "INVALID_STATE_TRANSITION", e.message);
+        respondJobError(res, 409, "INVALID_STATE_TRANSITION", e.message, null, { ...ctx, rejectionStage: "state-transition" });
       } else if (e.code === "PAYLOAD_TOO_LARGE") {
-        v2BadRequest(res, "REQUEST_TOO_LARGE", "Job request exceeds configured limit");
+        respondJobError(res, 400, "REQUEST_TOO_LARGE", "Job request exceeds configured limit", null, { ...ctx, rejectionStage: "payload-size" });
       } else if (e.message && e.message.indexOf("JSON") !== -1) {
-        v2BadRequest(res, "REQUEST_SCHEMA_INVALID", "Invalid JSON body");
+        respondJobError(res, 400, "REQUEST_SCHEMA_INVALID", "Invalid JSON body", null, { ...ctx, rejectionStage: "json-parse" });
       } else {
-        v2ServerError(res, "JOB_CREATE_FAILED", e.message);
+        respondJobError(res, 500, "JOB_CREATE_FAILED", e.message, null, { ...ctx, rejectionStage: "catch" });
       }
   }
 }

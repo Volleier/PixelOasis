@@ -59,7 +59,7 @@ export async function dispatch(method, pathname, req, res, queryParams) {
       await exactHandler(req, res, queryParams);
       logger.info("v2.request_completed", {
         component: "v2-router",
-        data: { method, path: pathname },
+        data: { method, path: pathname, httpStatus: res.statusCode, traceId: corrId },
         durationMs: Date.now() - reqStart,
       });
       return;
@@ -77,7 +77,7 @@ export async function dispatch(method, pathname, req, res, queryParams) {
         await route.handler(req, res, params, queryParams);
         logger.info("v2.request_completed", {
           component: "v2-router",
-          data: { method, path: pathname, params },
+          data: { method, path: pathname, params, httpStatus: res.statusCode, traceId: corrId },
           durationMs: Date.now() - reqStart,
         });
         return;
@@ -88,12 +88,12 @@ export async function dispatch(method, pathname, req, res, queryParams) {
     v2NotFound(res, "NOT_FOUND", "Endpoint not found: " + method + " " + pathname);
     logger.debug("v2.not_found", {
       component: "v2-router",
-      data: { method, path: pathname },
+      data: { method, path: pathname, httpStatus: 404, traceId: corrId },
     });
   } catch (err) {
     logger.error("v2.handler_error", {
       component: "v2-router",
-      data: { method, path: pathname },
+      data: { method, path: pathname, httpStatus: 500, traceId: corrId, errorClass: err.constructor ? err.constructor.name : typeof err },
       error: err,
       durationMs: Date.now() - reqStart,
     });
