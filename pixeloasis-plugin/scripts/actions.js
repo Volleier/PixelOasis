@@ -162,7 +162,10 @@ function _onAppClick(e) {
         el.getAttribute("data-action") !== "toggle-favorite" &&
         el.getAttribute("data-action") !== "move-favorite") {
       var capId = el.getAttribute("data-capability-id");
-      if (capId && window.PO.CapabilitySections) {
+      if (capId && window.PO.CapabilityController) {
+        window.PO.CapabilityController.openCapability(capId);
+      } else if (capId && window.PO.CapabilitySections) {
+        /* Fallback if controller not loaded */
         window.PO.CapabilitySections.showPlaceholder(capId);
       }
       return;

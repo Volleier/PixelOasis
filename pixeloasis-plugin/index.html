@@ -20,6 +20,16 @@
     <script src="./scripts/capabilities/favorites-store.js"></script>
     <script src="./scripts/capabilities/capability-store.js"></script>
 
+    <!-- v2: Capture layer -->
+    <script src="./scripts/capture/capture-utils.js"></script>
+    <script src="./scripts/capture/document-capture.js"></script>
+    <script src="./scripts/capture/selection-capture.js"></script>
+    <script src="./scripts/capture/subject-capture.js"></script>
+
+    <!-- v2: Preflight & parameter form -->
+    <script src="./scripts/capabilities/preflight.js"></script>
+    <script src="./scripts/capabilities/parameter-form.js"></script>
+
     <!-- Vendor: pure-JS PNG encoder (loaded before photoshop.js) -->
     <script src="./scripts/vendor/png-encoder.js"></script>
 
@@ -31,6 +41,7 @@
 
     <!-- v2: UI rendering -->
     <script src="./scripts/ui/capability-sections.js"></script>
+    <script src="./scripts/ui/parameter-panel.js"></script>
 
     <!-- v1 compat: UI modules (status, preview, settings, parameters, workflows) -->
     <script src="./scripts/ui-status.js"></script>
@@ -38,6 +49,9 @@
     <script src="./scripts/ui-settings.js"></script>
     <script src="./scripts/ui-workflows.js"></script>
     <script src="./scripts/ui-parameters.js"></script>
+
+    <!-- v2: Capability controller (after UI modules for dependencies) -->
+    <script src="./scripts/capabilities/capability-controller.js"></script>
 
     <!-- Template (delegates to capability-sections in v2) -->
     <script src="./scripts/ui-template.js"></script>
