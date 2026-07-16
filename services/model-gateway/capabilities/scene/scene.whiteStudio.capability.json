@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "2.0",
+  "id": "scene.whiteStudio",
+  "title": {
+    "zh-CN": "白棚"
+  },
+  "description": {
+    "zh-CN": "主体抠图、灰白无缝棚生成、接触阴影与色温匹配"
+  },
+  "section": "studioComposite",
+  "input": {
+    "source": "document",
+    "mask": "none",
+    "points": "none",
+    "subjectMask": "optional"
+  },
+  "parameterSchema": {},
+  "outputSchema": {},
+  "pipeline": "white-studio-v1",
+  "variants": [],
+  "policy": {
+    "sensitive": false
+  },
+  "enabled": true,
+  "ui": {
+    "order": 10,
+    "requiresConfirm": true,
+    "icon": "scene"
+  }
+}

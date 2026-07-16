@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "2.0",
+  "id": "portrait.bustEnhance",
+  "title": {
+    "zh-CN": "丰胸"
+  },
+  "description": {
+    "zh-CN": "受限局部形变与服装褶皱修复（仅限成人）"
+  },
+  "section": "portrait",
+  "input": {
+    "source": "selection",
+    "mask": "required",
+    "points": "none",
+    "editMask": "required"
+  },
+  "parameterSchema": {},
+  "outputSchema": {},
+  "pipeline": "bust-enhance-v1",
+  "variants": [],
+  "policy": {
+    "sensitive": true
+  },
+  "enabled": true,
+  "ui": {
+    "order": 10,
+    "requiresConfirm": true,
+    "icon": "portrait"
+  }
+}

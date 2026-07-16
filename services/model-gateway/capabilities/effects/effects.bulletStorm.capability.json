@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "2.0",
+  "id": "effects.bulletStorm",
+  "title": {
+    "zh-CN": "枪林弹雨"
+  },
+  "description": {
+    "zh-CN": "多弹道、曳光、枪口方向和前后景遮挡效果"
+  },
+  "section": "combatEffects",
+  "input": {
+    "source": "document",
+    "mask": "optional",
+    "points": "optional",
+    "subjectMask": "optional"
+  },
+  "parameterSchema": {},
+  "outputSchema": {},
+  "pipeline": "bullet-storm-v1",
+  "variants": [],
+  "policy": {
+    "sensitive": false
+  },
+  "enabled": true,
+  "ui": {
+    "order": 10,
+    "requiresConfirm": true,
+    "icon": "effects"
+  }
+}

@@ -3,13 +3,15 @@
  * GET /v2/capabilities         → all enabled capabilities
  * GET /v2/capabilities/{id}    → single capability
  *
- * Currently serves fixture data. Future: loads from *.capability.json files.
+ * Uses the capability registry loaded from *.capability.json files.
+ * Falls back to fixture data if registry is not available.
  */
 
 import { writeJson, v2NotFound } from "../../utils/errors.js";
+import { getCapabilities, getCapability } from "../../capabilities/registry-instance.js";
 import logger from "../../utils/logger.js";
 
-/* ── Fixture: 27 capabilities (mirrors plugin fixture) ── */
+/* ── Fixture: fallback if registry not loaded ── */
 const CAPABILITIES_FIXTURE = [
   { id: "effects.desertSandstorm", title: "飞沙走石", section: "sceneEffects", description: "生成沙漠背景、风沙、近景颗粒和运动模糊效果", input: { source: "document", mask: "optional", points: "none", subjectMask: "optional" }, parameterSchema: {}, availability: { state: "ready", profile: "quality_16gb" }, ui: { order: 10, requiresConfirm: true } },
   { id: "effects.blackSmokeDust", title: "黑色烟尘", section: "sceneEffects", description: "分形噪声烟体与粒子效果，支持遮挡合成", input: { source: "document", mask: "optional", points: "optional", subjectMask: "optional" }, parameterSchema: {}, availability: { state: "ready", profile: "quality_16gb" }, ui: { order: 20, requiresConfirm: true } },
@@ -48,17 +50,30 @@ const _byId = {};
 /* ── GET /v2/capabilities ── */
 export async function handleCapabilities(req, res, params) {
   const locale = params.get("locale") || "zh-CN";
-  writeJson(res, 200, {
-    schemaVersion: "2.0",
-    revision: "fixture-001",
-    capabilities: CAPABILITIES_FIXTURE,
-  });
+
+  /* Try registry first, fall back to fixture */
+  const registryCaps = getCapabilities();
+  if (registryCaps && registryCaps.length > 0) {
+    writeJson(res, 200, {
+      schemaVersion: "2.0",
+      revision: "capability-registry",
+      capabilities: registryCaps,
+    });
+  } else {
+    writeJson(res, 200, {
+      schemaVersion: "2.0",
+      revision: "fixture-001",
+      capabilities: CAPABILITIES_FIXTURE,
+    });
+  }
 }
 
 /* ── GET /v2/capabilities/{id} ── */
 export async function handleCapabilityById(req, res, routeParams) {
   const id = routeParams.id;
-  const cap = _byId[id];
+
+  /* Try registry first */
+  const cap = getCapability(id) || _byId[id];
   if (!cap) {
     v2NotFound(res, "CAPABILITY_NOT_FOUND", "Capability not found: " + id);
     return;

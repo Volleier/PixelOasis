@@ -57,48 +57,17 @@ export default {
      * Step 1: Resolve workflow variant
      * ═══════════════════════════════════════════════════════════════ */
 
+    /* Resolve workflow variant — no category fallback (§13).
+     * If the exact workflowId doesn't resolve, return a clear error
+     * rather than silently using a different workflow. */
     var variant;
     try {
       variant = registry.resolveVariant(request.workflowId);
     } catch (err) {
-      /* Fallback: try any enabled variant in the same category.
-       * This lets fallback-list workflows (e.g. composition.outpaint.basic)
-       * reuse the same API workflow as their siblings (e.g. sdxl-inpaint-basic). */
-      var parts = request.workflowId.split(".");
-      var categoryPrefix = parts[0];
-      var allIds = registry.getAllWorkflowIds();
-      var fallbackVariant = null;
-
-      for (var f = 0; f < allIds.length; f++) {
-        if (allIds[f].startsWith(categoryPrefix + ".")) {
-          try {
-            fallbackVariant = registry.resolveVariant(allIds[f]);
-            break;
-          } catch (_) { /* try next */ }
-        }
-      }
-
-      if (fallbackVariant) {
-        console.warn("[comfyui] WARNING: category fallback used — " +
-          request.workflowId + " → " + fallbackVariant.workflowId +
-          ". This is a dev-only safety net; production should request the correct workflowId.");
-        logger.warn("workflow.variant_fallback", {
-          component: "adapter",
-          correlationId: request.correlationId,
-          workflowId: request.workflowId,
-          data: {
-            originalError: err.message,
-            fallbackWorkflowId: fallbackVariant.workflowId,
-            fallbackVariantId: fallbackVariant.variantId,
-          },
-        });
-        variant = fallbackVariant;
-      } else {
-        throw new ComfyUIError(
-          "Workflow resolution failed: " + err.message,
-          { workflowId: request.workflowId },
-        );
-      }
+      throw new ComfyUIError(
+        "Workflow resolution failed: " + err.message,
+        { workflowId: request.workflowId },
+      );
     }
 
     console.log("[comfyui] Resolved workflow " + request.workflowId +

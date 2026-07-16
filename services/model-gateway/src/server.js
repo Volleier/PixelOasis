@@ -32,6 +32,17 @@ try {
   logger.warn("database.init_warning", { component: "server", error: err });
 }
 
+/* Init capability registry (v2) — loads *.capability.json files */
+import { initCapabilityRegistry } from "./capabilities/registry-instance.js";
+try {
+  await initCapabilityRegistry();
+  console.log("  Capabilities: registry loaded");
+  logger.info("capabilities.initialized", { component: "server" });
+} catch (err) {
+  console.warn("  Capabilities: initialization warning — " + err.message);
+  logger.warn("capabilities.init_warning", { component: "server", error: err });
+}
+
 /* Import v2 router */
 import { dispatch as dispatchV2 } from "./api/v2/router.js";
 

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "2.0",
+  "id": "scene.quickCleanupGrade",
+  "title": {
+    "zh-CN": "场照修图"
+  },
+  "description": {
+    "zh-CN": "近景穿帮清理、背景压暗、降饱和与轻景深"
+  },
+  "section": "studioComposite",
+  "input": {
+    "source": "document",
+    "mask": "none",
+    "points": "none"
+  },
+  "parameterSchema": {},
+  "outputSchema": {},
+  "pipeline": "quick-cleanup-v1",
+  "variants": [],
+  "policy": {
+    "sensitive": false
+  },
+  "enabled": true,
+  "ui": {
+    "order": 10,
+    "requiresConfirm": true,
+    "icon": "scene"
+  }
+}

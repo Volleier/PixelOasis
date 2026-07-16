@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "2.0",
+  "id": "scene.lightBlend",
+  "title": {
+    "zh-CN": "光影溶图"
+  },
+  "description": {
+    "zh-CN": "主体重照、色彩融合与接触阴影合成"
+  },
+  "section": "studioComposite",
+  "input": {
+    "source": "document",
+    "mask": "none",
+    "points": "none",
+    "subjectMask": "required"
+  },
+  "parameterSchema": {},
+  "outputSchema": {},
+  "pipeline": "light-blend-v1",
+  "variants": [],
+  "policy": {
+    "sensitive": false
+  },
+  "enabled": true,
+  "ui": {
+    "order": 10,
+    "requiresConfirm": true,
+    "icon": "scene"
+  }
+}
