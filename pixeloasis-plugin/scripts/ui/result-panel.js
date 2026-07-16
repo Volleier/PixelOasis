@@ -127,13 +127,54 @@ window.PO.ResultPanel = (function () {
     var actions = document.createElement("div");
     actions.className = "po-result-actions";
 
-    /* Place button (P2: disabled — placement is P3) */
+    /* Check if job already placed in this document */
+    var alreadyPlaced = window.PO.LayerMetadata && window.PO.LayerMetadata.checkJobAlreadyPlaced(jobId);
+
+    /* Place button */
     var placeBtn = document.createElement("button");
     placeBtn.className = "po-button po-button--primary";
     placeBtn.type = "button";
-    placeBtn.textContent = "回填到当前文档";
-    placeBtn.disabled = true;
-    placeBtn.title = "图层回填将在下一阶段（P3）接入";
+
+    if (alreadyPlaced || (job.placementPlaced)) {
+      placeBtn.textContent = "✓ 已回填";
+      placeBtn.disabled = true;
+      placeBtn.title = "此任务结果已回填到当前文档";
+    } else {
+      placeBtn.textContent = "回填到当前文档";
+      placeBtn.disabled = false;
+      placeBtn.title = "";
+
+      /* Check document match */
+      var docInfo = window.PO.CaptureUtils.getDocumentInfo();
+      if (docInfo && job.documentId && String(docInfo.id) !== String(job.documentId)) {
+        placeBtn.textContent = "回填到当前文档（文档已变更）";
+        placeBtn.disabled = true;
+        placeBtn.title = "当前文档与生成时的文档不匹配，结果可能位置不对";
+      }
+
+      if (!placeBtn.disabled) {
+        placeBtn.addEventListener("click", async function () {
+          placeBtn.textContent = "回填中…";
+          placeBtn.disabled = true;
+
+          try {
+            var photoshop = window.require("photoshop");
+            var doc = photoshop.app.activeDocument;
+            if (!doc) throw new Error("无活动文档");
+
+            await window.PO.ResultGroup.placeJobArtifacts(job, doc);
+
+            placeBtn.textContent = "✓ 已回填";
+            placeBtn.disabled = true;
+          } catch (err) {
+            placeBtn.textContent = "回填失败，点击重试";
+            placeBtn.disabled = false;
+            window.PO.showTransientStatus &&
+              window.PO.showTransientStatus("回填失败：" + (err.userMessage || err.message || ""));
+          }
+        });
+      }
+    }
     actions.appendChild(placeBtn);
 
     /* Dismiss button */

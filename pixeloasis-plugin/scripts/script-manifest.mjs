@@ -38,11 +38,16 @@ export const sourceScripts = [
   /* 29 */ "scripts/jobs/job-store.js",
   /* 30 */ "scripts/jobs/job-events.js",
   /* 31 */ "scripts/jobs/job-controller.js",
-  /* 32 */ "scripts/ui/progress-panel.js",
-  /* 33 */ "scripts/ui/result-panel.js",
-  /* 34 */ "scripts/ui-template.js",
-  /* 35 */ "scripts/actions.js",
-  /* 36 */ "index.js",
+  /* 32 */ "scripts/placement/artifact-downloader.js",
+  /* 33 */ "scripts/placement/artifact-placer.js",
+  /* 34 */ "scripts/placement/mask-placer.js",
+  /* 35 */ "scripts/placement/layer-metadata.js",
+  /* 36 */ "scripts/placement/result-group.js",
+  /* 37 */ "scripts/ui/progress-panel.js",
+  /* 38 */ "scripts/ui/result-panel.js",
+  /* 39 */ "scripts/ui-template.js",
+  /* 40 */ "scripts/actions.js",
+  /* 41 */ "index.js",
 ];
 
 export const vendorScripts = [
