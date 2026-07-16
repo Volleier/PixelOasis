@@ -314,7 +314,14 @@ window.PO.JobController = (function () {
         correlationId: correlationId,
         progress: 0,
         createdAt: Date.now(),
+        stages: [],
+        traceId: _traceId || correlationId,
       });
+
+      /* ── Render ProgressPanel BEFORE subscribing to SSE ── */
+      if (!useMock && window.PO.ProgressPanel) {
+        window.PO.ProgressPanel.show();
+      }
 
       /* ── Start tracking ── */
       if (useMock) {

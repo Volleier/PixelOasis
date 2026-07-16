@@ -17,11 +17,21 @@ window.PO.JobEvents = (function () {
   "use strict";
 
   /* ── Watcher state ── */
-  var _watchers = {}; /* { jobId: { eventSource, timer, callbacks, lastSequence, backoffMs } } */
+  var _watchers = {}; /* { jobId: { eventSource, timer, callbacks, lastSequence, backoffMs, lastState } } */
 
   var TERMINAL_STATES = { succeeded: true, failed: true, canceled: true };
   var POLL_BACKOFF = [1500, 3000, 6000, 10000];
   var MAX_POLL_BACKOFF = 15000;
+  /* Valid state transitions: each state → allowed next states */
+  var VALID_TRANSITIONS = {
+    queued:         { preparing: true, failed: true, canceled: true },
+    preparing:      { running: true, failed: true, canceled: true },
+    running:        { postprocessing: true, failed: true, canceled: true },
+    postprocessing: { succeeded: true, failed: true, canceled: true },
+    succeeded:      {},
+    failed:         {},
+    canceled:       {},
+  };
 
   /* ═══════════════════════════════════════════════════════════════════
    * watch(jobId, callbacks)
@@ -39,8 +49,11 @@ window.PO.JobEvents = (function () {
       timer: null,
       callbacks: callbacks,
       lastSequence: 0,
+      lastState: null,
       backoffMs: POLL_BACKOFF[0],
       backoffIdx: 0,
+      pendingTerminal: null,
+      polling: false,
     };
 
     _watchers[jobId] = watcher;
@@ -76,10 +89,10 @@ window.PO.JobEvents = (function () {
       watcher.backoffMs = POLL_BACKOFF[0];
     };
 
-    es.onmessage = function (event) {
+    function handleSseEvent(event) {
       try {
         var data = JSON.parse(event.data);
-        _processEvent(jobId, watcher, data);
+        _processEvent(jobId, watcher, data, event.type || "message");
         if (event.lastEventId) {
           watcher.lastSequence = parseInt(event.lastEventId, 10) || watcher.lastSequence;
         }
@@ -90,7 +103,14 @@ window.PO.JobEvents = (function () {
           data: { jobId: jobId },
         });
       }
-    };
+    }
+
+    es.onmessage = handleSseEvent;
+    if (typeof es.addEventListener === "function") {
+      es.addEventListener("state", handleSseEvent);
+      es.addEventListener("state_change", handleSseEvent);
+      es.addEventListener("complete", handleSseEvent);
+    }
 
     es.onerror = function () {
       window.PO.Logger && window.PO.Logger.warn("job_events.sse_error", {
@@ -99,7 +119,9 @@ window.PO.JobEvents = (function () {
       });
       /* Close SSE, fall back to polling */
       _closeSSE(jobId, watcher);
-      _fallbackToPolling(jobId, watcher);
+      if (!watcher.polling) {
+        _fallbackToPolling(jobId, watcher);
+      }
     };
   }
 
@@ -114,7 +136,9 @@ window.PO.JobEvents = (function () {
   /* ── Fall back to polling ── */
   function _fallbackToPolling(jobId, watcher) {
     if (!_watchers[jobId]) return; /* Already unwatched */
+    if (watcher.polling) return;    /* Already polling */
 
+    watcher.polling = true;
     window.PO.Logger && window.PO.Logger.info("job_events.polling_started", {
       component: "job-events",
       data: { jobId: jobId, backoffMs: watcher.backoffMs },
@@ -125,12 +149,23 @@ window.PO.JobEvents = (function () {
 
   /* ── Poll job status ── */
   async function _pollJob(jobId, watcher) {
+    /* Attempt SSE recovery: if the EventSource reconnected, stop polling */
+    if (watcher.eventSource && watcher.eventSource.readyState === 1 /* OPEN */) {
+      watcher.polling = false;
+      if (watcher.timer) { clearTimeout(watcher.timer); watcher.timer = null; }
+      window.PO.Logger && window.PO.Logger.info("job_events.sse_recovered", {
+        component: "job-events",
+        data: { jobId: jobId },
+      });
+      return;
+    }
+
     try {
       var result = await window.PO.GatewayV2Client.getJob(jobId);
       var data = result.data;
 
       if (data) {
-        _processEvent(jobId, watcher, data);
+        _processEvent(jobId, watcher, data, "poll");
 
         /* If terminal, stop */
         if (TERMINAL_STATES[data.state]) {
@@ -159,7 +194,7 @@ window.PO.JobEvents = (function () {
   }
 
   /* ── Process an event / poll result ── */
-  function _processEvent(jobId, watcher, data) {
+  function _processEvent(jobId, watcher, data, eventType) {
     /* Dedup by sequence */
     if (data.sequence && data.sequence <= watcher.lastSequence) {
       return;
@@ -168,9 +203,29 @@ window.PO.JobEvents = (function () {
       watcher.lastSequence = data.sequence;
     }
 
-    /* Validate state transition */
-    var state = data.state;
-    var prevState = data.prevState;
+    /* Validate state transition — reject terminal→back */
+    var state = data.state || data.newState;
+    var prevState = data.prevState || watcher.lastState;
+    if (!state) return;
+    data.state = state;
+
+    /* Reject invalid transitions (e.g. terminal → back, skipped stages) */
+    if (watcher.lastState && TERMINAL_STATES[watcher.lastState]) {
+      window.PO.Logger && window.PO.Logger.warn("job_events.transition_rejected", {
+        component: "job-events",
+        data: { jobId: jobId, from: watcher.lastState, to: state, reason: "terminal" },
+      });
+      return;
+    }
+    if (watcher.lastState && VALID_TRANSITIONS[watcher.lastState] &&
+        !VALID_TRANSITIONS[watcher.lastState][state]) {
+      window.PO.Logger && window.PO.Logger.warn("job_events.transition_rejected", {
+        component: "job-events",
+        data: { jobId: jobId, from: watcher.lastState, to: state, reason: "invalid" },
+      });
+      return;
+    }
+    watcher.lastState = state;
 
     window.PO.Logger && window.PO.Logger.info("job_events.state_change", {
       component: "job-events",
@@ -202,10 +257,18 @@ window.PO.JobEvents = (function () {
 
     /* Terminal state */
     if (TERMINAL_STATES[state]) {
+      if (eventType !== "complete" && eventType !== "poll") {
+        watcher.pendingTerminal = data;
+        return;
+      }
+      if (watcher.pendingTerminal) {
+        data.message = data.message || watcher.pendingTerminal.message;
+        data.error = data.error || watcher.pendingTerminal.error;
+      }
       if (state === "succeeded" && watcher.callbacks.onComplete) {
         watcher.callbacks.onComplete(jobId, data);
       } else if (state === "failed" && watcher.callbacks.onError) {
-        watcher.callbacks.onError(jobId, data.error || { message: "任务失败" });
+        watcher.callbacks.onError(jobId, data.error || { message: data.message || "任务失败" });
       } else if (state === "canceled" && watcher.callbacks.onError) {
         watcher.callbacks.onError(jobId, { code: "CANCELED", message: "任务已取消" });
       }
