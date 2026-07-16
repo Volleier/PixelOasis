@@ -1,6 +1,16 @@
 window.PO = window.PO || {};
 
-/* ── Render workflow buttons dynamically from the registry (ImplList §8.1) ── */
+/* ui-template.js — v2 static HTML template
+ *
+ * In v2, the template is built by CapabilitySections.renderApp() using
+ * DOM API.  This file keeps buildTemplate() as the entry point that
+ * index.js calls, and it delegates to CapabilitySections.renderApp().
+ *
+ * The old v1 buildSections() and renderWorkflowButtons() are kept for
+ * backward compatibility but are no longer called by the v2 startup path.
+ */
+
+/* ── Legacy v1: render workflow buttons (kept for backward compat) ── */
 window.PO.renderWorkflowButtons = function (category) {
   var ids = window.PO.PHASE1_WORKFLOW_IDS || [];
   var html = ['<div class="po-action-row">'];
@@ -20,6 +30,7 @@ window.PO.renderWorkflowButtons = function (category) {
   return html.join("");
 };
 
+/* ── Legacy v1: build sections (kept for backward compat) ── */
 window.PO.buildSections = function () {
   var TEXT = window.PO.TEXT;
 
@@ -53,33 +64,36 @@ window.PO.buildSections = function () {
     .join("");
 };
 
+/* ── v2 buildTemplate — delegates to CapabilitySections.renderApp() ── */
 window.PO.buildTemplate = function () {
+  var appRoot = document.getElementById("app");
+  if (!appRoot) return "";
+
+  /* If CapabilitySections is loaded (v2 path), use DOM API */
+  if (window.PO.CapabilitySections && window.PO.CapabilitySections.renderApp) {
+    window.PO.CapabilitySections.renderApp(appRoot);
+    return ""; /* renderApp already populated the DOM */
+  }
+
+  /* Fallback: v1 template (used when v2 modules aren't loaded) */
   var TEXT = window.PO.TEXT;
   return [
     '<div class="po-root">',
-
-    /* ── Main content ── */
     '<main class="po-main">',
     '<div class="po-main-scroll">',
     window.PO.buildSections(),
     "</div>",
     "</main>",
-
-    /* ── Preview area (in normal flow, below main) ── */
     '<section class="po-preview">',
     '<div class="po-preview__viewport">',
     '<img id="preview-image" class="po-preview__image" alt="selection preview" />',
     '<div id="preview-empty" class="po-preview__empty">' + TEXT.previewEmpty + "</div>",
     "</div>",
     "</section>",
-
-    /* ── Bottom bar ── */
     '<footer class="po-bottom-bar">',
     '<div id="status" class="po-status">' + TEXT.ready + "</div>",
     '<button id="settings-btn" class="po-bottom-button" type="button">' + TEXT.settings + "</button>",
     "</footer>",
-
-    /* ── 设置区 (overlay + drawer) ── */
     '<div id="settings-overlay" class="po-settings-overlay" hidden></div>',
     '<aside id="settings-drawer" class="po-settings-drawer" hidden>',
     '<div class="po-settings-drawer__body">',
@@ -92,14 +106,10 @@ window.PO.buildTemplate = function () {
     '<span class="po-toggle__thumb"></span>',
     "</button>",
     "</div>",
-
-    /* Gateway URL */
     '<div class="po-setting-group">',
     '<label class="po-setting-row__label" for="gateway-url-input">' + TEXT.gatewayUrlLabel + "</label>",
     '<input id="gateway-url-input" class="po-settings-url-input" type="text" placeholder="' + TEXT.gatewayUrlPlaceholder + '" />',
     "</div>",
-
-    /* Log settings */
     '<div class="po-setting-group">',
     '<div class="po-setting-row">',
     '<span class="po-setting-row__label">日志记录</span>',
@@ -109,13 +119,9 @@ window.PO.buildTemplate = function () {
     "</div>",
     '<button id="log-open-btn" class="po-button po-button--secondary" type="button" style="margin-top:8px;width:100%;">打开日志</button>',
     "</div>",
-
     "</div>",
     "</aside>",
-
-    /* ── 参数页 (full-screen overlay) ── */
     window.PO.buildParameterPage ? window.PO.buildParameterPage() : "",
-
     "</div>",
   ].join("");
 };

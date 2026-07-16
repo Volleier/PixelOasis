@@ -1,5 +1,11 @@
+/* PixelOasis v2 — Classic UXP dist build
+ *
+ * Uses script-manifest.mjs as the single source of truth for file lists.
+ * Supports subdirectory structure: api/, capabilities/, ui/, vendor/, etc.
+ */
+
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -7,70 +13,125 @@ const pluginRoot = resolve(scriptDir, "..");
 const distDir = resolve(pluginRoot, "dist");
 const distScriptsDir = resolve(distDir, "scripts");
 
+/* Import manifest (file:// URL required on Windows) */
+const manifestPath = resolve(scriptDir, "script-manifest.mjs");
+const manifestUrl = new URL("file:///" + manifestPath.replace(/\\/g, "/")).href;
+const manifest = await import(manifestUrl);
+const sourceScripts = manifest.sourceScripts || [];
+const vendorScripts = manifest.vendorScripts || [];
+const rootFiles = manifest.rootFiles || ["index.html", "index.js", "panel.css", "manifest.json"];
+const legacyScripts = manifest.legacyScripts || [];
+
+/* All scripts to copy (source + legacy) */
+const allScripts = [...new Set([...sourceScripts, ...legacyScripts])];
+
 await rm(distDir, { recursive: true, force: true });
 await mkdir(distDir, { recursive: true });
-await mkdir(distScriptsDir, { recursive: true });
 
-/* Root-level files */
-const rootFiles = ["index.html", "index.js", "panel.css", "manifest.json"];
+/* ── Root-level files ── */
 for (const filename of rootFiles) {
-  await copyFile(resolve(pluginRoot, filename), resolve(distDir, filename));
+  try {
+    await copyFile(resolve(pluginRoot, filename), resolve(distDir, basename(filename)));
+  } catch (e) {
+    console.warn(`Warning: root file not found: ${filename}`);
+  }
 }
 
-/* Icons */
+/* Also copy index.html directly (in case it's already listed as rootFiles) */
+const indexPath = resolve(pluginRoot, "index.html");
+const distIndexPath = resolve(distDir, "index.html");
+try {
+  await copyFile(indexPath, distIndexPath);
+} catch (e) {
+  console.error("Error: index.html not found — build failed");
+  process.exit(1);
+}
+
+/* ── Icons ── */
 const distIconsDir = resolve(distDir, "icons");
 await mkdir(distIconsDir, { recursive: true });
 const iconFiles = ["icon.png", "icon@1x.png", "icon@2x.png"];
 for (const filename of iconFiles) {
-  await copyFile(resolve(pluginRoot, "icons", filename), resolve(distIconsDir, filename));
+  try {
+    await copyFile(resolve(pluginRoot, "icons", filename), resolve(distIconsDir, filename));
+  } catch (e) {
+    console.warn(`Warning: icon file not found: ${filename}`);
+  }
 }
 
-/* Script modules */
-const scriptFiles = [
-  "ui-text.js",
-  "state.js",
-  "logger.js",
-  "ui-template.js",
-  "ui-workflows.js",
-  "photoshop.js",
-  "gateway-client.js",
-  "photoshop-place-layer.js",
-  "placement-engine.js",
-  "ui-status.js",
-  "ui-preview.js",
-  "ui-settings.js",
-  "ui-parameters.js",
-  "actions.js",
-];
+/* ── Script files (handle subdirectories) ── */
+for (const scriptRel of allScripts) {
+  const srcPath = resolve(pluginRoot, scriptRel);
+  const destPath = resolve(distDir, scriptRel);
+  const destSubdir = dirname(destPath);
 
-for (const filename of scriptFiles) {
-  await copyFile(
-    resolve(scriptDir, filename),
-    resolve(distScriptsDir, filename),
-  );
+  await mkdir(destSubdir, { recursive: true });
+
+  try {
+    await copyFile(srcPath, destPath);
+  } catch (e) {
+    console.warn(`Warning: script not found: ${scriptRel}`);
+  }
 }
 
-/* Vendor modules */
-const distVendorDir = resolve(distDir, "scripts", "vendor");
-await mkdir(distVendorDir, { recursive: true });
-const vendorFiles = ["png-encoder.js"];
-
-for (const filename of vendorFiles) {
-  await copyFile(
-    resolve(scriptDir, "vendor", filename),
-    resolve(distVendorDir, filename),
-  );
+/* ── Patch manifest: set main to index.html ── */
+const distManifestPath = resolve(distDir, "manifest.json");
+try {
+  const manifestRaw = await readFile(distManifestPath, "utf8");
+  const manifestJson = JSON.parse(manifestRaw);
+  manifestJson.main = "index.html";
+  await writeFile(distManifestPath, `${JSON.stringify(manifestJson, null, 2)}\n`, "utf8");
+} catch (e) {
+  console.warn("Warning: could not patch manifest.json");
 }
 
-/* Patch manifest — set main to index.html */
-const manifestTarget = resolve(distDir, "manifest.json");
-const manifestRaw = await readFile(manifestTarget, "utf8");
-const manifest = JSON.parse(manifestRaw);
-manifest.main = "index.html";
+/* ── Validate: ensure index.html script src matches manifest order ── */
+const builtIndex = await readFile(distIndexPath, "utf8");
+const scriptSrcMatches = [...builtIndex.matchAll(/<script\s+src="([^"]+)"/g)];
+const actualOrder = scriptSrcMatches.map(m => m[1].replace(/^\//, ""));
 
-await writeFile(manifestTarget, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+/* Build expected order from manifest */
+const expectedOrder = [];
+for (const s of sourceScripts) {
+  if (s === "index.js") {
+    expectedOrder.push("./index.js");
+  } else if (s.startsWith("scripts/")) {
+    expectedOrder.push("./" + s);
+  } else {
+    expectedOrder.push("./scripts/" + s);
+  }
+}
+
+/* Check that expected scripts exist in actual */
+let orderOk = true;
+for (let i = 0; i < expectedOrder.length; i++) {
+  const idx = actualOrder.indexOf(expectedOrder[i]);
+  if (idx === -1) {
+    console.warn(`Warning: script missing from index.html: ${expectedOrder[i]}`);
+    orderOk = false;
+  }
+}
+
+/* Check relative order */
+let lastIdx = -1;
+for (let i = 0; i < expectedOrder.length; i++) {
+  const idx = actualOrder.indexOf(expectedOrder[i]);
+  if (idx !== -1) {
+    if (idx < lastIdx) {
+      console.warn(`Warning: script order violation: ${expectedOrder[i]} loaded before expected`);
+      orderOk = false;
+    }
+    lastIdx = idx;
+  }
+}
+
+if (orderOk) {
+  console.log("✓ Script loading order validated against manifest");
+} else {
+  console.warn("⚠ Script loading order has discrepancies — review index.html");
+}
 
 console.log("Prepared classic UXP dist for UXP Developer Tool.");
-console.log(`  Root:    index.html, index.js, panel.css, manifest.json`);
-console.log(`  Scripts: ${scriptFiles.map(f => `scripts/${f}`).join(", ")}`);
-console.log(`  Vendor:  ${vendorFiles.map(f => `scripts/vendor/${f}`).join(", ")}`);
+console.log(`  Root:    ${rootFiles.join(", ")}`);
+console.log(`  Scripts: ${sourceScripts.length} modules`);
+console.log(`  Icons:   ${iconFiles.join(", ")}`);

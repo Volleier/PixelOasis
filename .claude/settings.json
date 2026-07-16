@@ -3,7 +3,11 @@
     "allow": [
       "Bash(node deploy-plugin.mjs)",
       "Bash(ls -la \"D:/Adobe/Adobe Photoshop 2025/Plug-ins/com.pixeloasis.plugin/\")",
-      "Read(//d/Adobe/Adobe Photoshop 2025/Plug-ins/com.pixeloasis.plugin/**)"
+      "Read(//d/Adobe/Adobe Photoshop 2025/Plug-ins/com.pixeloasis.plugin/**)",
+      "Bash(npm run *)",
+      "Bash(node tools/deploy-plugin.mjs)",
+      "Bash(node -e \"import\\('./pixeloasis-plugin/scripts/capabilities/capability-labels.js'\\).catch\\(\\(\\)=>{}\\); console.log\\('Fixture check done'\\)\")",
+      "Bash(node -e \"const fs = require\\('fs'\\); const c = fs.readFileSync\\('pixeloasis-plugin/scripts/capabilities/capability-labels.js','utf8'\\); const m = c.match\\(/EXPECTED_CAPABILITY_IDS\\\\s*=\\\\s*\\\\[\\([\\\\s\\\\S]*?\\)\\\\];/\\); if\\(m\\) console.log\\(m[1].split\\(','\\).filter\\(l=>l.includes\\('\\\\\"'\\)\\).length\\)\")"
     ]
   }
 }

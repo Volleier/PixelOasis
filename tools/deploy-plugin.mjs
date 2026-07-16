@@ -1,3 +1,10 @@
+/* PixelOasis v2 — Deploy single-file Photoshop plugin
+ *
+ * Uses script-manifest.mjs as the single source of truth.
+ * Concatenates all scripts into main.js in load order.
+ * Handles subdirectories: api/, capabilities/, ui/, vendor/, etc.
+ */
+
 import { copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -26,43 +33,51 @@ if (existsSync(configPath)) {
 const psMinHostVersion = config.photoshop?.min_host_version || "27.0.0";
 const psPluginPath = config.photoshop?.plugin_path || "";
 
-const scriptFiles = [
-  "scripts/ui-text.js",
-  "scripts/state.js",
-  "scripts/logger.js",
-  "scripts/ui-template.js",
-  "scripts/ui-workflows.js",
-  "scripts/vendor/png-encoder.js",
-  "scripts/gateway-client.js",
-  "scripts/photoshop.js",
-  "scripts/photoshop-place-layer.js",
-  "scripts/placement-engine.js",
-  "scripts/ui-status.js",
-  "scripts/ui-preview.js",
-  "scripts/ui-settings.js",
-  "scripts/ui-parameters.js",
-  "scripts/actions.js",
-  "index.js",
-];
+/* ── Import manifest ── */
+const manifestPath = resolve(pluginRoot, "scripts", "script-manifest.mjs");
+const manifestUrl = new URL("file:///" + manifestPath.replace(/\\/g, "/")).href;
+const manifest = await import(manifestUrl);
+const sourceScripts = manifest.sourceScripts || [];
+const legacyScripts = manifest.legacyScripts || [];
+
+/* Build ordered script list: source + legacy (deduplicated) */
+const seen = new Set();
+const allScripts = [];
+for (const s of [...sourceScripts, ...legacyScripts]) {
+  if (!seen.has(s)) {
+    seen.add(s);
+    allScripts.push(s);
+  }
+}
 
 await rm(deployDir, { recursive: true, force: true });
 await rm(legacyDeployDir, { recursive: true, force: true });
 await mkdir(deployDir, { recursive: true });
 await mkdir(resolve(deployDir, "icons"), { recursive: true });
 
+/* ── Concatenate all scripts in manifest order ── */
 const chunks = [];
-for (const filename of scriptFiles) {
-  const content = await readFile(resolve(pluginRoot, filename), "utf8");
-  chunks.push(`\n/* ===== ${filename} ===== */\n${content}\n`);
+for (const filename of allScripts) {
+  try {
+    const content = await readFile(resolve(pluginRoot, filename), "utf8");
+    chunks.push(`\n/* ===== ${filename} ===== */\n${content}\n`);
+  } catch (e) {
+    console.warn(`Warning: script not found, skipping: ${filename}`);
+  }
 }
 
 await writeFile(resolve(deployDir, "main.js"), chunks.join("\n"), "utf8");
 await copyFile(resolve(pluginRoot, "panel.css"), resolve(deployDir, "panel.css"));
 
 for (const icon of ["icon.png", "icon@1x.png", "icon@2x.png"]) {
-  await copyFile(resolve(pluginRoot, "icons", icon), resolve(deployDir, "icons", icon));
+  try {
+    await copyFile(resolve(pluginRoot, "icons", icon), resolve(deployDir, "icons", icon));
+  } catch (e) {
+    console.warn(`Warning: icon not found: ${icon}`);
+  }
 }
 
+/* ── Minimal index.html for single-file deployment ── */
 const indexHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
   <head>
@@ -80,11 +95,12 @@ const indexHtml = `<!DOCTYPE html>
 
 await writeFile(resolve(deployDir, "index.html"), indexHtml, "utf8");
 
-const manifest = {
+/* ── manifest v6 for direct deployment ── */
+const manifestV6 = {
   manifestVersion: 6,
   id: "com.pixeloasis.plugin",
   name: "PixelOasis",
-  version: "0.1.0",
+  version: "0.2.0",
   main: "index.html",
   icons: [
     { width: 32, height: 32, path: "icons/icon@1x.png" },
@@ -141,14 +157,15 @@ const manifest = {
   },
 };
 
-await writeFile(resolve(deployDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+await writeFile(resolve(deployDir, "manifest.json"), `${JSON.stringify(manifestV6, null, 2)}\n`, "utf8");
 
 console.log("Prepared deployable Photoshop plugin.");
 console.log(`  Directory: ${deployDir}`);
 console.log(`  Host minVersion: ${psMinHostVersion}`);
+console.log(`  Scripts bundled: ${allScripts.length} modules`);
 console.log("  Files: manifest.json, index.html, main.js, panel.css, icons/");
 
-/* P2-2: Detect placeholder paths */
+/* ── Detect placeholder paths ── */
 function isPlaceholderPath(p) {
   if (!p || typeof p !== "string") return true;
   var trimmed = p.trim();
@@ -157,7 +174,7 @@ function isPlaceholderPath(p) {
   return false;
 }
 
-/* P2-1: Auto-deploy to photoshop.plugin_path */
+/* ── Auto-deploy to photoshop.plugin_path ── */
 if (psPluginPath) {
   if (isPlaceholderPath(psPluginPath)) {
     console.warn("\nWarning: photoshop.plugin_path appears to be a placeholder value.");

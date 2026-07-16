@@ -1,126 +1,208 @@
-/* PixelOasis — Assembly & startup
+/* PixelOasis v2 — Assembly & startup
  *
- * Dependencies (loaded via <script> tags in index.html, in order):
- *   scripts/ui-text.js        → window.PO.TEXT
- *   scripts/state.js           → window.PO.state, clearTransientTimer
- *   scripts/ui-template.js     → window.PO.buildTemplate
- *   scripts/ui-workflows.js    → window.PO.WORKFLOWS, CATEGORY_WORKFLOW
- *   scripts/vendor/png-encoder.js → window.PO.PngEncoder
- *   scripts/photoshop.js       → PS API wrappers
- *   scripts/ui-status.js      → setStatus, showTransientStatus, refreshSelectionStatus
- *   scripts/ui-preview.js      → updatePreview
- *   scripts/ui-settings.js     → toggleSettings, initSettings
- *   scripts/ui-parameters.js   → buildParameterPage, open/close/save, initParameterPage
- *   scripts/actions.js         → handleCapture, handleSelectTool, bindEvents
+ * Startup flow (roadmap §5.2):
+ *   1. buildTemplate() — query fixed containers and overlay DOM
+ *   2. initSettings(), init stores, bindEvents()
+ *   3. restoreFavorites(), restoreUiPreferences()
+ *   4. refreshGatewayHealth() → refreshCapabilities()
+ *   5. renderCapabilityApp() — favorites + all sections
+ *   6. (future) recoverActiveJobs()
+ *
+ * Prohibited at startup:
+ *   - auto capture, auto upload, auto placement
+ *   - calling v1 loadWorkflowsFromBackend()
+ *   - category-fallback rendering
  */
 
 (function () {
+  "use strict";
+
   try {
     /* ── Startup log ── */
-    window.PO.Logger.info("plugin.started", {
+    window.PO.Logger && window.PO.Logger.info("plugin.started", {
       component: "startup",
-      message: "PixelOasis initializing",
-      data: { version: "0.1.0" },
+      message: "PixelOasis v2 initializing",
+      data: { version: "0.2.0" },
     });
 
-    /* ── Render template ── */
+    /* ═══════════════════════════════════════════════════════════════
+     * Step 1: Build template (now uses CapabilitySections.renderApp)
+     * ═══════════════════════════════════════════════════════════════ */
+
     var appRoot = document.getElementById("app");
     if (!appRoot) throw new Error("PixelOasis root element not found.");
-    appRoot.innerHTML = window.PO.buildTemplate();
 
-    /* ── Query DOM elements ── */
-    window.PO.elements = {
-      mainEl: document.querySelector(".po-main"),
-      settingsButton: document.getElementById("settings-btn"),
-      settingsOverlay: document.getElementById("settings-overlay"),
-      settingsDrawer: document.getElementById("settings-drawer"),
-      themeToggleButton: document.getElementById("theme-toggle-btn"),
-      gatewayUrlInput: document.getElementById("gateway-url-input"),
-      statusNode: document.getElementById("status"),
-      previewEmpty: document.getElementById("preview-empty"),
-      previewImage: document.getElementById("preview-image"),
-    };
+    /* buildTemplate() delegates to CapabilitySections.renderApp() in v2 */
+    window.PO.buildTemplate();
 
-    /* ── Query parameter page elements ── */
-    window.PO.paramElements = {
-      page: document.getElementById("param-page"),
-      title: document.getElementById("param-title"),
-      backBtn: document.getElementById("param-back-btn"),
-      backBtnBottom: document.getElementById("param-back-btn-bottom"),
-      prompt: document.getElementById("param-prompt"),
-      negPrompt: document.getElementById("param-neg-prompt"),
-      seed: document.getElementById("param-seed"),
-      randomSeedBtn: document.getElementById("param-random-seed"),
-      steps: document.getElementById("param-steps"),
-      stepsVal: document.getElementById("param-steps-val"),
-      cfg: document.getElementById("param-cfg"),
-      cfgVal: document.getElementById("param-cfg-val"),
-      denoise: document.getElementById("param-denoise"),
-      denoiseVal: document.getElementById("param-denoise-val"),
-      sampler: document.getElementById("param-sampler"),
-      scheduler: document.getElementById("param-scheduler"),
-      runBtn: document.getElementById("param-run-btn"),
-    };
+    /* ═══════════════════════════════════════════════════════════════
+     * Step 2: Query DOM elements (created by renderApp)
+     * ═══════════════════════════════════════════════════════════════ */
 
+    /* Elements are already set by CapabilitySections.renderApp() onto
+       window.PO.elements.  Ensure critical elements exist. */
     var els = window.PO.elements;
-
-    /* Validate critical elements */
-    if (
-      !els.settingsButton ||
-      !els.settingsOverlay ||
-      !els.settingsDrawer ||
-      !els.themeToggleButton ||
-      !els.statusNode ||
-      !els.previewEmpty ||
-      !els.previewImage
-    ) {
-      throw new Error("PixelOasis UI element not found.");
+    if (!els || !els.statusNode || !els.settingsButton) {
+      /* v1 fallback: query them from DOM directly */
+      window.PO.elements = window.PO.elements || {};
+      window.PO.elements.statusNode = document.getElementById("status");
+      window.PO.elements.settingsButton = document.getElementById("settings-btn");
+      window.PO.elements.settingsOverlay = document.getElementById("settings-overlay");
+      window.PO.elements.settingsDrawer = document.getElementById("settings-drawer");
+      window.PO.elements.themeToggleButton = document.getElementById("theme-toggle-btn");
+      window.PO.elements.gatewayUrlInput = document.getElementById("gateway-url-input");
     }
 
-    /* ── Bind events ── */
-    window.PO.bindEvents();
+    /* ═══════════════════════════════════════════════════════════════
+     * Step 3: Init settings (binds drawer events)
+     * ═══════════════════════════════════════════════════════════════ */
 
-    /* ── Init parameter page ── */
-    window.PO.initParameterPage();
+    if (window.PO.initSettings) window.PO.initSettings();
 
-    /* ── Load workflows from backend, then re-render buttons ── (ImplList §8.1) */
-    window.PO.loadWorkflowsFromBackend().then(function () {
-      /* Re-render section bodies with backend-driven workflow buttons */
-      if (window.PO.renderWorkflowButtons) {
-        var categories = ["composition", "quality"];
-        for (var ci = 0; ci < categories.length; ci++) {
-          var body = document.querySelector('.po-section[data-section="' + categories[ci] + '"] .po-section__body');
-          if (body) body.innerHTML = window.PO.renderWorkflowButtons(categories[ci]);
+    /* ═══════════════════════════════════════════════════════════════
+     * Step 4: Restore persisted state
+     * ═══════════════════════════════════════════════════════════════ */
+
+    /* Restore favorites from localStorage */
+    if (window.PO.FavoritesStore) {
+      window.PO.FavoritesStore.loadFavorites();
+    }
+
+    /* Restore section collapse state */
+    if (window.PO.CapabilitySections && window.PO.CapabilitySections.restoreCollapseState) {
+      window.PO.CapabilitySections.restoreCollapseState();
+    }
+
+    /* Restore gateway URL from v1 state (migrate forward) */
+    try {
+      var savedUrl = localStorage.getItem("po.settings.v2");
+      if (!savedUrl) {
+        /* Try old setting */
+        savedUrl = localStorage.getItem("po.gatewayUrl");
+      }
+      if (savedUrl) {
+        var urlData = JSON.parse(savedUrl);
+        var url = (urlData && urlData.gatewayUrl) || urlData;
+        if (typeof url === "string" && url.length > 0) {
+          window.PO.state.gateway.baseUrl = url;
+          if (els && els.gatewayUrlInput) {
+            els.gatewayUrlInput.value = url;
+          }
         }
       }
-      /* Re-bind events for new buttons */
-      if (window.PO.bindWorkflowButtons) window.PO.bindWorkflowButtons();
+    } catch (e) { /* ignore */ }
+
+    /* ═══════════════════════════════════════════════════════════════
+     * Step 5: Refresh capabilities
+     * ═══════════════════════════════════════════════════════════════ */
+
+    var capsPromise;
+    if (window.PO.CapabilityStore) {
+      capsPromise = window.PO.CapabilityStore.refreshCapabilities({ force: false });
+    } else {
+      capsPromise = Promise.resolve();
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+     * Step 6: Render UI (after capabilities are available)
+     * ═══════════════════════════════════════════════════════════════ */
+
+    capsPromise.then(function () {
+      if (window.PO.CapabilitySections) {
+        window.PO.CapabilitySections.renderAll();
+      }
+
+      /* Prune expired tombstones */
+      if (window.PO.FavoritesStore && window.PO.CapabilityStore) {
+        var allCaps = window.PO.CapabilityStore.getAll();
+        var allIds = [];
+        for (var i = 0; i < allCaps.length; i++) {
+          allIds.push(allCaps[i].id);
+        }
+        window.PO.FavoritesStore.pruneTombstones(allIds);
+      }
+
+      /* Update task link */
+      if (window.PO.CapabilitySections && window.PO.CapabilitySections.updateTaskLink) {
+        window.PO.CapabilitySections.updateTaskLink(0);
+      }
     }).catch(function (err) {
-      /* Backend unreachable — local WORKFLOWS already rendered as fallback */
-      window.PO.Logger.warn("workflows.backend_unreachable", {
+      window.PO.Logger && window.PO.Logger.error("capabilities.render_failed", {
         component: "startup",
-        data: { reason: err ? (err.message || String(err)) : "unknown" },
+        error: err,
       });
-      try {
-        window.PO.setStatus("离线模式 — 使用本地工作流");
-        window.PO.showTransientStatus("无法连接到网关，使用本地工作流");
-      } catch (_) { /* ignore */ }
+      /* Try rendering with whatever we have */
+      if (window.PO.CapabilitySections) {
+        window.PO.CapabilitySections.renderAll();
+      }
     });
 
-    /* ── Startup ── */
+    /* ═══════════════════════════════════════════════════════════════
+     * Step 7: Bind events
+     * ═══════════════════════════════════════════════════════════════ */
+
+    window.PO.bindEvents();
+
+    /* ═══════════════════════════════════════════════════════════════
+     * Step 8: Gateway health check (background, non-blocking)
+     * ═══════════════════════════════════════════════════════════════ */
+
+    if (window.PO.GatewayClient && window.PO.GatewayClient.health) {
+      window.PO.GatewayClient.health().then(function (healthy) {
+        window.PO.state.gateway.health = healthy ? "online" : "offline";
+
+        if (window.PO.CapabilitySections && window.PO.CapabilitySections.updateEnvStatus) {
+          window.PO.CapabilitySections.updateEnvStatus(
+            healthy ? "网关已连接" : "网关离线 — 使用本地缓存"
+          );
+        }
+
+        if (healthy) {
+          window.PO.setStatus && window.PO.setStatus("网关就绪");
+          /* Try to refresh capabilities from live gateway */
+          if (window.PO.CapabilityStore) {
+            window.PO.CapabilityStore.refreshCapabilities({ force: true }).then(function () {
+              if (window.PO.CapabilitySections) {
+                window.PO.CapabilitySections.renderAll();
+              }
+            }).catch(function () { /* keep fixture/cache data */ });
+          }
+        } else {
+          window.PO.setStatus && window.PO.setStatus("离线模式 — 使用缓存数据");
+        }
+      }).catch(function () {
+        window.PO.state.gateway.health = "offline";
+        window.PO.setStatus && window.PO.setStatus("离线模式 — 使用缓存数据");
+        if (window.PO.CapabilitySections && window.PO.CapabilitySections.updateEnvStatus) {
+          window.PO.CapabilitySections.updateEnvStatus("网关离线 — 使用本地缓存");
+        }
+      });
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+     * Step 9: Photoshop document listener (lightweight, non-blocking)
+     * ═══════════════════════════════════════════════════════════════ */
+
     try {
       var photoshop = window.require("photoshop");
       if (photoshop && photoshop.app) {
-        window.PO.updatePreview(null);
-        window.PO.refreshSelectionStatus();
+        window.PO.refreshSelectionStatus && window.PO.refreshSelectionStatus();
+        window.PO.setStatus && window.PO.setStatus("就绪");
       } else {
-        window.PO.setStatus("uxp shell ready");
+        window.PO.setStatus && window.PO.setStatus("uxp shell ready");
       }
     } catch (error) {
-      window.PO.setStatus(error instanceof Error ? error.message : String(error));
+      window.PO.setStatus &&
+        window.PO.setStatus(error instanceof Error ? error.message : String(error));
     }
+
+    window.PO.Logger && window.PO.Logger.info("plugin.ready", {
+      component: "startup",
+      message: "PixelOasis v2 initialized",
+    });
+
   } catch (error) {
-    window.PO.Logger.error("plugin.initialization_failed", {
+    window.PO.Logger && window.PO.Logger.error("plugin.initialization_failed", {
       component: "startup",
       error: error,
     });
