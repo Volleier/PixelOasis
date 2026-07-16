@@ -124,7 +124,7 @@ export function updateState(id, newState, opts) {
   opts = opts || {};
   const db = getDb();
 
-  const current = db.prepare("SELECT state FROM jobs WHERE id = ?").get(id);
+  const current = db.prepare("SELECT state, updated_at FROM jobs WHERE id = ?").get(id);
   if (!current) throw new Error("Job not found: " + id);
 
   /* Validate transition */
@@ -135,7 +135,8 @@ export function updateState(id, newState, opts) {
     throw err;
   }
 
-  const now = new Date().toISOString();
+  const currentUpdatedAtMs = Date.parse(current.updated_at);
+  const now = new Date(Math.max(Date.now(), currentUpdatedAtMs + 1)).toISOString();
   const updates = { state: newState, updated_at: now };
 
   /* Update TTL for terminal states */

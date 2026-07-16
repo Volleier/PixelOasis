@@ -76,11 +76,12 @@ export async function probeGPU() {
     const stats = await getSystemStats();
     if (!stats || !stats.system) return null;
 
-    const gpu = stats.system.gpu || {};
+    const gpu = stats.system.gpu || (Array.isArray(stats.devices) ? stats.devices.find(device => device.type === "cuda") : null) || {};
+    const toGb = value => value ? Math.round((value > 1024 * 1024 ? value / (1024 ** 3) : value / 1024)) : null;
     return {
       name: gpu.name || "GPU",
-      vramTotalGb: gpu.vram_total ? Math.round(gpu.vram_total / 1024) : null,
-      vramFreeGb: gpu.vram_free ? Math.round(gpu.vram_free / 1024) : null,
+      vramTotalGb: toGb(gpu.vram_total),
+      vramFreeGb: toGb(gpu.vram_free),
     };
   } catch (e) {
     logger.warn("readiness.gpu_probe_failed", { component: "readiness-probe", error: e });
