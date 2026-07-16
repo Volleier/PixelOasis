@@ -56,6 +56,13 @@ window.PO.GatewayV2Client = (function () {
     return url.replace(/\/+$/, "");
   }
 
+  /* ── Generate trace ID (once per operation, persisted across retries) ── */
+  function createTraceId() {
+    var ts = Date.now().toString(36);
+    var rnd = Math.floor(Math.random() * 100000).toString(36);
+    return "tr_" + ts + "_" + rnd;
+  }
+
   /* ── Generate correlation ID ── */
   function _correlationId() {
     var ts = Date.now().toString(36);
@@ -123,9 +130,11 @@ window.PO.GatewayV2Client = (function () {
     var startTime = Date.now();
 
     try {
+      var traceId = options.traceId || corrId;
       var fetchOpts = {
         method: method,
         headers: Object.assign({
+          "X-Trace-Id": traceId,
           "X-Correlation-Id": corrId,
           "X-Client-Id": getClientId(),
           "Accept": "application/json",
@@ -201,20 +210,21 @@ window.PO.GatewayV2Client = (function () {
 
   /* ── Normalize HTTP error ── */
   function _normalizeError(status, body, corrId) {
-    var code = (body && body.code) || "HTTP_" + status;
-    var message = (body && body.message) || ("HTTP " + status);
+    var payload = (body && body.error) || body || {};
+    var code = payload.code || "HTTP_" + status;
+    var message = payload.message || ("HTTP " + status);
 
     /* Map status to standard codes */
     switch (status) {
-      case 400: code = body.code || "REQUEST_SCHEMA_INVALID"; break;
-      case 404: code = body.code || "NOT_FOUND"; break;
-      case 409: code = body.code || "DOCUMENT_STATE_CONFLICT"; break;
-      case 422: code = body.code || "INPUT_MASK_REQUIRED"; break;
-      case 424: code = body.code || "MODEL_MISSING"; break;
-      case 429: code = body.code || "QUEUE_LIMIT_EXCEEDED"; break;
-      case 500: code = body.code || "PIPELINE_FAILED"; break;
-      case 502: code = body.code || "COMFYUI_UNAVAILABLE"; break;
-      case 507: code = body.code || "DISK_SPACE_LOW"; break;
+      case 400: code = payload.code || "REQUEST_SCHEMA_INVALID"; break;
+      case 404: code = payload.code || "NOT_FOUND"; break;
+      case 409: code = payload.code || "DOCUMENT_STATE_CONFLICT"; break;
+      case 422: code = payload.code || "INPUT_MASK_REQUIRED"; break;
+      case 424: code = payload.code || "MODEL_MISSING"; break;
+      case 429: code = payload.code || "QUEUE_LIMIT_EXCEEDED"; break;
+      case 500: code = payload.code || "PIPELINE_FAILED"; break;
+      case 502: code = payload.code || "COMFYUI_UNAVAILABLE"; break;
+      case 507: code = payload.code || "DISK_SPACE_LOW"; break;
     }
 
     var err = window.PO.ApiErrors.normalizeApiError({
@@ -335,6 +345,7 @@ window.PO.GatewayV2Client = (function () {
 
   return {
     requestJson:         requestJson,
+    createTraceId:       createTraceId,
     getClientId:         getClientId,
     getHealth:           getHealth,
     getCapabilities:     getCapabilities,

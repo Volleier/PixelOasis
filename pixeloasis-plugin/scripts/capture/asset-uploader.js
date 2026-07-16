@@ -28,7 +28,7 @@ window.PO.AssetUploader = (function () {
    * uploadAsset(kind, base64OrBlob, correlationId, documentId)
    * ═══════════════════════════════════════════════════════════════════ */
 
-  async function uploadAsset(kind, base64OrBlob, correlationId, documentId) {
+  async function uploadAsset(kind, base64OrBlob, correlationId, documentId, metadata) {
     if (!base64OrBlob) throw new Error("No asset data to upload");
     if (!correlationId) correlationId = "po-" + Date.now().toString(36);
 
@@ -77,11 +77,18 @@ window.PO.AssetUploader = (function () {
       }
     }
 
-    /* Build FormData */
+    /* Build FormData with trace metadata */
+    metadata = metadata || {};
     var formData = new FormData();
     formData.append("file", blob, kind + ".png");
     formData.append("kind", kind);
     formData.append("correlationId", correlationId);
+    if (metadata.traceId) formData.append("traceId", metadata.traceId);
+    if (metadata.originalName) formData.append("originalName", String(metadata.originalName).substring(0, 160));
+    if (metadata.clientWidth) formData.append("clientWidth", String(Math.round(metadata.clientWidth)));
+    if (metadata.clientHeight) formData.append("clientHeight", String(Math.round(metadata.clientHeight)));
+    if (metadata.sourceScale) formData.append("sourceScale", String(metadata.sourceScale));
+    if (metadata.scope) formData.append("scope", metadata.scope);
 
     /* Upload with retry */
     var lastError = null;

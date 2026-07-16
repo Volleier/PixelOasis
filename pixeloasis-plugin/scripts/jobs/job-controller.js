@@ -191,10 +191,12 @@ window.PO.JobController = (function () {
 
       /* Source image (always required) */
       var sourceB64 = capture.imagePngBase64 || capture.contextImagePngBase64;
+      var sourceMeta = window.PO.CaptureUtils.buildSourceMetadata(capture);
+      sourceMeta.traceId = correlationId;
       if (sourceB64) {
         try {
           var sourceResult = await window.PO.AssetUploader.uploadAsset(
-            "source", sourceB64, correlationId, documentId
+            "source", sourceB64, correlationId, documentId, sourceMeta
           );
           sourceAssetId = sourceResult.assetId;
         } catch (e) {

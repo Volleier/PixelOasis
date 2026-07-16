@@ -172,15 +172,31 @@ window.PO.CaptureUtils = (function () {
     return "cap_" + ts + "_" + rnd;
   }
 
+  /* ── Build source metadata for trace/upload ── */
+  function buildSourceMetadata(capture) {
+    if (!capture) return {};
+    var docInfo = capture.documentInfo || getDocumentInfo();
+    var bounds = capture.editBounds || capture.subjectBounds || capture.bounds;
+    var imagePng = capture.imagePngBase64 || capture.contextImagePngBase64;
+    return {
+      originalName: docInfo ? ("Untitled-" + docInfo.id + ".png") : "capture.png",
+      clientWidth: bounds ? bounds.width : (docInfo ? docInfo.width : 0),
+      clientHeight: bounds ? bounds.height : (docInfo ? docInfo.height : 0),
+      sourceScale: capture.sourceScale || 1,
+      scope: capture.scope || "document",
+    };
+  }
+
   return {
-    getDocumentInfo:     getDocumentInfo,
-    normalizeBounds:     normalizeBounds,
-    expandAndClampBounds: expandAndClampBounds,
-    chooseProxySize:     chooseProxySize,
-    needsConversion:     needsConversion,
-    isConversionSafe:    isConversionSafe,
-    releaseCapture:      releaseCapture,
-    getDefaultPolicy:    getDefaultPolicy,
-    generateSessionId:   generateSessionId,
+    getDocumentInfo:      getDocumentInfo,
+    normalizeBounds:      normalizeBounds,
+    expandAndClampBounds:  expandAndClampBounds,
+    chooseProxySize:      chooseProxySize,
+    needsConversion:      needsConversion,
+    isConversionSafe:     isConversionSafe,
+    releaseCapture:       releaseCapture,
+    getDefaultPolicy:     getDefaultPolicy,
+    generateSessionId:    generateSessionId,
+    buildSourceMetadata:  buildSourceMetadata,
   };
 })();
