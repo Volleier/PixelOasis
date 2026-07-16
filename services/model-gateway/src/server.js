@@ -14,6 +14,7 @@ import { handleConfig } from "./routes/config.js";
 import { handleHealth } from "./routes/health.js";
 import { handleWorkflows } from "./routes/workflows.js";
 import { handleGenerate } from "./routes/generate.js";
+import { handleV1Generate } from "./api/v1-compat.js";
 import { notFound } from "./utils/errors.js";
 import { initRegistry } from "./adapters/registry-instance.js";
 import { getDb } from "./persistence/database.js";
@@ -42,6 +43,14 @@ try {
   console.warn("  Capabilities: initialization warning — " + err.message);
   logger.warn("capabilities.init_warning", { component: "server", error: err });
 }
+
+/* Load pipeline definitions (v2 Stage 5-7) */
+import "./pipelines/definitions/all-pipelines.js";
+
+/* Start TTL cleanup worker (v2 Stage 8) */
+import { start as startCleanup } from "./jobs/cleanup-worker.js";
+startCleanup();
+console.log("  Cleanup: TTL worker started");
 
 /* Import v2 router */
 import { dispatch as dispatchV2 } from "./api/v2/router.js";
