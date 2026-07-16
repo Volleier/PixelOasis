@@ -44,14 +44,18 @@ window.PO.CapabilitySections = (function () {
 
     /* Disabled state */
     var avail = cap.availability;
-    var isDisabled = (avail && (avail.state === "missing_models" ||
-                                avail.state === "missing_nodes" ||
-                                avail.state === "unsupported_hardware"));
+    var isDisabled = (avail && avail.state === "unsupported_hardware");
+    var isDependencyUnavailable = (avail && (avail.state === "missing_models" ||
+                                              avail.state === "missing_nodes"));
     var isPolicyDisabled = (avail && avail.state === "policy_disabled");
 
     if (isDisabled) {
       card.setAttribute("aria-disabled", "true");
       card.classList.add("po-capability-card--disabled");
+    }
+    if (isDependencyUnavailable) {
+      card.classList.add("po-capability-card--unavailable");
+      card.setAttribute("data-readiness-retry", "true");
     }
 
     /* ── Card body (clickable area) ── */
