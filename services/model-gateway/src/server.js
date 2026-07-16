@@ -52,6 +52,18 @@ import { start as startCleanup } from "./jobs/cleanup-worker.js";
 startCleanup();
 console.log("  Cleanup: TTL worker started");
 
+/* Start GPU worker + recover queued jobs (B2) */
+import { start as startWorker } from "./jobs/worker.js";
+import { recoverQueuedJobs } from "./jobs/scheduler.js";
+try {
+  recoverQueuedJobs();
+  startWorker();
+  console.log("  Worker: GPU worker started");
+  logger.info("worker.initialized", { component: "server" });
+} catch (err) {
+  console.warn("  Worker: start warning — " + err.message);
+}
+
 /* Import v2 router */
 import { dispatch as dispatchV2 } from "./api/v2/router.js";
 

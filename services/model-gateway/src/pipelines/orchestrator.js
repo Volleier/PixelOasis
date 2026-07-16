@@ -16,7 +16,10 @@ const RUNNERS = {
   image:      runImageStage,
   comfyui:    runComfyUIStage,
   qualityGate: runQualityGate,
-  artifact:   async (ctx, cfg) => ({ stage: "artifact", skipped: true }), /* P3 handles artifacts */
+  artifact:   async (ctx, cfg) => {
+    const { runArtifactRunner } = await import("./runners/artifact-runner.js");
+    return runArtifactRunner(ctx, cfg);
+  },
   policy:     async (ctx, cfg) => ({ stage: "policy", passed: true }),
 };
 
