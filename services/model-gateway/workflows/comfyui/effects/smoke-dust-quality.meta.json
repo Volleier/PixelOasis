@@ -1,0 +1,67 @@
+{
+  "workflowId": "smoke-dust-quality",
+  "variantId": "quality_16gb",
+  "capabilityId": "effects.blackSmokeDust",
+  "provider": "comfyui",
+  "enabled": true,
+  "priority": 100,
+  "profile": "quality_16gb",
+  "minVramGb": 14,
+  "timeoutMs": 120000,
+  "apiWorkflowFile": "smoke-dust-quality.api.json",
+  "inputs": {
+    "source": "required",
+    "subjectMask": "optional",
+    "editMask": "optional",
+    "points": "optional"
+  },
+  "outputs": [
+    { "nodeId": "80", "role": "smoke", "title": "Save Smoke RGBA" },
+    { "nodeId": "81", "role": "dust", "title": "Save Dust RGBA" },
+    { "nodeId": "90", "role": "compositePreview", "title": "Save Composite Preview" }
+  ],
+  "bindings": [
+    { "nodeId": "10", "field": "image", "type": "image", "source": "sourceFilename" },
+    { "nodeId": "20", "field": "width", "type": "integer", "source": "width" },
+    { "nodeId": "20", "field": "height", "type": "integer", "source": "height" },
+    { "nodeId": "20", "field": "anchor_x", "type": "number", "source": "anchorX" },
+    { "nodeId": "20", "field": "anchor_y", "type": "number", "source": "anchorY" },
+    { "nodeId": "20", "field": "density", "type": "number", "source": "density" },
+    { "nodeId": "20", "field": "direction", "type": "enum", "source": "direction" },
+    { "nodeId": "20", "field": "spread", "type": "number", "source": "spread" },
+    { "nodeId": "20", "field": "turbulence", "type": "number", "source": "turbulence" },
+    { "nodeId": "20", "field": "seed", "type": "seed", "source": "seed" },
+    { "nodeId": "21", "field": "width", "type": "integer", "source": "width" },
+    { "nodeId": "21", "field": "height", "type": "integer", "source": "height" },
+    { "nodeId": "21", "field": "anchor_x", "type": "number", "source": "anchorX" },
+    { "nodeId": "21", "field": "anchor_y", "type": "number", "source": "anchorY" },
+    { "nodeId": "21", "field": "particleAmount", "type": "number", "source": "particleAmount" },
+    { "nodeId": "21", "field": "direction", "type": "enum", "source": "direction" },
+    { "nodeId": "21", "field": "spread", "type": "number", "source": "spread" },
+    { "nodeId": "21", "field": "turbulence", "type": "number", "source": "turbulence" },
+    { "nodeId": "21", "field": "seed", "type": "seed", "source": "seed" },
+    { "nodeId": "30", "field": "occlusion", "type": "enum", "source": "occlusion" }
+  ],
+  "sizePolicy": {
+    "mode": "matchSelection",
+    "allowResize": true,
+    "maxLongEdge": 1024
+  },
+  "placementPolicy": {
+    "type": "layered",
+    "group": "PixelOasis/黑色烟尘"
+  },
+  "requiredNodes": [
+    "PO_FractalSmokeRGBA",
+    "PO_DustParticlesRGBA",
+    "PO_DepthSplitRGBA",
+    "ImageCompositeMasked"
+  ],
+  "requiredModels": [
+    { "name": "depth_anything_v2_vits.pth", "path": "depth_anything/depth_anything_v2_vits.pth" }
+  ],
+  "optionalNodes": ["TextEncodeQwenImageEdit"],
+  "optionalModels": [
+    { "name": "qwen-image-edit", "path": "qwen/qwen-image-edit-*.safetensors" }
+  ]
+}
