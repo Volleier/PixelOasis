@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,
   client_id TEXT NOT NULL,
   correlation_id TEXT NOT NULL,
-  idempotency_key TEXT UNIQUE,
+  idempotency_key TEXT,
   capability_id TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'queued',
   profile TEXT,
@@ -66,7 +66,9 @@ CREATE TABLE IF NOT EXISTS artifacts (
 /* Indexes */
 CREATE INDEX IF NOT EXISTS idx_jobs_client ON jobs(client_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);
-CREATE INDEX IF NOT EXISTS idx_jobs_idempotency ON jobs(idempotency_key);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_client_idempotency
+  ON jobs(client_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_job_stages_job ON job_stages(job_id);
 CREATE INDEX IF NOT EXISTS idx_job_events_job ON job_events(job_id);
 CREATE INDEX IF NOT EXISTS idx_assets_sha256 ON assets(sha256);

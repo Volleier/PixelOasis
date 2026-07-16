@@ -20,6 +20,13 @@ export async function handleArtifactDownload(req, res, routeParams) {
     return;
   }
 
+  const job = db.prepare("SELECT client_id FROM jobs WHERE id = ?").get(artifact.job_id);
+  const clientId = req.headers["x-client-id"] || "default";
+  if (!job || job.client_id !== clientId) {
+    v2NotFound(res, "ARTIFACT_NOT_FOUND", "Artifact not found");
+    return;
+  }
+
   /* Get the underlying asset */
   const asset = getAsset(artifact.asset_id);
   if (!asset || !existsSync(asset.path)) {
@@ -44,7 +51,14 @@ export async function handleArtifactDownload(req, res, routeParams) {
     const match = range.match(/bytes=(\d+)-(\d*)/);
     if (match) {
       const start = parseInt(match[1], 10);
-      const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+      const requestedEnd = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+      if (start >= fileSize || requestedEnd < start) {
+        res.statusCode = 416;
+        res.setHeader("Content-Range", "bytes */" + fileSize);
+        res.end();
+        return;
+      }
+      const end = Math.min(requestedEnd, fileSize - 1);
       res.statusCode = 206;
       res.setHeader("Content-Range", "bytes " + start + "-" + end + "/" + fileSize);
       res.setHeader("Content-Length", end - start + 1);

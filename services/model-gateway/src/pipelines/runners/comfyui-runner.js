@@ -16,13 +16,16 @@ export async function runComfyUIStage(ctx, config) {
   const wf = getWorkflow(workflowId);
   if (!wf) throw new Error("Workflow not found: " + workflowId);
 
+  /* Workflow repository caches templates. Each job must patch a clone so
+     parameters and uploaded assets cannot leak into later jobs. */
+  let apiWorkflow = structuredClone(wf.apiJson);
+
   if (config.inputBinding) {
     const bind = await import("../../adapters/comfyui/binding-engine.js");
-    const patched = bind.bind(wf.apiJson, inputs, config.parameters || {}, config.inputBinding);
-    wf.apiJson = patched;
+    apiWorkflow = bind.bind(apiWorkflow, inputs, config.parameters || {}, config.inputBinding);
   }
 
-  const outputs = await runPrompt(wf.apiJson, wf.meta, inputs, config.parameters || {}, {
+  const outputs = await runPrompt(apiWorkflow, wf.meta, inputs, config.parameters || {}, {
     jobId,
     clientId: jobId,
     timeoutMs: config.timeoutMs || 600000,

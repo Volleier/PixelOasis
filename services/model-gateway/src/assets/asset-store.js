@@ -45,6 +45,9 @@ export function storeAsset(opts) {
   if (opts.sha256 && opts.clientId) {
     const existing = findBySha256(opts.sha256, opts.clientId);
     if (existing) {
+      if (opts.moveFile) {
+        try { unlinkSync(opts.filePath); } catch (_) { /* best effort temporary-file cleanup */ }
+      }
       logger.info("asset.dedup_reused", {
         component: "asset-store",
         data: { sha256: opts.sha256.substring(0, 12), existingId: existing.id },
@@ -139,12 +142,19 @@ export function getAsset(id) {
   const row = db.prepare("SELECT * FROM assets WHERE id = ?").get(id);
   if (!row) return null;
 
+  if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) {
+    _removeAssetRecordAndFile(row);
+    return null;
+  }
+
   /* Check if file still exists */
   if (!existsSync(row.path)) {
     logger.warn("asset.file_missing", {
       component: "asset-store",
       data: { id, path: row.path },
     });
+    db.prepare("DELETE FROM assets WHERE id = ?").run(id);
+    return null;
   }
 
   return {
@@ -180,26 +190,24 @@ export function findBySha256(sha256, clientId) {
  * ═══════════════════════════════════════════════════════════════════ */
 
 export function deleteAsset(id) {
-  const asset = getAsset(id);
-  if (!asset) return false;
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM assets WHERE id = ?").get(id);
+  if (!row) return false;
+  _removeAssetRecordAndFile(row);
+  return true;
+}
 
-  /* Remove file */
+function _removeAssetRecordAndFile(row) {
   try {
-    if (existsSync(asset.path)) {
-      unlinkSync(asset.path);
-    }
+    if (existsSync(row.path)) unlinkSync(row.path);
   } catch (e) {
     logger.warn("asset.delete_file_failed", {
       component: "asset-store",
       error: e,
-      data: { id, path: asset.path },
+      data: { id: row.id },
     });
   }
-
-  /* Remove DB record */
-  const db = getDb();
-  db.prepare("DELETE FROM assets WHERE id = ?").run(id);
-  return true;
+  getDb().prepare("DELETE FROM assets WHERE id = ?").run(row.id);
 }
 
 /* ═══════════════════════════════════════════════════════════════════

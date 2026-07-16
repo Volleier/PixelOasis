@@ -49,9 +49,8 @@ const _byId = {};
 
 /* ── GET /v2/capabilities ── */
 export async function handleCapabilities(req, res, params) {
-  const locale = params.get("locale") || "zh-CN";
-
-  /* Try registry first, fall back to fixture */
+  /* The v2 registry is authoritative. Fixture data must never advertise
+     executable capabilities when the registry failed to initialise. */
   const registryCaps = getCapabilities();
   if (registryCaps && registryCaps.length > 0) {
     writeJson(res, 200, {
@@ -59,13 +58,16 @@ export async function handleCapabilities(req, res, params) {
       revision: "capability-registry",
       capabilities: registryCaps,
     });
-  } else {
-    writeJson(res, 200, {
-      schemaVersion: "2.0",
-      revision: "fixture-001",
-      capabilities: CAPABILITIES_FIXTURE,
-    });
+    return;
   }
+
+  writeJson(res, 503, {
+    error: {
+      code: "CAPABILITY_REGISTRY_UNAVAILABLE",
+      message: "Capability registry is unavailable",
+      retryable: true,
+    },
+  });
 }
 
 /* ── GET /v2/capabilities/{id} ── */

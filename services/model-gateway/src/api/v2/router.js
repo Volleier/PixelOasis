@@ -9,7 +9,7 @@ import { handleCapabilities, handleCapabilityById } from "./capabilities-route.j
 import { handleAssetUpload, handleAssetHead } from "./assets-route.js";
 import { handleCreateJob, handleGetJob, handleListJobs, handleCancelJob, handleRetryJob, handleJobEvents } from "./jobs-route.js";
 import { handleArtifactDownload } from "./artifacts-route.js";
-import { v2NotFound } from "../../utils/errors.js";
+import { v2NotFound, v2ServerError } from "../../utils/errors.js";
 import logger from "../../utils/logger.js";
 
 /* ── Exact routes (method + path) ── */
@@ -97,7 +97,7 @@ export async function dispatch(method, pathname, req, res, queryParams) {
       error: err,
       durationMs: Date.now() - reqStart,
     });
-    v2NotFound(res, "INTERNAL_ERROR", "Internal server error");
+    v2ServerError(res, "INTERNAL_ERROR", "Internal server error");
   }
 }
 

@@ -228,7 +228,7 @@ try {
   });
   assert(jobA !== null, "Job A created with idempotency key");
 
-  /* Second job with same key should fail (UNIQUE constraint) */
+  /* Second job with same client and key should fail. */
   assertThrows(() => {
     jobRepo.create({
       clientId: TEST_CLIENT,
@@ -238,12 +238,21 @@ try {
     });
   }, "Duplicate idempotency key rejected");
 
+  const otherClientJob = jobRepo.create({
+    clientId: TEST_CLIENT + "-other",
+    correlationId: "idem-test-other-" + Date.now(),
+    idempotencyKey: idemKey,
+    capabilityId: "scene.whiteStudio",
+  });
+  assert(otherClientJob !== null, "Same idempotency key allowed for another client");
+
   /* findByIdempotencyKey returns original */
-  const found = jobRepo.findByIdempotencyKey(idemKey);
+  const found = jobRepo.findByIdempotencyKey(idemKey, TEST_CLIENT);
   assert(found !== null, "Found by idempotency key");
   assert(found.id === jobA.id, "Returns original job");
 
   jobRepo.deleteJob(jobA.id);
+  jobRepo.deleteJob(otherClientJob.id);
   console.log("");
 
   /* ── Summary ── */

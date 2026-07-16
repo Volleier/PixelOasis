@@ -39,11 +39,14 @@ export async function collect(historyEntry, outputMapping, options = {}) {
 
   for (const map of mapping) {
     /* Find the node by title in history outputs */
-    const nodeEntry = _findNodeByTitle(historyEntry.outputs, map.nodeTitle);
+    const nodeEntry = _findOutputNode(historyEntry.outputs, map);
     if (!nodeEntry) {
-      logger.warn("output_collector.node_not_found", {
+      throw new Error("Declared output node not found: " + (map.nodeId || map.nodeTitle || "unknown"));
+    }
+    if (!nodeEntry.images || nodeEntry.images.length === 0) {
+      logger.warn("output_collector.node_has_no_images", {
         component: "output-collector",
-        data: { nodeTitle: map.nodeTitle },
+        data: { nodeId: map.nodeId, nodeTitle: map.nodeTitle },
       });
       continue;
     }
@@ -84,27 +87,13 @@ export async function collect(historyEntry, outputMapping, options = {}) {
   return results;
 }
 
-/* ── Find node in history outputs by title (not node ID) ── */
-function _findNodeByTitle(outputs, nodeTitle) {
-  if (!nodeTitle) return null;
-
-  /* Direct lookup by node ID pattern: ComfyUI stores outputs keyed by node ID (number).
-   * The node title is a separate metadata field. We need to iterate. */
-  const keys = Object.keys(outputs);
-  for (const key of keys) {
-    const output = outputs[key];
-    /* ComfyUI doesn't store node title in history outputs directly.
-     * We match by checking if the output has images and the mapping
-     * specifies the expected node. When no title match is possible,
-     * we fall back to ordinal position. */
-  }
-
-  /* Fallback: return first output with images matching the ordinal */
-  if (keys.length > 0) {
-    /* Use the mapping index if available */
-    return outputs[keys[0]]; /* Default to first output node */
-  }
-  return null;
+/* Comfy history is keyed by node ID and does not preserve node titles.
+ * Metadata must declare nodeId (nodeTitle is accepted only when it is that
+ * ID). Choosing history's first output corrupts multi-artifact placement. */
+function _findOutputNode(outputs, mapping) {
+  const nodeId = mapping.nodeId || mapping.nodeTitle;
+  if (nodeId === undefined || nodeId === null) return null;
+  return outputs[String(nodeId)] || null;
 }
 
 /* ── Infer output mapping from history when none is provided ── */
@@ -115,7 +104,7 @@ function _inferMapping(historyEntry) {
     const nodeId = nodeIds[i];
     const output = historyEntry.outputs[nodeId];
     if (output.images && output.images.length > 0) {
-      mapping.push({ nodeTitle: "output-" + (i + 1), role: "result-" + (i + 1) });
+      mapping.push({ nodeId, role: "result-" + (i + 1) });
     }
   }
   return mapping;

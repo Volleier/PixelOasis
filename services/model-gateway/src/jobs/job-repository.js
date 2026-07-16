@@ -101,15 +101,15 @@ export function getById(id) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
- * findByIdempotencyKey(key) → job | null
+ * findByIdempotencyKey(key, clientId) → job | null
  * ═══════════════════════════════════════════════════════════════════ */
 
-export function findByIdempotencyKey(key) {
+export function findByIdempotencyKey(key, clientId) {
   if (!key) return null;
   const db = getDb();
-  const job = db.prepare(
-    "SELECT id FROM jobs WHERE idempotency_key = ?"
-  ).get(key);
+  const job = clientId
+    ? db.prepare("SELECT id FROM jobs WHERE idempotency_key = ? AND client_id = ?").get(key, clientId)
+    : db.prepare("SELECT id FROM jobs WHERE idempotency_key = ?").get(key);
   return job ? getById(job.id) : null;
 }
 
