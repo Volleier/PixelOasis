@@ -16,10 +16,21 @@ import { handleWorkflows } from "./routes/workflows.js";
 import { handleGenerate } from "./routes/generate.js";
 import { notFound } from "./utils/errors.js";
 import { initRegistry } from "./adapters/registry-instance.js";
+import { getDb } from "./persistence/database.js";
 import logger from "./utils/logger.js";
 
 /* Init logger with config */
 logger.init(config);
+
+/* Init database (v2) — runs migrations on first start */
+try {
+  getDb();
+  console.log("  Database: ready (SQLite WAL)");
+  logger.info("database.initialized", { component: "server" });
+} catch (err) {
+  console.warn("  Database: initialization warning — " + err.message);
+  logger.warn("database.init_warning", { component: "server", error: err });
+}
 
 /* Route table — keyed by "METHOD:pathname" */
 var ROUTES = {
