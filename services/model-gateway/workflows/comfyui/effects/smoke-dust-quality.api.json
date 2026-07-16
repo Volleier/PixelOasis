@@ -1,0 +1,6 @@
+{
+  "_note": "This is a stub. The real API workflow must be exported from ComfyUI Desktop using Save (API Format) after installing the pixeloasis_effects custom node package. All node IDs must match the meta.json outputs section.",
+  "_status": "pending_export_from_comfyui",
+  "lastValidatedComfyUIVersion": null,
+  "nodes": []
+}

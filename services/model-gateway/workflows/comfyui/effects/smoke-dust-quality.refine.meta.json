@@ -1,0 +1,28 @@
+{
+  "workflowId": "smoke-dust-quality.refine",
+  "variantId": "quality_16gb_refine",
+  "capabilityId": "effects.blackSmokeDust",
+  "provider": "comfyui",
+  "enabled": false,
+  "priority": 50,
+  "profile": "quality_16gb",
+  "minVramGb": 15,
+  "timeoutMs": 180000,
+  "apiWorkflowFile": "smoke-dust-quality.refine.api.json",
+  "inputs": {
+    "source": "required",
+    "compositePreview": "required",
+    "smokeAlpha": "required",
+    "dustAlpha": "required"
+  },
+  "outputs": [
+    { "nodeId": "91", "role": "compositePreview", "title": "Save Refined Composite" }
+  ],
+  "bindings": [],
+  "sizePolicy": { "mode": "matchSelection", "allowResize": true, "maxLongEdge": 1024 },
+  "requiredNodes": ["TextEncodeQwenImageEdit"],
+  "requiredModels": [
+    { "name": "qwen-image-edit", "path": "qwen/qwen-image-edit-*.safetensors" }
+  ],
+  "note": "Optional Qwen semantic refinement pass. Only triggered when semanticRefine=true. Enabled=false until B4."
+}
