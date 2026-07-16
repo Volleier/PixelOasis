@@ -603,6 +603,13 @@ window.PO.CapabilitySections = (function () {
     envStatus.className = "po-env-status";
     envStatus.textContent = "检查中…";
     envGroup.appendChild(envStatus);
+    var envOpenBtn = document.createElement("button");
+    envOpenBtn.id = "env-open-btn";
+    envOpenBtn.className = "po-button po-button--secondary";
+    envOpenBtn.type = "button";
+    envOpenBtn.style.cssText = "margin-top:4px;width:100%;";
+    envOpenBtn.textContent = "打开环境状态";
+    envGroup.appendChild(envOpenBtn);
     drawerBody.appendChild(envGroup);
 
     /* Danger zone: clear data */
@@ -626,6 +633,13 @@ window.PO.CapabilitySections = (function () {
     clearCacheBtn.style.cssText = "margin-top:4px;width:100%;";
     clearCacheBtn.textContent = "清除能力缓存";
     dangerGroup.appendChild(clearCacheBtn);
+    var clearDraftsBtn = document.createElement("button");
+    clearDraftsBtn.id = "clear-drafts-btn";
+    clearDraftsBtn.className = "po-button po-button--secondary";
+    clearDraftsBtn.type = "button";
+    clearDraftsBtn.style.cssText = "margin-top:4px;width:100%;";
+    clearDraftsBtn.textContent = "清除参数草稿";
+    dangerGroup.appendChild(clearDraftsBtn);
     drawerBody.appendChild(dangerGroup);
 
     settingsDrawer.appendChild(drawerBody);

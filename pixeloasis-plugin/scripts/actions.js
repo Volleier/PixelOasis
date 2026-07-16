@@ -206,6 +206,26 @@ function _onAppClick(e) {
       return;
     }
 
+    /* ── Clear drafts ── */
+    if (el.id === "clear-drafts-btn") {
+      if (confirm("确定要清除所有参数草稿吗？此操作不可撤销。")) {
+        if (window.PO.ParameterForm) {
+          window.PO.ParameterForm.clearDrafts();
+          window.PO.showTransientStatus &&
+            window.PO.showTransientStatus("参数草稿已清除");
+        }
+      }
+      return;
+    }
+
+    /* ── Open environment panel ── */
+    if (el.id === "env-open-btn") {
+      if (window.PO.FirstRunPanel) {
+        window.PO.FirstRunPanel.show();
+      }
+      return;
+    }
+
     el = el.parentElement;
   }
 }

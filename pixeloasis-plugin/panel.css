@@ -1199,3 +1199,127 @@ body {
   border-radius: 2px;
   flex-shrink: 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+ * v2: Environment panel overlay
+ * ═══════════════════════════════════════════════════════════════════ */
+
+.po-env-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 25;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+}
+
+.po-env-overlay__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 38px;
+  padding: 0 var(--space-sm);
+  border-bottom: 1px solid var(--border-muted);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.po-env-overlay__title {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.po-env-overlay__close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-muted);
+  background: var(--bg-control-alt);
+  color: var(--text-primary);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.po-env-overlay__close:hover {
+  background: #4d4d4d;
+}
+
+.po-env-overlay__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-sm);
+}
+
+.po-env-refresh-row {
+  margin-bottom: var(--space-sm);
+}
+
+.po-env-section {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.po-env-section--ok { }
+.po-env-section--warn { }
+.po-env-section--error { background: rgba(232, 96, 48, 0.06); }
+.po-env-section--unknown { opacity: 0.6; }
+
+.po-env-icon {
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.po-env-icon--ok { color: #5a8f5a; }
+.po-env-icon--warn { color: #e8b830; }
+.po-env-icon--error { color: #e86030; }
+.po-env-icon--unknown { color: var(--text-muted); }
+
+.po-env-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.po-env-message {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.po-env-row {
+  display: flex;
+  gap: var(--space-xs);
+  padding: 2px 0 2px 28px;
+}
+
+.po-env-row__label {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.po-env-row__message {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.po-env-row--error .po-env-row__message {
+  color: #e86030;
+}

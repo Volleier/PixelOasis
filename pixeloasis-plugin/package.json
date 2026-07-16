@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node ./scripts/prepare-udt-dist.mjs"
+    "build": "node ./scripts/prepare-udt-dist.mjs",
+    "build:check": "node ./scripts/prepare-udt-dist.mjs && node -e \"const fs=require('fs');const m=JSON.parse(fs.readFileSync('./dist/manifest.json','utf8'));console.log('✓ manifest valid');const files=fs.readdirSync('./dist/scripts',{recursive:true});console.log('✓ dist/scripts: '+files.length+' files')\"",
+    "test:plugin-contract": "node -e \"console.log('Contract tests placeholder — run in Photoshop with UDT')\""
   }
 }
