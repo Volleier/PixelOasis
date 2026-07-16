@@ -178,45 +178,29 @@ window.PO.ParameterPanel = (function () {
     notice.style.display = "none";
     scroll.appendChild(notice);
 
-    /* ── Capture summary ── */
+    /* ── Capture summary (one-line, no preview here) ── */
     if (capture) {
       var summary = document.createElement("div");
       summary.className = "po-param-summary";
 
-      var summaryTitle = document.createElement("div");
-      summaryTitle.className = "po-param-summary__title";
-      summaryTitle.textContent = "输入范围";
-      summary.appendChild(summaryTitle);
-
-      /* Preview thumbnail */
-      if (capture.preview) {
-        var thumb = document.createElement("img");
-        thumb.className = "po-param-thumb";
-        thumb.src = window.PO.toDataUrl(capture.preview, "image/jpeg");
-        thumb.alt = "捕获预览";
-        summary.appendChild(thumb);
-      }
-
-      /* Scope info */
       var scopeInfo = document.createElement("div");
       scopeInfo.className = "po-param-summary__info";
       var scopeLabel = capture.scope === "document" ? "整图" :
                        capture.scope === "selection" ? "选区" :
                        capture.scope === "subject" ? "主体" : capture.scope;
-      scopeInfo.textContent = scopeLabel;
+      scopeInfo.textContent = "输入：" + scopeLabel;
 
       var bounds = capture.editBounds || capture.subjectBounds || capture.bounds;
       if (bounds) {
-        scopeInfo.textContent += " — " + bounds.width + " × " + bounds.height + " px";
+        scopeInfo.textContent += " · " + bounds.width + " × " + bounds.height + " px";
       }
       if (capture.sourceScale && capture.sourceScale < 1) {
-        scopeInfo.textContent += "（已缩放至 " + Math.round(capture.sourceScale * 100) + "% 处理）";
+        scopeInfo.textContent += "（已缩放至 " + Math.round(capture.sourceScale * 100) + "%）";
       }
       if (capture.conversionApplied) {
-        scopeInfo.textContent += " — 色彩已转换";
+        scopeInfo.textContent += " · 色彩已转换";
       }
       summary.appendChild(scopeInfo);
-
       scroll.appendChild(summary);
     }
 
@@ -354,6 +338,26 @@ window.PO.ParameterPanel = (function () {
 
     scroll.appendChild(formSection);
 
+    /* ── Input preview (collapsed <details> AFTER form) ── */
+    if (capture && capture.preview) {
+      var previewDetails = document.createElement("details");
+      previewDetails.className = "po-param-preview";
+
+      var previewSummary = document.createElement("summary");
+      var bounds = capture.editBounds || capture.subjectBounds || capture.bounds;
+      previewSummary.textContent = "输入预览" + (bounds ? "（" + bounds.width + " × " + bounds.height + " px）" : "");
+      previewDetails.appendChild(previewSummary);
+
+      var previewThumb = document.createElement("img");
+      previewThumb.className = "po-param-preview__thumb";
+      previewThumb.src = window.PO.toDataUrl(capture.preview, "image/jpeg");
+      previewThumb.alt = "输入预览";
+      previewThumb.loading = "lazy";
+      previewDetails.appendChild(previewThumb);
+
+      scroll.appendChild(previewDetails);
+    }
+
     _overlay.appendChild(scroll);
 
     /* ── Bottom actions ── */
@@ -368,7 +372,7 @@ window.PO.ParameterPanel = (function () {
     actions.appendChild(cancelBtn);
 
     var submitBtn = document.createElement("button");
-    submitBtn.id = "param-submit-btn";
+    submitBtn.id = "po-v2-param-submit-btn";
     submitBtn.className = "po-button po-button--primary";
     submitBtn.type = "button";
     submitBtn.textContent = "开始生成";
@@ -385,10 +389,10 @@ window.PO.ParameterPanel = (function () {
       }
     });
 
-    /* ── Append to app root ── */
-    var appRoot = document.getElementById("app");
-    if (appRoot) {
-      appRoot.appendChild(_overlay);
+    /* ── Append to .po-root (positioned container) ── */
+    var rootEl = document.querySelector(".po-root") || document.getElementById("app");
+    if (rootEl) {
+      rootEl.appendChild(_overlay);
     }
 
     /* Update submit button state */
@@ -397,7 +401,7 @@ window.PO.ParameterPanel = (function () {
 
   /* ── Update submit button disabled state ── */
   function _updateSubmitButton() {
-    var btn = document.getElementById("param-submit-btn");
+    var btn = document.getElementById("po-v2-param-submit-btn");
     if (!btn) return;
 
     var disabled = false;
@@ -484,7 +488,7 @@ window.PO.ParameterPanel = (function () {
     );
 
     /* ── State machine begins ── */
-    var submitBtn = document.getElementById("param-submit-btn");
+    var submitBtn = document.getElementById("po-v2-param-submit-btn");
 
     /* State: validating */
     _setInlineStatus("validating", "正在校验参数…");

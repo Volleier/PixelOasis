@@ -173,24 +173,38 @@ function _onAppClick(e) {
 
     /* ── Clear favorites ── */
     if (el.id === "clear-favorites-btn") {
-      if (confirm(window.PO.TEXT.clearFavoritesConfirm)) {
-        window.PO.FavoritesStore.clearAll();
-        if (window.PO.CapabilitySections) {
-          window.PO.CapabilitySections.renderAll();
-        }
-        window.PO.showTransientStatus &&
-          window.PO.showTransientStatus("收藏已清除");
+      e.preventDefault();
+      e.stopPropagation();
+      window.PO.FavoritesStore.clearAll();
+      if (window.PO.CapabilitySections) {
+        window.PO.CapabilitySections.renderAll();
       }
+      window.PO.showTransientStatus &&
+        window.PO.showTransientStatus("收藏已清除");
       return;
     }
 
     /* ── Clear cache ── */
     if (el.id === "clear-cache-btn") {
-      if (confirm(window.PO.TEXT.clearCacheConfirm)) {
-        try { localStorage.removeItem("po.capabilityCache.v2"); } catch (_) {}
-        window.PO.showTransientStatus &&
-          window.PO.showTransientStatus("能力缓存已清除");
+      e.preventDefault();
+      e.stopPropagation();
+      if (window.PO.CapabilityStore && window.PO.CapabilityStore.clearCache) {
+        window.PO.CapabilityStore.clearCache();
       }
+      var refresh = window.PO.CapabilityStore && window.PO.CapabilityStore.refreshCapabilities
+        ? window.PO.CapabilityStore.refreshCapabilities({ force: true })
+        : Promise.resolve();
+      refresh.then(function () {
+        if (window.PO.CapabilitySections) window.PO.CapabilitySections.renderAll();
+        window.PO.showTransientStatus && window.PO.showTransientStatus("能力缓存已清除并刷新");
+      }).catch(function (error) {
+        if (window.PO.CapabilitySections) window.PO.CapabilitySections.renderAll();
+        window.PO.showTransientStatus && window.PO.showTransientStatus("能力缓存已清除，网关刷新失败");
+        window.PO.Logger && window.PO.Logger.warn("capabilities.cache_refresh_failed", {
+          component: "actions",
+          error: error,
+        });
+      });
       return;
     }
 
@@ -272,13 +286,6 @@ window.PO.bindEvents = function () {
   /* ── Settings (delegated via _onAppClick) + init ── */
   if (window.PO.initSettings) window.PO.initSettings();
 
-  /* ── v1 workflow buttons (only if v1 template is active) ── */
-  if (window.PO.bindWorkflowButtons) {
-    window.PO.bindWorkflowButtons();
-  }
-
-  /* ── Init parameter page if v1 modules present ── */
-  if (window.PO.initParameterPage) {
-    window.PO.initParameterPage();
-  }
+  /* v1 workflow buttons and parameter page are no longer initialized
+     in v2 — CapabilityController + ParameterPanel replace them. */
 };

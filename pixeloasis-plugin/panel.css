@@ -961,8 +961,11 @@ body {
   bottom: 0;
   z-index: 20;
   background: var(--bg-primary);
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: 40px minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .po-param-overlay[hidden] {
@@ -1009,13 +1012,40 @@ body {
 
 /* ── Scroll area ── */
 .po-param-overlay__scroll {
-  flex: 1;
-  min-height: 0;
+  box-sizing: border-box;
   overflow-y: auto;
-  padding: var(--space-sm);
+  min-height: 0;
+  padding: 12px 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: 16px;
+}
+
+/* ── Input preview (collapsed <details>, placed after form) ── */
+.po-param-preview {
+  border: 1px solid var(--border-muted);
+  background: var(--bg-surface);
+  margin-top: 0;
+}
+
+.po-param-preview summary {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.po-param-preview summary:hover {
+  color: var(--text-primary);
+}
+
+.po-param-preview__thumb {
+  display: block;
+  max-width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  border-top: 1px solid var(--border-subtle);
 }
 
 /* ── Capture summary ── */
@@ -1087,6 +1117,26 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+/* ── Slider row: label + value in grid ── */
+.po-param-slider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.po-param-slider-row .po-param-range {
+  grid-column: 1;
+}
+
+.po-param-slider-row .po-param-range-val {
+  grid-column: 2;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .po-param-form-hint {
