@@ -33,9 +33,16 @@ export const sourceScripts = [
   /* 24 */ "scripts/ui-workflows.js",
   /* 25 */ "scripts/ui-parameters.js",
   /* 26 */ "scripts/capabilities/capability-controller.js",
-  /* 27 */ "scripts/ui-template.js",
-  /* 28 */ "scripts/actions.js",
-  /* 29 */ "index.js",
+  /* 27 */ "scripts/api/gateway-v2-client.js",
+  /* 28 */ "scripts/capture/asset-uploader.js",
+  /* 29 */ "scripts/jobs/job-store.js",
+  /* 30 */ "scripts/jobs/job-events.js",
+  /* 31 */ "scripts/jobs/job-controller.js",
+  /* 32 */ "scripts/ui/progress-panel.js",
+  /* 33 */ "scripts/ui/result-panel.js",
+  /* 34 */ "scripts/ui-template.js",
+  /* 35 */ "scripts/actions.js",
+  /* 36 */ "index.js",
 ];
 
 export const vendorScripts = [

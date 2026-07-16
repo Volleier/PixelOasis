@@ -380,10 +380,10 @@ window.PO.ParameterPanel = (function () {
   }
 
   /* ═══════════════════════════════════════════════════════════════════
-   * _handleSubmit — P1 mock (no real job submission)
+   * _handleSubmit — real job submission via JobController
    * ═══════════════════════════════════════════════════════════════════ */
 
-  function _handleSubmit() {
+  async function _handleSubmit() {
     if (!_currentCapability) return;
 
     /* Validate form */
@@ -424,30 +424,70 @@ window.PO.ParameterPanel = (function () {
       result.values
     );
 
-    /* ── P1 MOCK: show placeholder, no actual job submission ── */
-    window.PO.Logger && window.PO.Logger.info("parameter_panel.submit_mock", {
-      component: "parameter-panel",
-      data: {
-        capabilityId: _currentCapability.id,
-        subjectMode: _subjectMode,
-        adultConfirmed: _adultConfirmed,
-      },
-    });
-
+    /* Update button state */
     var submitBtn = document.getElementById("param-submit-btn");
     if (submitBtn) {
-      submitBtn.textContent = "任务提交将在下一阶段接入";
+      submitBtn.textContent = "提交中…";
       submitBtn.disabled = true;
-      setTimeout(function () {
-        submitBtn.textContent = "开始生成";
-        _updateSubmitButton();
-      }, 2000);
     }
 
-    window.PO.showTransientStatus &&
-      window.PO.showTransientStatus("任务提交将在下一阶段接入（P1 Mock）");
+    window.PO.setStatus && window.PO.setStatus("正在提交任务…");
 
-    /* Don't close — user can continue adjusting or manually return */
+    /* ── Submit via JobController ── */
+    try {
+      var jobResult = await window.PO.JobController.createAndSubmit({
+        capability: _currentCapability,
+        capture: _currentCapture,
+        values: result.values,
+        preflight: _currentPreflight,
+      });
+
+      /* Success — close parameter panel, show progress */
+      if (submitBtn) {
+        submitBtn.textContent = "任务已加入队列";
+      }
+
+      window.PO.showTransientStatus &&
+        window.PO.showTransientStatus("任务已加入队列 — " + (jobResult.jobId || ""));
+
+      window.PO.Logger && window.PO.Logger.info("parameter_panel.submitted", {
+        component: "parameter-panel",
+        correlationId: jobResult.correlationId,
+        data: {
+          jobId: jobResult.jobId,
+          capabilityId: _currentCapability.id,
+          mock: jobResult.mock || false,
+        },
+      });
+
+      /* Don't release capture — controller manages it. Close panel. */
+      _currentCapture = null; /* Prevent releaseCapture from firing on close */
+      close();
+
+      /* Show progress panel */
+      if (window.PO.ProgressPanel) {
+        window.PO.ProgressPanel.show();
+      }
+
+    } catch (err) {
+      /* Submission failed — keep panel open, show error */
+      if (submitBtn) {
+        submitBtn.textContent = "开始生成";
+        submitBtn.disabled = false;
+        _updateSubmitButton();
+      }
+
+      window.PO.showTransientStatus &&
+        window.PO.showTransientStatus(
+          "提交失败：" + (err.userMessage || err.message || "未知错误")
+        );
+
+      window.PO.Logger && window.PO.Logger.error("parameter_panel.submit_failed", {
+        component: "parameter-panel",
+        error: err,
+        data: { capabilityId: _currentCapability.id },
+      });
+    }
   }
 
   /* ── Get subject mode ── */

@@ -122,6 +122,24 @@
         window.PO.FavoritesStore.pruneTombstones(allIds);
       }
 
+      /* ═══════════════════════════════════════════════════════════════
+       * Step 6.5: Recover active jobs
+       * ═══════════════════════════════════════════════════════════════ */
+      if (window.PO.JobStore && window.PO.JobController) {
+        window.PO.JobStore.load();
+        var activeJobs = window.PO.JobStore.listActive();
+        if (activeJobs.length > 0 && window.PO.CapabilitySections && window.PO.CapabilitySections.updateTaskLink) {
+          window.PO.CapabilitySections.updateTaskLink(activeJobs.length);
+        }
+        /* Recover job tracking in background */
+        window.PO.JobController.recoverActiveJobs().catch(function (err) {
+          window.PO.Logger && window.PO.Logger.warn("job.recovery_failed", {
+            component: "startup",
+            error: err,
+          });
+        });
+      }
+
       /* Update task link */
       if (window.PO.CapabilitySections && window.PO.CapabilitySections.updateTaskLink) {
         window.PO.CapabilitySections.updateTaskLink(0);

@@ -262,6 +262,8 @@ window.PO.Logger = (function () {
           component: opts.component || "unknown",
           event: event,
           correlationId: opts.correlationId || undefined,
+          jobId: opts.jobId || undefined,
+          capabilityId: opts.capabilityId || undefined,
           workflowId: opts.workflowId || undefined,
           durationMs: typeof opts.durationMs === "number" ? opts.durationMs : undefined,
           message: opts.message || undefined,
