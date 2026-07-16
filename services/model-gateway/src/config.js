@@ -57,8 +57,8 @@ export default {
     enabled: process.env.PO_LOG_ENABLED !== "0",
     level: loaded.model_gateway.log_level || "info",
     dir: (loaded.logging && loaded.logging.dir) || process.env.PO_LOG_DIR || path.resolve(PROJECT_ROOT, "logs"),
-    maxFileBytes: 5 * 1024 * 1024,
-    retainFiles: 10,
+    retainRuns: (loaded.logging && loaded.logging.retainRuns) || 14,
+    warnFileSizeMb: (loaded.logging && loaded.logging.warnFileSizeMb) || 256,
     logPromptText: process.env.PO_LOG_PROMPT_TEXT === "1",
   },
 
