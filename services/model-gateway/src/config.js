@@ -72,6 +72,7 @@ export default {
   /* ── ComfyUI root path (for debug/model checks) ──── */
   comfyuiRoot: loaded.comfyui.root || "",
   comfyuiModelsDir: loaded.comfyui.models_dir || "",
+  modelAssetsDir: path.resolve(PROJECT_ROOT, "models"),
 
   /* ── v2: Data & persistence ──────────────────────── */
   dataDir: process.env.PO_DATA_DIR || loaded.model_gateway.data_dir || "E:/PixelOasisData",

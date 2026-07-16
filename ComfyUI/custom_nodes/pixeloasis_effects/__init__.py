@@ -13,7 +13,7 @@ Nodes:
 
 from .smoke_nodes import PO_FractalSmokeRGBA, PO_DustParticlesRGBA
 from .depth_nodes import PO_DepthEstimate, PO_DepthSplitRGBA
-from .image_nodes import PO_RGBAComposite, PO_SaveLayeredImage
+from .image_nodes import PO_RGBAComposite, PO_MergeRGBA, PO_SaveLayeredImage
 
 NODE_CLASS_MAPPINGS = {
     "PO_FractalSmokeRGBA": PO_FractalSmokeRGBA,
@@ -21,6 +21,7 @@ NODE_CLASS_MAPPINGS = {
     "PO_DepthEstimate": PO_DepthEstimate,
     "PO_DepthSplitRGBA": PO_DepthSplitRGBA,
     "PO_RGBAComposite": PO_RGBAComposite,
+    "PO_MergeRGBA": PO_MergeRGBA,
     "PO_SaveLayeredImage": PO_SaveLayeredImage,
 }
 
@@ -30,11 +31,12 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "PO_DepthEstimate": "PO Depth Estimate",
     "PO_DepthSplitRGBA": "PO Depth Split RGBA",
     "PO_RGBAComposite": "PO RGBA Composite",
+    "PO_MergeRGBA": "PO Merge RGBA",
     "PO_SaveLayeredImage": "PO Save Layered Image",
 }
 
 __all__ = [
     "PO_FractalSmokeRGBA", "PO_DustParticlesRGBA",
-    "PO_DepthEstimate", "PO_DepthSplitRGBA",
+    "PO_DepthEstimate", "PO_DepthSplitRGBA", "PO_MergeRGBA",
     "PO_RGBAComposite", "PO_SaveLayeredImage",
 ]

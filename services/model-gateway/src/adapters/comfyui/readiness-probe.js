@@ -5,7 +5,7 @@
  */
 
 import { getSystemStats, getObjectInfo } from "./http-client.js";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import config from "../../config.js";
 import logger from "../../utils/logger.js";
@@ -46,17 +46,25 @@ export async function probeNodes(requiredNodes = []) {
 
 export function probeModels(requiredModels = []) {
   const comfyRoot = config.comfyuiRoot || "";
-  const modelsDir = config.comfyuiModelsDir || resolve(comfyRoot, "models");
+  const modelsDir = config.modelAssetsDir || config.comfyuiModelsDir || resolve(comfyRoot, "models");
 
   const missing = [];
   for (const model of requiredModels) {
     const modelPath = resolve(modelsDir, model.path || model.name || model);
-    if (!existsSync(modelPath)) {
+    if (!existsSync(modelPath) || (model.minSizeBytes && _fileSize(modelPath) < model.minSizeBytes)) {
       missing.push(model.name || model.id || model);
     }
   }
 
   return { total: requiredModels.length, found: requiredModels.length - missing.length, missing };
+}
+
+function _fileSize(filePath) {
+  try {
+    return statSync(filePath).size;
+  } catch (_) {
+    return 0;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════

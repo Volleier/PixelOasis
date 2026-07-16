@@ -189,7 +189,7 @@ class PO_DustParticlesRGBA:
 
             # Displace by direction + turbulence
             px += dx * width * rng.randn(num_particles).astype(np.float32) * 0.15 * turbulence
-            py += (-dy * height * 0.4 + rng.randn(num_particles).astype(np.float32) * 0.1 * turbulence) * height
+            py += -dy * height * 0.4 + rng.randn(num_particles).astype(np.float32) * height * 0.1 * turbulence
 
             # Particle sizes and opacities
             sizes = rng.rand(num_particles).astype(np.float32) * 4.0 + 1.0  # 1-5 px

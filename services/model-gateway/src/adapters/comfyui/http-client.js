@@ -62,7 +62,13 @@ export async function uploadImage(filePath, filename, overwrite = false) {
   const { readFileSync } = await import("node:fs");
   const blob = new Blob([readFileSync(filePath)]);
   const form = new FormData();
-  form.append("image", blob, filename);
+  const normalized = String(filename).replace(/\\/g, "/");
+  const segments = normalized.split("/").filter(Boolean);
+  const imageName = segments.pop() || "source.png";
+  const subfolder = segments.join("/");
+  form.append("image", blob, imageName);
+  if (subfolder) form.append("subfolder", subfolder);
+  form.append("type", "input");
   if (overwrite) form.append("overwrite", "true");
 
   const resp = await _fetch("POST", "/upload/image", { body: form, timeoutMs: 60000 });

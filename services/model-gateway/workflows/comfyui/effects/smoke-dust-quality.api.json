@@ -1,6 +1,16 @@
 {
-  "_note": "This is a stub. The real API workflow must be exported from ComfyUI Desktop using Save (API Format) after installing the pixeloasis_effects custom node package. All node IDs must match the meta.json outputs section.",
-  "_status": "pending_export_from_comfyui",
-  "lastValidatedComfyUIVersion": null,
-  "nodes": []
+  "10": { "class_type": "LoadImage", "inputs": { "image": "po/placeholder/source.png" } },
+  "11": { "class_type": "LoadImageMask", "inputs": { "image": "po/placeholder/subject-mask.png", "channel": "red" } },
+  "12": { "class_type": "PO_DepthEstimate", "inputs": { "image": ["10", 0] } },
+  "20": { "class_type": "PO_FractalSmokeRGBA", "inputs": { "width": 1024, "height": 1024, "anchor_x": 0.58, "anchor_y": 0.72, "direction": "upRight", "density": 0.5, "spread": 0.45, "turbulence": 0.55, "seed": 42 } },
+  "21": { "class_type": "PO_DustParticlesRGBA", "inputs": { "width": 1024, "height": 1024, "anchor_x": 0.58, "anchor_y": 0.72, "direction": "upRight", "particleAmount": 0.35, "spread": 0.45, "turbulence": 0.55, "seed": 42 } },
+  "30": { "class_type": "PO_DepthSplitRGBA", "inputs": { "rgba": ["20", 0], "depth": ["12", 0], "subject_mask": ["11", 0], "occlusion": "auto" } },
+  "31": { "class_type": "PO_DepthSplitRGBA", "inputs": { "rgba": ["21", 0], "depth": ["12", 0], "subject_mask": ["11", 0], "occlusion": "auto" } },
+  "40": { "class_type": "PO_MergeRGBA", "inputs": { "back": ["30", 0], "front": ["30", 1] } },
+  "41": { "class_type": "PO_MergeRGBA", "inputs": { "back": ["31", 0], "front": ["31", 1] } },
+  "50": { "class_type": "PO_RGBAComposite", "inputs": { "source": ["10", 0], "back": ["30", 0], "front": ["30", 1] } },
+  "51": { "class_type": "PO_RGBAComposite", "inputs": { "source": ["50", 0], "back": ["31", 0], "front": ["31", 1] } },
+  "80": { "class_type": "PO_SaveLayeredImage", "inputs": { "images": ["40", 0], "filename_prefix": "PixelOasis/placeholder/smoke" } },
+  "81": { "class_type": "PO_SaveLayeredImage", "inputs": { "images": ["41", 0], "filename_prefix": "PixelOasis/placeholder/dust" } },
+  "90": { "class_type": "SaveImage", "inputs": { "images": ["51", 0], "filename_prefix": "PixelOasis/placeholder/composite" } }
 }

@@ -25,7 +25,7 @@ export async function runComfyUIStage(ctx, config) {
     apiWorkflow = bind.bind(apiWorkflow, inputs, config.parameters || {}, config.inputBinding);
   }
 
-  const outputs = await runPrompt(apiWorkflow, wf.meta, inputs, config.parameters || {}, {
+  const outputs = await runPrompt(apiWorkflow, wf.meta, inputs, inputs.params || config.parameters || {}, {
     jobId,
     clientId: jobId,
     timeoutMs: config.timeoutMs || 600000,

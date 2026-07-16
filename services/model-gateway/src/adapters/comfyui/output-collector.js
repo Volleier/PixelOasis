@@ -5,7 +5,7 @@
  */
 
 import { viewImage } from "./http-client.js";
-import { detectImageDimensions } from "../../utils/images.js";
+import { detectImageDimensions } from "./result-reader.js";
 import logger from "../../utils/logger.js";
 
 /* ═══════════════════════════════════════════════════════════════════

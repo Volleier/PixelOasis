@@ -11,6 +11,11 @@ import { executePipeline } from "../pipelines/orchestrator.js";
 import { isActive, STATES } from "./state-machine.js";
 import { getCapability } from "../capabilities/registry-instance.js";
 import { checkDiskSpace } from "../security/disk-protection.js";
+import { getAsset } from "../assets/asset-store.js";
+import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
+import sharp from "sharp";
+import config from "../config.js";
 import logger from "../utils/logger.js";
 
 let _running = false;
@@ -75,6 +80,19 @@ async function _processJob(jobId) {
   /* Get capability */
   const capability = getCapability(job.capabilityId);
   if (!capability) throw new Error("Capability not found: " + job.capabilityId);
+  if (!job.input || !job.input.source?.assetId) {
+    throw Object.assign(new Error("Job input graph is missing"), { code: "JOB_INPUT_MISSING" });
+  }
+  const sourceAsset = getAsset(job.input.source.assetId);
+  if (!sourceAsset || sourceAsset.clientId !== job.clientId) {
+    throw Object.assign(new Error("Job source asset is unavailable"), { code: "ASSET_NOT_FOUND" });
+  }
+  const subjectMaskAssetId = job.input.inputs?.subjectMaskAssetId;
+  const subjectMaskAsset = subjectMaskAssetId ? getAsset(subjectMaskAssetId) : null;
+  if (subjectMaskAsset && subjectMaskAsset.clientId !== job.clientId) {
+    throw Object.assign(new Error("Job subject mask is unavailable"), { code: "ASSET_NOT_FOUND" });
+  }
+  const subjectMaskPath = subjectMaskAsset?.path || await _createEmptySubjectMask(jobId, sourceAsset);
 
   /* ── preparing ── */
   jobRepo.updateState(jobId, STATES.PREPARING, { progress: 10 });
@@ -82,6 +100,7 @@ async function _processJob(jobId) {
 
   /* Resolve pipeline */
   const pipelineName = capability.pipeline || "black-smoke-v1";
+  const outputSize = _workflowSize(job.input.source.bounds);
 
   /* ── running ── */
   jobRepo.updateState(jobId, STATES.RUNNING, { progress: 25 });
@@ -91,7 +110,21 @@ async function _processJob(jobId) {
       jobId,
       capabilityId: job.capabilityId,
       params: job.params || {},
-      sourceBuffer: null, /* Will be loaded from asset store by runners */
+      sourcePath: sourceAsset.path,
+      subjectMaskPath,
+      sourceFilename: "po/" + jobId + "/source.png",
+      subjectMaskFilename: "po/" + jobId + "/subject-mask.png",
+      smokeOutputPrefix: "PixelOasis/" + jobId + "/smoke",
+      dustOutputPrefix: "PixelOasis/" + jobId + "/dust",
+      compositeOutputPrefix: "PixelOasis/" + jobId + "/composite",
+      images: [
+        { name: "source.png", filePath: sourceAsset.path },
+        { name: "subject-mask.png", filePath: subjectMaskPath },
+      ],
+      anchorX: _anchorCoordinate(job.input.inputs?.points, "x", 0.58, job.input.source.bounds?.width),
+      anchorY: _anchorCoordinate(job.input.inputs?.points, "y", 0.72, job.input.source.bounds?.height),
+      width: outputSize.width,
+      height: outputSize.height,
     });
 
     /* ── postprocessing ── */
@@ -136,7 +169,7 @@ async function _registerArtifacts(jobId, outputs, capability) {
     }
 
     /* Store as artifact asset */
-    const clientId = "default";
+    const clientId = jobRepo.getById(jobId)?.clientId;
     const artifactId = "art_" + jobId + "_" + role;
     const asset = storeAsset({
       id: artifactId,
@@ -157,6 +190,8 @@ async function _registerArtifacts(jobId, outputs, capability) {
       blendMode: artDef.blendMode || "normal",
       opacity: artDef.opacity || 100,
       previewOnly: artDef.previewOnly || false,
+      bounds: jobRepo.getById(jobId)?.input?.source?.bounds || null,
+      createSmartObject: true,
       order: (artifactRoles.indexOf(artDef) + 1) * 10,
     });
 
@@ -173,13 +208,42 @@ async function _registerArtifacts(jobId, outputs, capability) {
 }
 
 function _bufferToTempFile(buf, name) {
-  const { writeFileSync, mkdirSync, existsSync } = require("node:fs");
-  const { resolve } = require("node:path");
-  const tmpDir = resolve("E:/PixelOasisData", "tmp");
+  const tmpDir = resolve(config.dataDir, "tmp");
   if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
   const path = resolve(tmpDir, name + ".png");
   writeFileSync(path, buf);
   return path;
+}
+
+async function _createEmptySubjectMask(jobId, sourceAsset) {
+  const tmpDir = resolve(config.dataDir, "tmp");
+  if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
+  const path = resolve(tmpDir, jobId + "-empty-subject-mask.png");
+  const metadata = await sharp(sourceAsset.path).metadata();
+  await sharp({
+    create: {
+      width: metadata.width,
+      height: metadata.height,
+      channels: 3,
+      background: { r: 0, g: 0, b: 0 },
+    },
+  }).png().toFile(path);
+  return path;
+}
+
+function _anchorCoordinate(points, coordinate, fallback, extent) {
+  if (!Array.isArray(points) || points.length === 0 || !Number.isFinite(points[0]?.[coordinate]) || !extent) return fallback;
+  return Math.max(0, Math.min(1, points[0][coordinate] / extent));
+}
+
+function _workflowSize(bounds) {
+  const width = Math.max(1, Math.round(bounds?.width || 1024));
+  const height = Math.max(1, Math.round(bounds?.height || 1024));
+  const scale = Math.min(1, 1024 / Math.max(width, height));
+  return {
+    width: Math.max(64, Math.round(width * scale)),
+    height: Math.max(64, Math.round(height * scale)),
+  };
 }
 
 function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }

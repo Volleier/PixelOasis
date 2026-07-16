@@ -15,6 +15,8 @@ import { isActive, isTerminal } from "../../jobs/state-machine.js";
 import { getAsset } from "../../assets/asset-store.js";
 import { getCapability } from "../../capabilities/registry-instance.js";
 import config from "../../config.js";
+import { enqueue, cancelQueued } from "../../jobs/scheduler.js";
+import { getDb } from "../../persistence/database.js";
 import logger from "../../utils/logger.js";
 
 const MAX_JOB_BODY_BYTES = () => (config.jobInputMaxMb || 300) * 1024 * 1024;
@@ -125,7 +127,14 @@ export async function handleCreateJob(req, res, params) {
         capabilityId: payload.capabilityId,
         profile: (payload.options && payload.options.profile) || "quality_16gb",
         params: payload.parameters || null,
+        input: {
+          source: payload.source,
+          inputs: payload.inputs || {},
+          options: payload.options || {},
+        },
       });
+
+      enqueue(job.id);
 
       writeJson(res, 202, {
         jobId: job.id,
@@ -291,6 +300,7 @@ export async function handleGetJob(req, res, routeParams) {
     profile: job.profile,
     progress: _estimateProgress(job),
     stages: job.stages,
+    artifacts: getJobArtifacts(job.id),
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
   });
@@ -339,7 +349,9 @@ export async function handleCancelJob(req, res, routeParams) {
     return;
   }
 
-  jobRepo.updateState(jobId, "canceled", { message: "Canceled by user" });
+  if (!cancelQueued(jobId)) {
+    jobRepo.updateState(jobId, "canceled", { message: "Canceled by user" });
+  }
   writeJson(res, 200, { jobId, state: "canceled" });
 
   logger.info("job.canceled_v2", { component: "jobs-route", data: { jobId } });
@@ -407,7 +419,7 @@ export async function handleJobEvents(req, res, routeParams, queryParams) {
     /* Check if job reached terminal state */
     const current = jobRepo.getById(jobId);
     if (current && isTerminal(current.state)) {
-      _sendSSE(res, "complete", { state: current.state });
+      _sendSSE(res, "complete", { state: current.state, artifacts: getJobArtifacts(jobId) });
       clearInterval(interval);
       res.end();
     }
@@ -423,6 +435,24 @@ export async function handleJobEvents(req, res, routeParams, queryParams) {
     clearInterval(interval);
     clearInterval(heartbeat);
   });
+}
+
+function getJobArtifacts(jobId) {
+  return getDb().prepare(`
+    SELECT artifacts.id, artifacts.role, assets.mime, assets.sha256, assets.size_bytes, artifacts.placement_json
+    FROM artifacts
+    JOIN assets ON assets.id = artifacts.asset_id
+    WHERE artifacts.job_id = ?
+    ORDER BY artifacts.created_at ASC
+  `).all(jobId).map(artifact => ({
+    id: artifact.id,
+    role: artifact.role,
+    mimeType: artifact.mime,
+    sha256: artifact.sha256,
+    sizeBytes: artifact.size_bytes,
+    downloadUrl: "/v2/artifacts/" + artifact.id,
+    placement: artifact.placement_json ? JSON.parse(artifact.placement_json) : {},
+  }));
 }
 
 function isJobOwnedBy(req, job, queryParams) {

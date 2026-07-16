@@ -7,7 +7,7 @@
   "priority": 100,
   "profile": "quality_16gb",
   "minVramGb": 14,
-  "timeoutMs": 120000,
+  "timeoutMs": 180000,
   "apiWorkflowFile": "smoke-dust-quality.api.json",
   "inputs": {
     "source": "required",
@@ -22,6 +22,7 @@
   ],
   "bindings": [
     { "nodeId": "10", "field": "image", "type": "image", "source": "sourceFilename" },
+    { "nodeId": "11", "field": "image", "type": "mask", "source": "subjectMaskFilename" },
     { "nodeId": "20", "field": "width", "type": "integer", "source": "width" },
     { "nodeId": "20", "field": "height", "type": "integer", "source": "height" },
     { "nodeId": "20", "field": "anchor_x", "type": "number", "source": "anchorX" },
@@ -41,6 +42,10 @@
     { "nodeId": "21", "field": "turbulence", "type": "number", "source": "turbulence" },
     { "nodeId": "21", "field": "seed", "type": "seed", "source": "seed" },
     { "nodeId": "30", "field": "occlusion", "type": "enum", "source": "occlusion" }
+    ,{ "nodeId": "31", "field": "occlusion", "type": "enum", "source": "occlusion" }
+    ,{ "nodeId": "80", "field": "filename_prefix", "type": "string", "source": "smokeOutputPrefix" }
+    ,{ "nodeId": "81", "field": "filename_prefix", "type": "string", "source": "dustOutputPrefix" }
+    ,{ "nodeId": "90", "field": "filename_prefix", "type": "string", "source": "compositeOutputPrefix" }
   ],
   "sizePolicy": {
     "mode": "matchSelection",
@@ -52,13 +57,17 @@
     "group": "PixelOasis/黑色烟尘"
   },
   "requiredNodes": [
+    "PO_DepthEstimate",
     "PO_FractalSmokeRGBA",
     "PO_DustParticlesRGBA",
     "PO_DepthSplitRGBA",
-    "ImageCompositeMasked"
+    "PO_MergeRGBA",
+    "PO_RGBAComposite",
+    "PO_SaveLayeredImage",
+    "SaveImage"
   ],
   "requiredModels": [
-    { "name": "depth_anything_v2_vits.pth", "path": "depth_anything/depth_anything_v2_vits.pth" }
+    { "name": "depth_anything_v2_vitl_fp16.safetensors", "path": "depthanything/depth_anything_v2_vitl_fp16.safetensors" }
   ],
   "optionalNodes": ["TextEncodeQwenImageEdit"],
   "optionalModels": [

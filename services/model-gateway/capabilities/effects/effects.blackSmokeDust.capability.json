@@ -40,8 +40,8 @@
       "minVramGb": 14,
       "priority": 100,
       "enabled": true,
-      "requiredNodes": ["PO_FractalSmokeRGBA", "PO_DustParticlesRGBA", "PO_DepthSplitRGBA", "ImageCompositeMasked"],
-      "requiredModels": [{ "name": "depth_anything_v2_vits.pth", "path": "depth_anything/depth_anything_v2_vits.pth" }],
+      "requiredNodes": ["PO_DepthEstimate", "PO_FractalSmokeRGBA", "PO_DustParticlesRGBA", "PO_DepthSplitRGBA", "PO_MergeRGBA", "PO_RGBAComposite", "PO_SaveLayeredImage", "SaveImage"],
+      "requiredModels": [{ "name": "depth_anything_v2_vitl_fp16.safetensors", "path": "depthanything/depth_anything_v2_vitl_fp16.safetensors", "minSizeBytes": 500000000 }],
       "optionalNodes": ["TextEncodeQwenImageEdit"],
       "optionalModels": [{ "name": "qwen-image-edit", "path": "qwen/qwen-image-edit-*.safetensors" }]
     }

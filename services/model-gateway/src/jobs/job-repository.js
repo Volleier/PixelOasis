@@ -27,10 +27,11 @@ export function create(jobData) {
   const expiresAt = new Date(Date.now() + ttlHours * 3600 * 1000).toISOString();
 
   const paramsJson = jobData.params ? JSON.stringify(jobData.params) : null;
+  const inputJson = jobData.input ? JSON.stringify(jobData.input) : null;
 
   db.prepare(`
-    INSERT INTO jobs (id, client_id, correlation_id, idempotency_key, capability_id, state, profile, params_json, created_at, updated_at, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO jobs (id, client_id, correlation_id, idempotency_key, capability_id, state, profile, params_json, input_json, created_at, updated_at, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     jobData.clientId || "default",
@@ -40,6 +41,7 @@ export function create(jobData) {
     "queued",
     jobData.profile || "quality_16gb",
     paramsJson,
+    inputJson,
     now,
     now,
     expiresAt
@@ -82,6 +84,7 @@ export function getById(id) {
     state: job.state,
     profile: job.profile,
     params: job.params_json ? JSON.parse(job.params_json) : null,
+    input: job.input_json ? JSON.parse(job.input_json) : null,
     createdAt: job.created_at,
     updatedAt: job.updated_at,
     expiresAt: job.expires_at,

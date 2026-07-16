@@ -18,12 +18,9 @@ definePipeline("desert-sandstorm-v1", [
 ]);
 
 definePipeline("black-smoke-v1", [
-  { name: "resize",       runner: "image",   config: { operation: "resizeProxy", width: 1024, height: 1024 } },
-  { name: "smokeGen",     runner: "comfyui", config: { workflow: "smoke-dust-quality" } },
-  { name: "depthSplit",   runner: "comfyui", config: { workflow: "smoke-dust-quality" } },
+  { name: "smokeGen",     runner: "comfyui", config: { workflow: "smoke-dust-quality", timeoutMs: 180000 } },
   { name: "blank",        runner: "qualityGate", config: { gate: "blankOrCorrupt" } },
   { name: "dimensions",   runner: "qualityGate", config: { gate: "dimensions" } },
-  { name: "package",      runner: "artifact", config: { roles: ["smoke", "dust", "compositePreview"] } },
 ]);
 
 definePipeline("water-sparkle-v1", [

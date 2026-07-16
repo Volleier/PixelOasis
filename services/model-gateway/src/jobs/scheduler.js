@@ -36,7 +36,7 @@ export function done(jobId) {
 /* ── Get next queued job from database (on restart recovery) ── */
 export function recoverQueuedJobs() {
   try {
-    const queuedJobs = jobRepo.listByClient("default", "queued");
+    const queuedJobs = jobRepo.getActive().filter(job => job.state === "queued");
     for (const job of queuedJobs) {
       if (_queue.indexOf(job.id) === -1 && _processing !== job.id) {
         _queue.push(job.id);
