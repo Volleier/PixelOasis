@@ -404,13 +404,21 @@ window.PO.ParameterPanel = (function () {
 
     /* Display errors */
     if (!validation.valid) {
+      var firstErrorEl = null;
       var errorKeys = Object.keys(validation.errors);
       for (var i = 0; i < errorKeys.length; i++) {
         var key = errorKeys[i];
         var errorEl = document.getElementById("param-error-" + key);
         if (errorEl) {
           errorEl.textContent = validation.errors[key];
+          if (!firstErrorEl) firstErrorEl = errorEl;
         }
+      }
+      /* Scroll to first error */
+      if (firstErrorEl) {
+        firstErrorEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        var input = firstErrorEl.parentElement.querySelector("input, select, textarea");
+        if (input) input.focus();
       }
       window.PO.showTransientStatus &&
         window.PO.showTransientStatus("请修正参数错误后再提交");

@@ -49,7 +49,8 @@ window.PO.Preflight = (function () {
    * prepare(capability) → preflight result
    * ═══════════════════════════════════════════════════════════════════ */
 
-  function prepare(capability) {
+  function prepare(capability) { return _prepareAsync(capability); }
+  async function _prepareAsync(capability) {
     if (!capability) {
       return { passed: false, error: { code: "CAPABILITY_NOT_FOUND", userMessage: "能力不存在" } };
     }
@@ -129,8 +130,32 @@ window.PO.Preflight = (function () {
 
     if (needsSelection) {
       /* Check actual Photoshop selection — NOT full-canvas fake */
-      var hasSelection = _checkRealSelection(docInfo);
-      if (!hasSelection) {
+      try {
+        var selBounds = await window.PO.getSelectionBounds();
+        if (!selBounds || selBounds.width <= 0 || selBounds.height <= 0) {
+          return {
+            passed: false,
+            error: {
+              code: "INPUT_MASK_REQUIRED",
+              userMessage: "此功能需要编辑区域选区，请先选择要处理的区域",
+              action: "recapture-selection",
+            },
+          };
+        }
+        /* Verify selection is real (not full-canvas) */
+        var doc = window.require("photoshop").app.activeDocument;
+        if (doc && selBounds.width === doc.width && selBounds.height === doc.height) {
+          return {
+            passed: false,
+            error: {
+              code: "INPUT_MASK_REQUIRED",
+              userMessage: "请选择具体编辑区域，不能使用全画布选区",
+              action: "recapture-selection",
+            },
+          };
+        }
+        checks.selection.found = true;
+      } catch (e) {
         return {
           passed: false,
           error: {
@@ -140,7 +165,6 @@ window.PO.Preflight = (function () {
           },
         };
       }
-      checks.selection.found = true;
     }
 
     /* ── 4. Input contract — subject ── */

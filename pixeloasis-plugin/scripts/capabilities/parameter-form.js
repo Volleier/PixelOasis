@@ -189,18 +189,36 @@ window.PO.ParameterForm = (function () {
       return { element: el, unsupported: false };
     }
 
-    /* Color → text input with hex validation */
+    /* Color → text input with hex validation + color swatch */
     if (prop.type === "color" || prop.format === "color" || prop.format === "hex") {
+      var colorContainer = document.createElement("div");
+      colorContainer.className = "po-param-color-container";
+
       el = document.createElement("input");
       el.type = "text";
       el.id = "param-" + key;
-      el.className = "po-param-input";
+      el.className = "po-param-input po-param-color-input";
       el.setAttribute("data-param-key", key);
       el.setAttribute("data-param-type", "color");
-      el.maxLength = 9; /* #RRGGBB or #RRGGBBAA */
+      el.maxLength = 9;
       el.placeholder = "#RRGGBB";
       if (value !== undefined) el.value = String(value);
-      return { element: el, unsupported: false };
+
+      /* Color preview swatch */
+      var swatch = document.createElement("span");
+      swatch.className = "po-param-color-swatch";
+      swatch.style.backgroundColor = String(value || prop.default || "#888888");
+      swatch.setAttribute("aria-hidden", "true");
+      el.addEventListener("input", function () {
+        var v = el.value;
+        if (/^#[0-9A-Fa-f]{3,8}$/.test(v)) {
+          swatch.style.backgroundColor = v;
+        }
+      });
+
+      colorContainer.appendChild(swatch);
+      colorContainer.appendChild(el);
+      return { element: colorContainer, unsupported: false };
     }
 
     /* Object (one level of nested properties) */

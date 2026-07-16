@@ -61,11 +61,13 @@ window.PO.ResultPanel = (function () {
       artLabel.textContent = "生成结果：" + artifacts.length + " 个图层";
       artSection.appendChild(artLabel);
 
+      var ROLE_ZH = { background: "背景层", foreground: "前景层", subject: "主体层", result: "结果层", rimLight: "轮廓光", ambientHaze: "环境雾", glow: "辉光", lightning: "雷电", sparks: "火花", debris: "碎石", smoke: "烟雾", dust: "粉尘", backlight: "逆光", relitSubject: "重照主体", haze: "空气透视", contactShadow: "接触阴影", backdrop: "棚背景", subjectCutout: "主体抠图", colorBlend: "色彩融合", cleanupPatch: "清理修补", backgroundGrade: "背景调色", compositePreview: "合成预览", hairBody: "发型主体", hairEdges: "发丝边缘", hairStrands: "发丝", flowingHair: "飘发", flyawayStrands: "碎发", skinRepaint: "皮肤重绘", eyeEffect: "眼睛效果", faceRepaint: "面部重绘", bodyEdit: "身体编辑", garmentRepair: "服装修复", supportRemoval: "移除结果", removedMask: "移除蒙版", gearRemoval: "器材移除", environmentSpill: "环境溢光", subjectUnderlight: "主体底光", lightingEnhancement: "光影增强", dimensionalRender: "立体化渲染", lightShade: "明暗增强", cleanupComposite: "清场合成", waterHighlights: "水面波光", sparkleGlow: "闪烁辉光", farDust: "远景沙尘", nearDebris: "近景碎石", desertBackground: "沙漠背景", backTrails: "后景弹道", frontTrails: "前景弹道", impactSparks: "撞击火花", environmentReflection: "环境反射", longHair: "长发", doll01: "玩偶1", doll02: "玩偶2", doll03: "玩偶3", doll04: "玩偶4", doll05: "玩偶5" };
       for (var ai = 0; ai < artifacts.length; ai++) {
         var art = artifacts[ai];
         var artRow = document.createElement("div");
         artRow.className = "po-result-artifact";
-        artRow.textContent = (art.placement && art.placement.layerName) || art.role || ("图层 " + (ai + 1));
+        var roleLabel = ROLE_ZH[art.role] || art.role || ("图层 " + (ai + 1));
+        artRow.textContent = "• " + roleLabel;
         artSection.appendChild(artRow);
       }
 
