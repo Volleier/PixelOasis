@@ -63,7 +63,12 @@ window.PO.ArtifactDownloader = (function () {
     /* Fetch */
     var resp;
     try {
-      resp = await fetch(downloadUrl);
+      resp = await fetch(downloadUrl, {
+        headers: {
+          "X-Client-Id": window.PO.GatewayV2Client.getClientId(),
+          "Accept": "image/png",
+        },
+      });
     } catch (e) {
       throw new Error("下载失败：" + (e.message || "网络错误"));
     }

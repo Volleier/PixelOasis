@@ -28,7 +28,9 @@ window.PO.ResultGroup = (function () {
     if (!currentDocument) throw new Error("无活动文档");
 
     var jobId = job.jobId;
-    var artifacts = (job.result && job.result.artifacts) || [];
+    var artifacts = ((job.result && job.result.artifacts) || []).filter(function (artifact) {
+      return !(artifact.placement && artifact.placement.previewOnly === true);
+    });
     var rollbackGroupId = null;
     var rollbackLayerIds = [];
 
