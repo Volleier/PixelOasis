@@ -10,6 +10,29 @@ profiles:
     vramTier: "high"
 
 models:
+  - id: "depth-anything-v2-large-fp16"
+    name: "depth_anything_v2_vitl_fp16.safetensors"
+    folder: "depthanything"
+    required: true
+    license: "apache-2.0"
+    sizeGb: 0.68
+    sha256: ""
+    sources:
+      - type: "modelscope"
+        url: "https://modelscope.cn/models/damo/Depth-Anything-V2-Large/resolve/main/depth_anything_v2_vitl_fp16.safetensors"
+      - type: "huggingface"
+        url: "https://huggingface.co/depth-anything/Depth-Anything-V2-Large/resolve/main/depth_anything_v2_vitl_fp16.safetensors"
+      - type: "huggingface-mirror"
+        url: "https://hf-mirror.com/depth-anything/Depth-Anything-V2-Large/resolve/main/depth_anything_v2_vitl_fp16.safetensors"
+      - type: "huggingface-mirror-alt"
+        url: "https://hf-mirror.com/Kijai/DepthAnythingV2-safetensors/resolve/main/depth_anything_v2_vitl_fp16.safetensors"
+      - type: "modelscope-alt"
+        url: "https://modelscope.cn/models/Kijai/DepthAnythingV2-safetensors/resolve/main/depth_anything_v2_vitl_fp16.safetensors"
+      - type: "manual"
+        note: "Download depth_anything_v2_vitl_fp16.safetensors (Apache-2.0, ~680 MB) from https://huggingface.co/depth-anything/Depth-Anything-V2-Large or https://hf-mirror.com/depth-anything/Depth-Anything-V2-Large. Place in models/depthanything/ under the PixelOasis project root."
+    usedBy:
+      - "effects.blackSmokeDust"
+
   # ── Phase 1 model entries (placeholder — real models TBD) ──
 
   - id: "sd_xl_base"
