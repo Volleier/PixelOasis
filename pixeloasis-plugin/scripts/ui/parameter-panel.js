@@ -170,6 +170,14 @@ window.PO.ParameterPanel = (function () {
     var scroll = document.createElement("div");
     scroll.className = "po-param-overlay__scroll";
 
+    /* ── Inline status/error notice (always first in scroll) ── */
+    var notice = document.createElement("div");
+    notice.className = "po-param-overlay__notice";
+    notice.setAttribute("role", "status");
+    notice.setAttribute("aria-live", "polite");
+    notice.style.display = "none";
+    scroll.appendChild(notice);
+
     /* ── Capture summary ── */
     if (capture) {
       var summary = document.createElement("div");
@@ -423,12 +431,14 @@ window.PO.ParameterPanel = (function () {
     var formEl = _overlay.querySelector(".po-param-overlay__form");
     if (!formEl) return;
 
+    _clearInlineNotice();
+
     var result = window.PO.ParameterForm.getValues(formEl);
 
     var points = _readPoints();
     if (_currentPreflight && _currentPreflight.pointsRequired === 2) {
       if (!points || points.length !== 2) {
-        window.PO.showTransientStatus && window.PO.showTransientStatus("请填写效果起点和终点");
+        _showInlineError("capture", "POINTS_REQUIRED", "请填写效果起点和终点", false);
         return;
       }
       result.values.points = points;
@@ -462,8 +472,7 @@ window.PO.ParameterPanel = (function () {
         var input = firstErrorEl.parentElement.querySelector("input, select, textarea");
         if (input) input.focus();
       }
-      window.PO.showTransientStatus &&
-        window.PO.showTransientStatus("请修正参数错误后再提交");
+      _showInlineError("createJob", "REQUEST_SCHEMA_INVALID", "请修正参数错误后再提交", false);
       return;
     }
 
@@ -474,16 +483,21 @@ window.PO.ParameterPanel = (function () {
       result.values
     );
 
-    /* Update button state */
+    /* ── State machine begins ── */
     var submitBtn = document.getElementById("param-submit-btn");
+
+    /* State: validating */
+    _setInlineStatus("validating", "正在校验参数…");
     if (submitBtn) {
-      submitBtn.textContent = "提交中…";
+      submitBtn.textContent = "校验中…";
       submitBtn.disabled = true;
+      submitBtn.setAttribute("aria-busy", "true");
     }
 
-    window.PO.setStatus && window.PO.setStatus("正在提交任务…");
+    /* State: uploadingSource */
+    _setInlineStatus("uploadingSource", "正在上传源图…");
 
-    /* ── Submit via JobController ── */
+    /* Submit via JobController */
     try {
       var jobResult = await window.PO.JobController.createAndSubmit({
         capability: _currentCapability,
@@ -493,13 +507,13 @@ window.PO.ParameterPanel = (function () {
         subjectMode: _subjectMode,
       });
 
-      /* Success — close parameter panel, show progress */
+      /* State: queued — job created */
+      _setInlineStatus("queued", "任务已加入队列 — " + (jobResult.jobId || ""));
+
       if (submitBtn) {
         submitBtn.textContent = "任务已加入队列";
+        submitBtn.setAttribute("aria-busy", "false");
       }
-
-      window.PO.showTransientStatus &&
-        window.PO.showTransientStatus("任务已加入队列 — " + (jobResult.jobId || ""));
 
       window.PO.Logger && window.PO.Logger.info("parameter_panel.submitted", {
         component: "parameter-panel",
@@ -516,22 +530,23 @@ window.PO.ParameterPanel = (function () {
       if (jobResult.captureConsumed) {
         _currentCapture = null;
       }
-      close();
 
-      /* Make sure progress panel is visible before closing */
+      /* Show progress panel BEFORE closing to prevent visual gap */
       if (window.PO.ProgressPanel) {
         window.PO.ProgressPanel.show();
       }
 
+      close();
+
     } catch (err) {
-      /* Submission failed — keep panel open, capture alive, show inline error */
+      /* State: failed — keep panel open, show inline error */
       if (submitBtn) {
         submitBtn.textContent = "开始生成";
         submitBtn.disabled = false;
+        submitBtn.setAttribute("aria-busy", "false");
         _updateSubmitButton();
       }
 
-      /* Show inline error in overlay instead of transient status bar */
       var normalized = window.PO.ApiErrors.normalizeApiError(err);
       _showInlineError(normalized.stage || "createJob", normalized.code, normalized.userMessage, normalized.retryable);
 

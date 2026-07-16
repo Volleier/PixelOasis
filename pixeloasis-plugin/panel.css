@@ -716,6 +716,14 @@ body {
   opacity: 0.55;
 }
 
+.po-capability-card--unavailable {
+  opacity: 0.72;
+}
+
+.po-capability-card--unavailable .po-capability-card__body {
+  cursor: pointer;
+}
+
 .po-capability-card__body {
   flex: 1;
   min-width: 0;
@@ -1150,6 +1158,47 @@ body {
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   line-height: 1.5;
+}
+
+/* ── Inline notice (status / error, pinned to top of scroll) ── */
+.po-param-overlay__notice {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-sm);
+  border-radius: 2px;
+  margin-bottom: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.po-param-overlay__notice[hidden],
+.po-param-overlay__notice[style*="display: none"] {
+  display: none !important;
+}
+
+.po-param-overlay__notice--info,
+.po-param-overlay__notice--validating,
+.po-param-overlay__notice--uploadingSource,
+.po-param-overlay__notice--uploadingMask,
+.po-param-overlay__notice--creatingJob,
+.po-param-overlay__notice--queued {
+  background: rgba(90, 143, 197, 0.15);
+  color: #a0c8e8;
+  border: 1px solid rgba(90, 143, 197, 0.3);
+}
+
+.po-param-overlay__notice--error,
+.po-param-overlay__notice--failed {
+  background: rgba(232, 96, 48, 0.12);
+  color: #f0a080;
+  border: 1px solid rgba(232, 96, 48, 0.3);
+}
+
+.po-param-overlay__notice-text {
+  margin-bottom: var(--space-xs);
+  line-height: 1.4;
+}
+
+.po-param-overlay__retry-btn {
+  margin-right: var(--space-xs);
 }
 
 /* ── Bottom actions ── */
