@@ -89,6 +89,9 @@ window.PO.initSettings = function () {
       var oldUrl = window.PO.state.gatewayUrl;
       if (val) {
         window.PO.state.gatewayUrl = val;
+        try {
+          localStorage.setItem("po.settings.v2", JSON.stringify({ gatewayUrl: val }));
+        } catch (_) {}
         window.PO.Logger.info("settings.gateway_url_changed", {
           component: "settings",
           data: { oldUrl: oldUrl, newUrl: val },

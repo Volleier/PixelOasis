@@ -7,7 +7,8 @@
       "Bash(npm run *)",
       "Bash(node tools/deploy-plugin.mjs)",
       "Bash(node -e \"import\\('./pixeloasis-plugin/scripts/capabilities/capability-labels.js'\\).catch\\(\\(\\)=>{}\\); console.log\\('Fixture check done'\\)\")",
-      "Bash(node -e \"const fs = require\\('fs'\\); const c = fs.readFileSync\\('pixeloasis-plugin/scripts/capabilities/capability-labels.js','utf8'\\); const m = c.match\\(/EXPECTED_CAPABILITY_IDS\\\\s*=\\\\s*\\\\[\\([\\\\s\\\\S]*?\\)\\\\];/\\); if\\(m\\) console.log\\(m[1].split\\(','\\).filter\\(l=>l.includes\\('\\\\\"'\\)\\).length\\)\")"
+      "Bash(node -e \"const fs = require\\('fs'\\); const c = fs.readFileSync\\('pixeloasis-plugin/scripts/capabilities/capability-labels.js','utf8'\\); const m = c.match\\(/EXPECTED_CAPABILITY_IDS\\\\s*=\\\\s*\\\\[\\([\\\\s\\\\S]*?\\)\\\\];/\\); if\\(m\\) console.log\\(m[1].split\\(','\\).filter\\(l=>l.includes\\('\\\\\"'\\)\\).length\\)\")",
+      "Bash(curl -s http://127.0.0.1:8787/health)"
     ]
   }
 }
