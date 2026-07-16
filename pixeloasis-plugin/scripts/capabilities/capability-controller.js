@@ -59,7 +59,7 @@ window.PO.CapabilityController = (function () {
       }
 
       /* ── Step 2: Preflight ── */
-      preflightResult = window.PO.Preflight.prepare(capability);
+      preflightResult = await window.PO.Preflight.prepare(capability);
 
       if (!preflightResult.passed) {
         var err = preflightResult.error;

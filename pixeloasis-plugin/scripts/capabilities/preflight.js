@@ -74,6 +74,17 @@ window.PO.Preflight = (function () {
     }
     checks.document = { passed: true, docInfo: docInfo };
 
+    if (!window.PO.state || !window.PO.state.gateway || window.PO.state.gateway.health !== "online") {
+      return {
+        passed: false,
+        error: {
+          code: "COMFYUI_UNAVAILABLE",
+          userMessage: "v2 模型网关不可用，请先启动并完成环境检查",
+          action: "open-environment",
+        },
+      };
+    }
+
     /* ── 2. Readiness ── */
     var avail = capability.availability;
     if (avail) {
@@ -221,6 +232,7 @@ window.PO.Preflight = (function () {
       requireAdultConfirm: requireAdultConfirm,
       requireSubjectChoice: requireSubjectChoice,
       requiresSelection: needsSelection,
+      pointsRequired: pointsRequired,
     };
   }
 

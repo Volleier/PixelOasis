@@ -69,6 +69,9 @@ window.PO.toggleSettings = function () {
 window.PO.initSettings = function () {
   var els = window.PO.elements;
 
+  if (window.PO.state && window.PO.state._settingsInitialized) return;
+  if (window.PO.state) window.PO.state._settingsInitialized = true;
+
   els.settingsButton.addEventListener("click", window.PO.toggleSettings);
 
   els.settingsOverlay.addEventListener("click", function () {

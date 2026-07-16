@@ -29,6 +29,7 @@ window.PO.JobController = (function () {
     var capture = opts.capture;
     var values = opts.values || {};
     var preflight = opts.preflight;
+    var subjectMode = opts.subjectMode || "auto";
 
     if (!capability || !capture) {
       throw new Error("缺少能力或采集数据");
@@ -39,8 +40,8 @@ window.PO.JobController = (function () {
     var docInfo = capture.documentInfo || window.PO.CaptureUtils.getDocumentInfo();
     var documentId = docInfo ? docInfo.id : "0";
     var historyStateId = "0"; /* P2: simplified; real history state ID from Photoshop API */
-    var nonce = Math.floor(Math.random() * 100000).toString(36);
-    var idempotencyKey = documentId + ":" + historyStateId + ":" + capability.id + ":" + nonce;
+    var captureSessionId = capture.captureSessionId || "capture-unknown";
+    var idempotencyKey = documentId + ":" + historyStateId + ":" + capability.id + ":" + captureSessionId;
 
     /* Prevent double-submit */
     if (_submitting[idempotencyKey]) {
@@ -59,6 +60,18 @@ window.PO.JobController = (function () {
         correlationId: correlationId,
         data: { capabilityId: capability.id, idempotencyKey: idempotencyKey },
       });
+
+      /* The subject choice is made in the parameter panel. Re-capture only
+         when the user switched away from the preview's auto subject source. */
+      if (capture.scope === "subject" && subjectMode !== (capture.subjectSource || "auto")) {
+        window.PO.CaptureUtils.releaseCapture(capture);
+        capture = await window.PO.SubjectCapture.captureSubjectContext(
+          window.PO.CaptureUtils.getDefaultPolicy(),
+          { mode: subjectMode }
+        );
+        docInfo = capture.documentInfo || docInfo;
+        documentId = docInfo ? docInfo.id : documentId;
+      }
 
       /* ── Upload assets ── */
       var sourceAssetId = null;
@@ -86,7 +99,11 @@ window.PO.JobController = (function () {
           );
           editMaskAssetId = maskResult.assetId;
         } catch (e) {
-          /* Mask upload failure is non-fatal for some capabilities */
+          var maskRequired = capability.input &&
+            (capability.input.mask === "required" || capability.input.editMask === "required");
+          if (maskRequired) {
+            throw new Error("编辑蒙版上传失败：" + (e.userMessage || e.message));
+          }
           window.PO.Logger && window.PO.Logger.warn("job.mask_upload_failed", {
             component: "job-controller",
             correlationId: correlationId,
@@ -112,7 +129,7 @@ window.PO.JobController = (function () {
       }
 
       /* ── Build job payload ── */
-      var bounds = capture.editBounds || capture.subjectBounds || capture.bounds;
+      var bounds = capture.contextBounds || capture.subjectBounds || capture.bounds || capture.editBounds;
       var payload = {
         schemaVersion: "2.0",
         capabilityId: capability.id,
@@ -129,12 +146,17 @@ window.PO.JobController = (function () {
             bitDepth: docInfo ? docInfo.bitDepth : 8,
           },
           bounds: bounds || { left: 0, top: 0, width: 0, height: 0 },
+          editBounds: capture.editBounds || null,
+          contextBounds: capture.contextBounds || null,
+          contextOffset: capture.contextOffset || null,
+          sourceScale: capture.sourceScale || 1,
         },
         inputs: {
           editMaskAssetId: editMaskAssetId || null,
           subjectMaskAssetId: subjectMaskAssetId || null,
           referenceAssetIds: [],
-          points: [],
+          points: _normalizePoints(values),
+          subjectSource: capture.subjectSource || subjectMode,
         },
         parameters: values,
         options: {
@@ -147,7 +169,7 @@ window.PO.JobController = (function () {
         },
       };
 
-      /* ── Create job (try gateway, fall back to mock) ── */
+      /* ── Create job ── */
       var jobResult;
       var useMock = false;
 
@@ -159,13 +181,12 @@ window.PO.JobController = (function () {
           throw new Error("Unexpected response: " + resp.status);
         }
       } catch (e) {
-        window.PO.Logger && window.PO.Logger.warn("job.gateway_create_failed_using_mock", {
-          component: "job-controller",
-          correlationId: correlationId,
-          error: e,
-        });
-        useMock = true;
-        jobResult = _createMockJob(correlationId, capability.id);
+        if (window.PO.state && window.PO.state.gateway && window.PO.state.gateway.mockMode === true) {
+          useMock = true;
+          jobResult = _createMockJob(correlationId, capability.id);
+        } else {
+          throw e;
+        }
       }
 
       var jobId = jobResult.jobId;
@@ -222,6 +243,7 @@ window.PO.JobController = (function () {
       throw e;
     } finally {
       delete _submitting[idempotencyKey];
+      window.PO.CaptureUtils.releaseCapture(capture);
     }
   }
 
@@ -230,18 +252,24 @@ window.PO.JobController = (function () {
    * ═══════════════════════════════════════════════════════════════════ */
 
   async function cancel(jobId) {
-    window.PO.JobStore.upsert({ jobId: jobId, state: "canceled" });
-    window.PO.JobEvents.unwatch(jobId);
-
     try {
-      await window.PO.GatewayV2Client.cancelJob(jobId);
+      var response = await window.PO.GatewayV2Client.cancelJob(jobId);
+      var serverState = response && response.data && response.data.state;
+      window.PO.JobStore.upsert({
+        jobId: jobId,
+        state: serverState || "canceling",
+        cancelRequested: true,
+      });
+      if (serverState === "canceled" || serverState === "failed" || serverState === "succeeded") {
+        window.PO.JobEvents.unwatch(jobId);
+      }
     } catch (e) {
-      /* Mark as canceled locally even if server cancel fails */
       window.PO.Logger && window.PO.Logger.warn("job.cancel_server_failed", {
         component: "job-controller",
         error: e,
         data: { jobId: jobId },
       });
+      throw e;
     }
 
     window.PO.Logger && window.PO.Logger.info("job.canceled", {
@@ -273,14 +301,24 @@ window.PO.JobController = (function () {
         var resp = await window.PO.GatewayV2Client.getJob(job.jobId);
         if (resp.ok && resp.data) {
           var state = resp.data.state;
+          var recoveredResult = resp.data.artifacts ? {
+            artifacts: resp.data.artifacts,
+            metrics: resp.data.metrics || {},
+            warnings: resp.data.warnings || [],
+          } : null;
           window.PO.JobStore.upsert({
             jobId: job.jobId,
             state: state,
             progress: resp.data.progress,
+            result: recoveredResult,
           });
 
           if (state === "succeeded" || state === "failed" || state === "canceled") {
-            /* Terminal state reached while away */
+            if (state === "succeeded" && recoveredResult) {
+              _onJobComplete(job.jobId, recoveredResult);
+            } else if (state === "failed") {
+              _onJobError(job.jobId, resp.data.error || { message: "任务失败" });
+            }
             continue;
           }
         }
@@ -403,6 +441,16 @@ window.PO.JobController = (function () {
 
   /* ── Job completed successfully ── */
   function _onJobComplete(jobId, result) {
+    window.PO.JobStore.upsert({
+      jobId: jobId,
+      state: "succeeded",
+      progress: 100,
+      result: {
+        artifacts: result.artifacts || [],
+        metrics: result.metrics || {},
+        warnings: result.warnings || [],
+      },
+    });
     window.PO.Logger && window.PO.Logger.info("job.completed", {
       component: "job-controller",
       data: {
@@ -428,6 +476,16 @@ window.PO.JobController = (function () {
     if (window.PO.ResultPanel) {
       window.PO.ResultPanel.showError(jobId, error);
     }
+  }
+
+  function _normalizePoints(values) {
+    var points = values.points || values.pointPair || [];
+    if (!Array.isArray(points)) return [];
+    return points.filter(function (point) {
+      return point && Number.isFinite(point.x) && Number.isFinite(point.y);
+    }).map(function (point) {
+      return { x: Math.round(point.x), y: Math.round(point.y) };
+    });
   }
 
   return {

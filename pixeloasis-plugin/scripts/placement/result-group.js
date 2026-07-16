@@ -29,6 +29,8 @@ window.PO.ResultGroup = (function () {
 
     var jobId = job.jobId;
     var artifacts = (job.result && job.result.artifacts) || [];
+    var rollbackGroupId = null;
+    var rollbackLayerIds = [];
 
     if (artifacts.length === 0) {
       throw new Error("此任务没有可回填的结果");
@@ -78,8 +80,10 @@ window.PO.ResultGroup = (function () {
         if (!doc) throw new Error("文档已关闭");
 
         /* ── Create/find group ── */
-        var group = await _findOrCreateGroup(groupName);
+        var groupInfo = await _findOrCreateGroup(groupName);
+        var group = groupInfo.group;
         if (!group) throw new Error("无法创建图层组");
+        if (groupInfo.created) rollbackGroupId = group.id;
 
         /* ── Sort by placement.order ── */
         downloaded.sort(function (a, b) {
@@ -105,6 +109,7 @@ window.PO.ResultGroup = (function () {
             item.fileEntry.fileEntry, placement
           );
           placedLayers.push({ layerId: result.layerId, artifact: item.artifact });
+          rollbackLayerIds.push(result.layerId);
 
           /* Move into group */
           await _moveLayerIntoGroup(result.layerId, groupId);
@@ -112,7 +117,7 @@ window.PO.ResultGroup = (function () {
           /* Apply artifact mask if specified */
           if (placement.maskArtifactId && item.maskFileEntry) {
             await window.PO.MaskPlacer.applyArtifactMask(
-              result.layerId, item.maskFileEntry, jobId
+              result.layerId, item.maskFileEntry.fileEntry, jobId
             );
           }
 
@@ -154,7 +159,7 @@ window.PO.ResultGroup = (function () {
       return true;
 
     } catch (e) {
-      /* Transaction failed — downloaded files are cleaned up */
+      await _rollbackPlacement(rollbackGroupId, rollbackLayerIds);
       await window.PO.ArtifactDownloader.cleanupJobFiles(jobId);
 
       window.PO.Logger && window.PO.Logger.error("result_group.placement_failed", {
@@ -178,7 +183,7 @@ window.PO.ResultGroup = (function () {
     for (var i = 0; i < layers.length; i++) {
       try {
         if (layers[i].name === groupName && layers[i].kind === "group") {
-          return layers[i];
+          return { group: layers[i], created: false };
         }
       } catch (_) {}
     }
@@ -189,7 +194,34 @@ window.PO.ResultGroup = (function () {
       { synchronousExecution: false, modalBehavior: "execute" },
     );
 
-    return _app().activeDocument.activeLayer;
+    return { group: _app().activeDocument.activeLayer, created: true };
+  }
+
+  async function _rollbackPlacement(groupId, layerIds) {
+    if ((!groupId && (!layerIds || layerIds.length === 0)) || !_app().activeDocument) return;
+    try {
+      await _core().executeAsModal(async function () {
+        if (groupId) {
+          await _action().batchPlay(
+            [{ _obj: "delete", _target: [{ _ref: "layer", _id: groupId }], _options: { dialogOptions: "dontDisplay" } }],
+            { synchronousExecution: false, modalBehavior: "execute" }
+          );
+          return;
+        }
+        for (var index = layerIds.length - 1; index >= 0; index--) {
+          await _action().batchPlay(
+            [{ _obj: "delete", _target: [{ _ref: "layer", _id: layerIds[index] }], _options: { dialogOptions: "dontDisplay" } }],
+            { synchronousExecution: false, modalBehavior: "execute" }
+          );
+        }
+      }, { commandName: "PixelOasis Roll Back Failed Placement" });
+    } catch (rollbackError) {
+      window.PO.Logger && window.PO.Logger.error("result_group.rollback_failed", {
+        component: "result-group",
+        error: rollbackError,
+        data: { groupId: groupId, layerCount: layerIds.length },
+      });
+    }
   }
 
   /* ── Move layer into group ── */

@@ -222,6 +222,36 @@ window.PO.ParameterPanel = (function () {
       scroll.appendChild(warnSection);
     }
 
+    /* ── Optional/required source points ── */
+    if (preflight && preflight.pointsRequired === 2) {
+      var pointsSection = document.createElement("div");
+      pointsSection.className = "po-param-section";
+      var pointsLabel = document.createElement("div");
+      pointsLabel.className = "po-param-label";
+      pointsLabel.textContent = "效果起止点（文档像素）";
+      pointsSection.appendChild(pointsLabel);
+      ["起点", "终点"].forEach(function (label, index) {
+        var row = document.createElement("div");
+        row.className = "po-param-row";
+        var caption = document.createElement("span");
+        caption.textContent = label;
+        row.appendChild(caption);
+        ["x", "y"].forEach(function (axis) {
+          var input = document.createElement("input");
+          input.type = "number";
+          input.min = "0";
+          input.step = "1";
+          input.required = true;
+          input.setAttribute("data-point-index", String(index));
+          input.setAttribute("data-point-axis", axis);
+          input.setAttribute("aria-label", label + " " + axis);
+          row.appendChild(input);
+        });
+        pointsSection.appendChild(row);
+      });
+      scroll.appendChild(pointsSection);
+    }
+
     /* ── Subject source choice ── */
     if (preflight && preflight.requireSubjectChoice) {
       var subjectSection = document.createElement("div");
@@ -392,6 +422,15 @@ window.PO.ParameterPanel = (function () {
 
     var result = window.PO.ParameterForm.getValues(formEl);
 
+    var points = _readPoints();
+    if (_currentPreflight && _currentPreflight.pointsRequired === 2) {
+      if (!points || points.length !== 2) {
+        window.PO.showTransientStatus && window.PO.showTransientStatus("请填写效果起点和终点");
+        return;
+      }
+      result.values.points = points;
+    }
+
     /* Remove internal keys */
     delete result.values._subjectMode;
     delete result.values._adultConfirmed;
@@ -448,6 +487,7 @@ window.PO.ParameterPanel = (function () {
         capture: _currentCapture,
         values: result.values,
         preflight: _currentPreflight,
+        subjectMode: _subjectMode,
       });
 
       /* Success — close parameter panel, show progress */
@@ -468,7 +508,7 @@ window.PO.ParameterPanel = (function () {
         },
       });
 
-      /* Don't release capture — controller manages it. Close panel. */
+      /* JobController releases the uploaded capture. Close without a second release. */
       _currentCapture = null; /* Prevent releaseCapture from firing on close */
       close();
 
@@ -501,6 +541,24 @@ window.PO.ParameterPanel = (function () {
   /* ── Get subject mode ── */
   function getSubjectMode() {
     return _subjectMode;
+  }
+
+  function _readPoints() {
+    if (!_overlay) return [];
+    var pointInputs = _overlay.querySelectorAll("[data-point-index]");
+    if (pointInputs.length === 0) return [];
+    var points = [{}, {}];
+    for (var index = 0; index < pointInputs.length; index++) {
+      var input = pointInputs[index];
+      var pointIndex = Number(input.getAttribute("data-point-index"));
+      var axis = input.getAttribute("data-point-axis");
+      var value = Number(input.value);
+      if (!Number.isFinite(value) || value < 0 || !points[pointIndex] || !axis) return [];
+      points[pointIndex][axis] = Math.round(value);
+    }
+    return points.every(function (point) {
+      return Number.isFinite(point.x) && Number.isFinite(point.y);
+    }) ? points : [];
   }
 
   return {

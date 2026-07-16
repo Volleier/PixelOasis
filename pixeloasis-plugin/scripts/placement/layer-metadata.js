@@ -57,7 +57,7 @@ window.PO.LayerMetadata = (function () {
         },
       });
 
-      /* Store metadata on the layer via batchPlay XMP descriptor when available */
+      /* Store metadata on the layer via batchPlay XMP descriptor when available. */
       var xmpDesc = _buildXmpDescriptor(info);
       try {
         await _action().batchPlay(
@@ -80,6 +80,12 @@ window.PO.LayerMetadata = (function () {
           error: xmpErr,
         });
       }
+
+      /* XMP is not consistently readable on all supported UXP hosts. Keep a
+         deterministic fallback in the layer name so idempotency survives a
+         Photoshop restart. The invisible separator keeps the visible name
+         readable while remaining parseable by readLayerMetadata(). */
+      await _writeLayerNameFallback(layer.id, info);
 
       return true;
     } catch (e) {
@@ -116,6 +122,38 @@ window.PO.LayerMetadata = (function () {
       }
     } catch (e) {
       /* XMP read not available */
+    }
+    return _parseLayerNameFallback(layer.name);
+  }
+
+  async function _writeLayerNameFallback(layerId, info) {
+    var layer = _findLayerById(_app().activeDocument.layers, layerId);
+    if (!layer) throw new Error("无法找到写入元数据的图层");
+    var suffix = "\u2063poJobId=" + String(info.jobId || "");
+    var name = String(layer.name || "");
+    var baseName = name.split("\u2063poJobId=")[0];
+    await _action().batchPlay(
+      [{
+        _obj: "set",
+        _target: [{ _ref: "layer", _id: layerId }],
+        to: { _obj: "layer", name: baseName + suffix },
+        _options: { dialogOptions: "dontDisplay" },
+      }],
+      { synchronousExecution: false, modalBehavior: "execute" }
+    );
+  }
+
+  function _parseLayerNameFallback(name) {
+    var match = String(name || "").match(/\u2063poJobId=([A-Za-z0-9_-]+)/);
+    return match ? { poJobId: match[1] } : null;
+  }
+
+  function _findLayerById(layers, layerId) {
+    for (var index = 0; layers && index < layers.length; index++) {
+      var layer = layers[index];
+      if (String(layer.id) === String(layerId)) return layer;
+      var nested = _findLayerById(layer.layers, layerId);
+      if (nested) return nested;
     }
     return null;
   }

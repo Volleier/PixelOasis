@@ -54,13 +54,7 @@
     }
 
     /* ═══════════════════════════════════════════════════════════════
-     * Step 3: Init settings (binds drawer events)
-     * ═══════════════════════════════════════════════════════════════ */
-
-    if (window.PO.initSettings) window.PO.initSettings();
-
-    /* ═══════════════════════════════════════════════════════════════
-     * Step 4: Restore persisted state
+     * Step 3: Restore persisted state
      * ═══════════════════════════════════════════════════════════════ */
 
     /* Restore favorites from localStorage */
@@ -125,9 +119,10 @@
       /* ═══════════════════════════════════════════════════════════════
        * Step 6.5: Recover active jobs
        * ═══════════════════════════════════════════════════════════════ */
+      var activeJobs = [];
       if (window.PO.JobStore && window.PO.JobController) {
         window.PO.JobStore.load();
-        var activeJobs = window.PO.JobStore.listActive();
+        activeJobs = window.PO.JobStore.listActive();
         if (activeJobs.length > 0 && window.PO.CapabilitySections && window.PO.CapabilitySections.updateTaskLink) {
           window.PO.CapabilitySections.updateTaskLink(activeJobs.length);
         }
@@ -140,8 +135,8 @@
         });
       }
 
-      /* Update task link */
-      if (window.PO.CapabilitySections && window.PO.CapabilitySections.updateTaskLink) {
+      /* Show zero only when there were no restored active jobs. */
+      if (activeJobs.length === 0 && window.PO.CapabilitySections && window.PO.CapabilitySections.updateTaskLink) {
         window.PO.CapabilitySections.updateTaskLink(0);
       }
     }).catch(function (err) {
@@ -165,8 +160,9 @@
      * Step 8: Gateway health check (background, non-blocking)
      * ═══════════════════════════════════════════════════════════════ */
 
-    if (window.PO.GatewayClient && window.PO.GatewayClient.health) {
-      window.PO.GatewayClient.health().then(function (healthy) {
+    if (window.PO.GatewayV2Client && window.PO.GatewayV2Client.getHealth) {
+      window.PO.GatewayV2Client.getHealth("full").then(function (response) {
+        var healthy = !!(response && response.ok && response.data && response.data.status === "ok");
         window.PO.state.gateway.health = healthy ? "online" : "offline";
 
         if (window.PO.CapabilitySections && window.PO.CapabilitySections.updateEnvStatus) {

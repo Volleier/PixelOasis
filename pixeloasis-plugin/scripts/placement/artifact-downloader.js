@@ -165,7 +165,6 @@ window.PO.ArtifactDownloader = (function () {
         artifactId: artifact.id,
         jobId: jobId,
         sizeBytes: arrayBuffer.byteLength,
-        path: file.nativePath || filename,
       },
     });
 
@@ -173,7 +172,7 @@ window.PO.ArtifactDownloader = (function () {
   }
 
   /* ═══════════════════════════════════════════════════════════════════
-   * downloadAllArtifacts(artifacts, jobId) → [{ artifact, fileEntry }]
+   * downloadAllArtifacts(artifacts, jobId) → [{ artifact, fileEntry, maskFileEntry }]
    * ═══════════════════════════════════════════════════════════════════ */
 
   async function downloadAllArtifacts(artifacts, jobId) {
@@ -181,12 +180,33 @@ window.PO.ArtifactDownloader = (function () {
 
     var results = [];
     var errors = [];
+    var byId = {};
+    var maskIds = {};
+    var downloads = {};
+
+    for (var index = 0; index < artifacts.length; index++) {
+      byId[artifacts[index].id] = artifacts[index];
+      if (artifacts[index].placement && artifacts[index].placement.maskArtifactId) {
+        maskIds[artifacts[index].placement.maskArtifactId] = true;
+      }
+    }
 
     /* Download sequentially (UXP may limit concurrent transfers) */
     for (var i = 0; i < artifacts.length; i++) {
+      /* A referenced mask is downloaded for its visual artifact, not placed as
+         an independent result layer. */
+      if (maskIds[artifacts[i].id]) continue;
       try {
-        var fileEntry = await downloadArtifact(artifacts[i], jobId);
-        results.push({ artifact: artifacts[i], fileEntry: fileEntry });
+        var fileEntry = await _downloadOnce(artifacts[i]);
+        var maskFileEntry = null;
+        var maskArtifactId = artifacts[i].placement && artifacts[i].placement.maskArtifactId;
+        if (maskArtifactId) {
+          if (!byId[maskArtifactId]) {
+            throw new Error("找不到引用的 mask artifact: " + maskArtifactId);
+          }
+          maskFileEntry = await _downloadOnce(byId[maskArtifactId]);
+        }
+        results.push({ artifact: artifacts[i], fileEntry: fileEntry, maskFileEntry: maskFileEntry });
       } catch (e) {
         errors.push({ index: i, artifact: artifacts[i], error: e.message });
       }
@@ -202,6 +222,13 @@ window.PO.ArtifactDownloader = (function () {
     }
 
     return results;
+
+    async function _downloadOnce(artifact) {
+      if (!downloads[artifact.id]) {
+        downloads[artifact.id] = await downloadArtifact(artifact, jobId);
+      }
+      return downloads[artifact.id];
+    }
   }
 
   /* ═══════════════════════════════════════════════════════════════════

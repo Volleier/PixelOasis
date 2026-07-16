@@ -171,18 +171,6 @@ function _onAppClick(e) {
       return;
     }
 
-    /* ── Settings button ── */
-    if (el.id === "settings-btn") {
-      if (window.PO.toggleSettings) window.PO.toggleSettings();
-      return;
-    }
-
-    /* ── Settings overlay dismiss ── */
-    if (el.id === "settings-overlay") {
-      if (window.PO.toggleSettings) window.PO.toggleSettings();
-      return;
-    }
-
     /* ── Clear favorites ── */
     if (el.id === "clear-favorites-btn") {
       if (confirm(window.PO.TEXT.clearFavoritesConfirm)) {
