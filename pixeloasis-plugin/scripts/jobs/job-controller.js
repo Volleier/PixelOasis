@@ -270,11 +270,24 @@ window.PO.JobController = (function () {
       /* ── Create job ── */
       var jobResult;
       var useMock = false;
+      var isIdempotent = false;
 
       try {
         var resp = await window.PO.GatewayV2Client.createJob(payload);
-        if (resp.ok && resp.status === 202) {
+        /* Accept 202 (new) or 200 (idempotent recovery) */
+        if (resp.ok && (resp.status === 202 || resp.status === 200)) {
           jobResult = resp.data;
+          if (resp.status === 200) {
+            if (!jobResult || !jobResult.jobId) {
+              throw new Error("幂等响应缺少 jobId");
+            }
+            isIdempotent = true;
+            window.PO.Logger && window.PO.Logger.info("job.idempotent_recovered", {
+              component: "job-controller",
+              correlationId: correlationId,
+              data: { jobId: jobResult.jobId, idempotencyKey: idempotencyKey },
+            });
+          }
         } else {
           throw new Error("Unexpected response: " + resp.status);
         }
@@ -326,12 +339,17 @@ window.PO.JobController = (function () {
       window.PO.Logger && window.PO.Logger.info("job.created", {
         component: "job-controller",
         correlationId: correlationId,
-        data: { jobId: jobId, capabilityId: capability.id, mock: useMock },
+        data: { jobId: jobId, capabilityId: capability.id, mock: useMock, idempotent: isIdempotent },
       });
 
-      return { jobId: jobId, correlationId: correlationId, mock: useMock };
+      /* Capture is consumed by the gateway — safe to release */
+      window.PO.CaptureUtils.releaseCapture(capture);
+
+      return { jobId: jobId, correlationId: correlationId, mock: useMock, captureConsumed: true };
 
     } catch (e) {
+      /* Upload or create failed — DO NOT release capture.
+         User can retry with the same capture data. */
       window.PO.Logger && window.PO.Logger.error("job.submit_failed", {
         component: "job-controller",
         correlationId: correlationId,
@@ -341,7 +359,6 @@ window.PO.JobController = (function () {
       throw e;
     } finally {
       delete _submitting[idempotencyKey];
-      window.PO.CaptureUtils.releaseCapture(capture);
     }
   }
 

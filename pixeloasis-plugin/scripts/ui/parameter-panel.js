@@ -22,6 +22,7 @@ window.PO.ParameterPanel = (function () {
   var _formResult = null;       /* { fragment, hasUnsupported } */
   var _subjectMode = "auto";
   var _adultConfirmed = false;
+  var _traceId = null;          /* persists across retries within one panel session */
 
   /* ═══════════════════════════════════════════════════════════════════
    * open({ capability, capture, preflight, draftValues })
@@ -33,6 +34,7 @@ window.PO.ParameterPanel = (function () {
     _currentCapture = opts.capture || null;
     _currentPreflight = opts.preflight || null;
     _adultConfirmed = false;
+    _traceId = "po-" + Date.now().toString(36) + "-" + Math.floor(Math.random() * 10000).toString(36);
 
     if (!_currentCapability) return;
 
@@ -92,7 +94,7 @@ window.PO.ParameterPanel = (function () {
       } catch (e) { /* ignore */ }
     }
 
-    /* Release capture data */
+    /* Release capture ONLY if not consumed by a successful job submission */
     if (_currentCapture) {
       window.PO.CaptureUtils.releaseCapture(_currentCapture);
       _currentCapture = null;
@@ -102,6 +104,7 @@ window.PO.ParameterPanel = (function () {
     _currentPreflight = null;
     _formResult = null;
     _adultConfirmed = false;
+    _traceId = null;
 
     if (_overlay) {
       _overlay.style.display = "none";
@@ -505,36 +508,97 @@ window.PO.ParameterPanel = (function () {
           jobId: jobResult.jobId,
           capabilityId: _currentCapability.id,
           mock: jobResult.mock || false,
+          idempotent: jobResult.idempotent || false,
         },
       });
 
-      /* JobController releases the uploaded capture. Close without a second release. */
-      _currentCapture = null; /* Prevent releaseCapture from firing on close */
+      /* JobController consumed the capture — prevent double-release on close */
+      if (jobResult.captureConsumed) {
+        _currentCapture = null;
+      }
       close();
 
-      /* Show progress panel */
+      /* Make sure progress panel is visible before closing */
       if (window.PO.ProgressPanel) {
         window.PO.ProgressPanel.show();
       }
 
     } catch (err) {
-      /* Submission failed — keep panel open, show error */
+      /* Submission failed — keep panel open, capture alive, show inline error */
       if (submitBtn) {
         submitBtn.textContent = "开始生成";
         submitBtn.disabled = false;
         _updateSubmitButton();
       }
 
-      window.PO.showTransientStatus &&
-        window.PO.showTransientStatus(
-          "提交失败：" + (err.userMessage || err.message || "未知错误")
-        );
+      /* Show inline error in overlay instead of transient status bar */
+      var normalized = window.PO.ApiErrors.normalizeApiError(err);
+      _showInlineError(normalized.stage || "createJob", normalized.code, normalized.userMessage, normalized.retryable);
 
       window.PO.Logger && window.PO.Logger.error("parameter_panel.submit_failed", {
         component: "parameter-panel",
         error: err,
-        data: { capabilityId: _currentCapability.id },
+        data: { capabilityId: _currentCapability.id, traceId: _traceId },
       });
+    }
+  }
+
+  /* ── Inline status (inside overlay scroll area) ── */
+  function _setInlineStatus(stage, message) {
+    var notice = _overlay && _overlay.querySelector(".po-param-overlay__notice");
+    if (!notice) return;
+    notice.className = "po-param-overlay__notice po-param-overlay__notice--" + (stage || "info");
+    notice.setAttribute("role", "status");
+    notice.setAttribute("aria-live", "polite");
+    notice.textContent = message || "";
+    notice.style.display = message ? "" : "none";
+  }
+
+  /* ── Inline error with retry/recapture/back actions ── */
+  function _showInlineError(stage, code, userMessage, retryable) {
+    var notice = _overlay && _overlay.querySelector(".po-param-overlay__notice");
+    if (!notice) return;
+    notice.className = "po-param-overlay__notice po-param-overlay__notice--error";
+    notice.setAttribute("role", "alert");
+    notice.innerHTML = "";
+
+    var msg = document.createElement("div");
+    msg.className = "po-param-overlay__notice-text";
+    msg.textContent = (userMessage || "提交失败") + (code ? " [" + code + "]" : "");
+    notice.appendChild(msg);
+
+    /* Retry button — only if capture still valid */
+    if (retryable && _currentCapture) {
+      var retryBtn = document.createElement("button");
+      retryBtn.className = "po-button po-button--primary po-param-overlay__retry-btn";
+      retryBtn.type = "button";
+      retryBtn.textContent = "重试";
+      retryBtn.addEventListener("click", function (e) { e.preventDefault(); _handleSubmit(); });
+      notice.appendChild(retryBtn);
+    }
+
+    /* Recapture button */
+    var recapBtn = document.createElement("button");
+    recapBtn.className = "po-button po-button--secondary";
+    recapBtn.type = "button";
+    recapBtn.textContent = "重新采集";
+    recapBtn.style.marginLeft = "8px";
+    recapBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      if (_currentCapture) { window.PO.CaptureUtils.releaseCapture(_currentCapture); _currentCapture = null; }
+      close();
+    });
+    notice.appendChild(recapBtn);
+
+    notice.style.display = "";
+  }
+
+  /* ── Clear inline notice ── */
+  function _clearInlineNotice() {
+    var notice = _overlay && _overlay.querySelector(".po-param-overlay__notice");
+    if (notice) {
+      notice.innerHTML = "";
+      notice.style.display = "none";
     }
   }
 
