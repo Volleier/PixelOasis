@@ -451,6 +451,11 @@ window.PO.CapabilitySections = (function () {
       var header = document.createElement("div");
       header.className = "po-section__header";
 
+      var sectionTitle = document.createElement("h2");
+      sectionTitle.className = "po-section__title";
+      sectionTitle.textContent = sec.title;
+      header.appendChild(sectionTitle);
+
       var toggleBtn = document.createElement("button");
       toggleBtn.className = "po-section__toggle";
       toggleBtn.type = "button";
@@ -461,11 +466,6 @@ window.PO.CapabilitySections = (function () {
       toggleBtn.textContent = "▾";
       _sectionHeaders[sec.id] = toggleBtn;
       header.appendChild(toggleBtn);
-
-      var sectionTitle = document.createElement("h2");
-      sectionTitle.className = "po-section__title";
-      sectionTitle.textContent = sec.title;
-      header.appendChild(sectionTitle);
 
       sectionEl.appendChild(header);
 
@@ -520,32 +520,7 @@ window.PO.CapabilitySections = (function () {
     var drawerBody = document.createElement("div");
     drawerBody.className = "po-settings-drawer__body";
 
-    /* Theme toggle row */
-    var themeRow = document.createElement("div");
-    themeRow.className = "po-setting-row";
 
-    var themeCopy = document.createElement("div");
-    themeCopy.className = "po-setting-copy";
-    var themeLabel = document.createElement("div");
-    themeLabel.className = "po-setting-row__label";
-    themeLabel.textContent = "亮暗模式";
-    var themeHint = document.createElement("div");
-    themeHint.className = "po-setting-row__hint";
-    themeHint.textContent = "仅显示界面，逻辑暂未接入";
-    themeCopy.appendChild(themeLabel);
-    themeCopy.appendChild(themeHint);
-    themeRow.appendChild(themeCopy);
-
-    var themeToggle = document.createElement("button");
-    themeToggle.id = "theme-toggle-btn";
-    themeToggle.className = "po-toggle";
-    themeToggle.type = "button";
-    themeToggle.setAttribute("aria-pressed", "false");
-    var themeThumb = document.createElement("span");
-    themeThumb.className = "po-toggle__thumb";
-    themeToggle.appendChild(themeThumb);
-    themeRow.appendChild(themeToggle);
-    drawerBody.appendChild(themeRow);
 
     /* Gateway URL */
     var gwGroup = document.createElement("div");
@@ -656,7 +631,6 @@ window.PO.CapabilitySections = (function () {
     els.settingsButton = settingsBtn;
     els.settingsOverlay = settingsOverlay;
     els.settingsDrawer = settingsDrawer;
-    els.themeToggleButton = themeToggle;
     els.gatewayUrlInput = gwInput;
     els.statusNode = statusNode;
 

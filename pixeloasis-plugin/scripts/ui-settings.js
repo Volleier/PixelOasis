@@ -81,20 +81,6 @@ window.PO.initSettings = function () {
     }
   });
 
-  els.themeToggleButton.addEventListener("click", function () {
-    var state = window.PO.state;
-    state.themePressed = !state.themePressed;
-    els.themeToggleButton.setAttribute(
-      "aria-pressed",
-      state.themePressed ? "true" : "false",
-    );
-    window.PO.Logger.info("settings.theme_toggled", {
-      component: "settings",
-      data: { darkMode: state.themePressed },
-    });
-    window.PO.showTransientStatus("theme toggle clicked");
-  });
-
   /* Gateway URL — save on change */
   if (els.gatewayUrlInput) {
     els.gatewayUrlInput.value = window.PO.state.gatewayUrl || "http://127.0.0.1:8787";

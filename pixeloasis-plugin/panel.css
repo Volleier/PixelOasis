@@ -71,6 +71,8 @@ body {
 }
 
 .po-section__header {
+  display: flex;
+  align-items: center;
   margin-bottom: var(--space-xs);
 }
 
@@ -79,6 +81,7 @@ body {
   color: var(--text-primary);
   font-size: var(--font-size-md);
   font-weight: 600;
+  flex: 1;
 }
 
 .po-section__body {
@@ -842,7 +845,7 @@ body {
 .po-section__toggle {
   width: 24px;
   height: 24px;
-  margin-right: 4px;
+  margin-left: 8px;
   padding: 0;
   border: none;
   background: transparent;
