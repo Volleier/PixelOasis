@@ -336,6 +336,16 @@ window.PO.GatewayV2Client = (function () {
     }
   }
 
+  /* ── Send client event (download/placement acknowledgement) ── */
+  async function sendClientEvent(jobId, event, data, traceId) {
+    if (!_validateId(jobId)) return;
+    return requestJson("POST", "/v2/jobs/" + encodeURIComponent(jobId) + "/client-events", {
+      body: JSON.stringify({ event: event, data: data || {} }),
+      traceId: traceId,
+      timeoutMs: 10000,
+    });
+  }
+
   /* ── Validate ID format ── */
   function _validateId(id) {
     if (!id || typeof id !== "string") return false;
@@ -358,5 +368,6 @@ window.PO.GatewayV2Client = (function () {
     retryJob:            retryJob,
     downloadArtifact:    downloadArtifact,
     subscribeJobEvents:  subscribeJobEvents,
+    sendClientEvent:     sendClientEvent,
   };
 })();

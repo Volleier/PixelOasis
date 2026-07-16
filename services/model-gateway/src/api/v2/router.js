@@ -7,7 +7,7 @@
 import { handleHealth } from "./health-route.js";
 import { handleCapabilities, handleCapabilityById } from "./capabilities-route.js";
 import { handleAssetUpload, handleAssetHead } from "./assets-route.js";
-import { handleCreateJob, handleGetJob, handleListJobs, handleCancelJob, handleRetryJob, handleJobEvents } from "./jobs-route.js";
+import { handleCreateJob, handleGetJob, handleListJobs, handleCancelJob, handleRetryJob, handleJobEvents, handleGetJobAudit, handleClientEvent } from "./jobs-route.js";
 import { handleArtifactDownload } from "./artifacts-route.js";
 import { v2NotFound, v2ServerError } from "../../utils/errors.js";
 import logger from "../../utils/logger.js";
@@ -37,6 +37,10 @@ const PARAM_ROUTES = [
   { method: "DELETE", pattern: /^\/v2\/jobs\/([A-Za-z0-9_-]+)$/, handler: handleCancelJob, paramKeys: ["id"] },
   /* /v2/artifacts/{id} */
   { method: "GET", pattern: /^\/v2\/artifacts\/([A-Za-z0-9_-]+)$/, handler: handleArtifactDownload, paramKeys: ["id"] },
+  /* /v2/jobs/{id}/audit */
+  { method: "GET", pattern: /^\/v2\/jobs\/([A-Za-z0-9_-]+)\/audit$/, handler: handleGetJobAudit, paramKeys: ["id"] },
+  /* /v2/jobs/{id}/client-events */
+  { method: "POST", pattern: /^\/v2\/jobs\/([A-Za-z0-9_-]+)\/client-events$/, handler: handleClientEvent, paramKeys: ["id"] },
 ];
 
 /* ═══════════════════════════════════════════════════════════════════

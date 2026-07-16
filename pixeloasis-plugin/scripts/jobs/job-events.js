@@ -110,6 +110,20 @@ window.PO.JobEvents = (function () {
       es.addEventListener("state", handleSseEvent);
       es.addEventListener("state_change", handleSseEvent);
       es.addEventListener("complete", handleSseEvent);
+      es.addEventListener("audit_complete", function (event) {
+        try {
+          var audit = JSON.parse(event.data);
+          if (audit && audit.jobId) {
+            window.PO.JobStore.upsert({
+              jobId: audit.jobId,
+              auditSummary: audit,
+            });
+            if (watcher.callbacks.onAuditComplete) {
+              watcher.callbacks.onAuditComplete(audit.jobId, audit);
+            }
+          }
+        } catch (e) { /* ignore parse errors */ }
+      });
     }
 
     es.onerror = function () {

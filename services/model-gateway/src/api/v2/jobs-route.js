@@ -18,6 +18,7 @@ import config from "../../config.js";
 import { enqueue, cancelQueued } from "../../jobs/scheduler.js";
 import { getDb } from "../../persistence/database.js";
 import logger from "../../utils/logger.js";
+import { getAuditEvents, buildAuditSummary, writeAuditEvent } from "../../observability/audit-repository.js";
 
 const MAX_JOB_BODY_BYTES = () => (config.jobInputMaxMb || 300) * 1024 * 1024;
 
@@ -469,7 +470,19 @@ export async function handleJobEvents(req, res, routeParams, queryParams) {
     /* Check if job reached terminal state */
     const current = jobRepo.getById(jobId);
     if (current && isTerminal(current.state)) {
-      _sendSSE(res, "complete", { state: current.state, artifacts: getJobArtifacts(jobId) });
+      const artifacts = getJobArtifacts(jobId);
+      _sendSSE(res, "complete", { state: current.state, artifacts: artifacts });
+
+      /* Send audit summary as a separate named event */
+      const auditSummary = buildAuditSummary(jobId, current.trace_id || current.correlationId, current, artifacts);
+      _sendSSE(res, "audit_complete", auditSummary);
+
+      logger.info("sse.audit.sent", {
+        component: "jobs-route",
+        jobId: jobId,
+        data: { artifactCount: artifacts.length },
+      });
+
       clearInterval(interval);
       res.end();
     }
@@ -516,4 +529,72 @@ function _sendSSE(res, event, data, id) {
   if (id) res.write("id: " + id + "\n");
   res.write("event: " + event + "\n");
   res.write("data: " + JSON.stringify(data) + "\n\n");
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * GET /v2/jobs/{id}/audit — replay task audit timeline
+ * ═══════════════════════════════════════════════════════════════════ */
+
+export async function handleGetJobAudit(req, res, routeParams) {
+  const jobId = routeParams.id;
+  const job = jobRepo.getById(jobId);
+  if (!job || !isJobOwnedBy(req, job)) {
+    v2NotFound(res, "JOB_NOT_FOUND", "Job not found: " + jobId);
+    return;
+  }
+  const limit = parseInt(req.url && req.url.indexOf("limit=") !== -1 ? new URLSearchParams(req.url.split("?")[1]).get("limit") : "200", 10) || 200;
+  const events = getAuditEvents(jobId, Math.min(limit, 500));
+  writeJson(res, 200, {
+    jobId: jobId,
+    traceId: job.trace_id || job.correlationId,
+    state: job.state,
+    events: events,
+  });
+
+  logger.info("job.audit.served", {
+    component: "jobs-route",
+    jobId: jobId,
+    data: { eventCount: events.length },
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * POST /v2/jobs/{id}/client-events — plugin reports download/placement
+ * ═══════════════════════════════════════════════════════════════════ */
+
+export async function handleClientEvent(req, res, routeParams) {
+  const jobId = routeParams.id;
+  const job = jobRepo.getById(jobId);
+  if (!job || !isJobOwnedBy(req, job)) {
+    v2NotFound(res, "JOB_NOT_FOUND", "Job not found: " + jobId);
+    return;
+  }
+
+  const body = await readJsonBody(req, 16 * 1024);
+  const allowedEvents = [
+    "artifact.download.started", "artifact.download.completed",
+    "placement.started", "placement.completed", "placement.failed",
+    "placement.acknowledged",
+  ];
+
+  const event = body.event;
+  if (!event || !allowedEvents.includes(event)) {
+    v2BadRequest(res, "REQUEST_SCHEMA_INVALID", "Unknown or disallowed client event: " + (event || ""));
+    return;
+  }
+
+  const data = body.data || {};
+  /* Mark plugin-reported events clearly */
+  data.reportedBy = "plugin";
+
+  writeAuditEvent(jobId, job.trace_id || job.correlationId, event, "info", data);
+
+  logger.info("client." + event, {
+    component: "jobs-route",
+    jobId: jobId,
+    traceId: job.trace_id || job.correlationId,
+    data: data,
+  });
+
+  writeJson(res, 201, { acknowledged: true, event: event });
 }
