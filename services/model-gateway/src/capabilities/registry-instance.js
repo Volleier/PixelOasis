@@ -43,8 +43,10 @@ export async function initCapabilityRegistry(capDir) {
       component: "capability-registry",
       error: e,
     });
-    enriched = capabilities.map(c => ({ ...c, availability: { state: "ready", profile: "quality_16gb" } }));
+    enriched = capabilities.map(c => ({ ...c, availability: { state: "missing_nodes", profile: null, details: { reason: "readiness_probe_failed" } } }));
   }
+
+  enriched = enriched.map(normalizeCapabilityForApi);
 
   _registry = {
     capabilities: enriched,
@@ -65,6 +67,21 @@ export async function initCapabilityRegistry(capDir) {
   });
 
   return _registry;
+}
+
+function normalizeLocalized(value) {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") return value["zh-CN"] || value.en || Object.values(value)[0] || "";
+  return "";
+}
+
+function normalizeCapabilityForApi(capability) {
+  return {
+    ...capability,
+    title: normalizeLocalized(capability.title),
+    description: normalizeLocalized(capability.description),
+    ui: { ...(capability.ui || {}), requiresConfirm: true },
+  };
 }
 
 export function getCapabilityRegistry() {

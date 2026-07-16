@@ -1,152 +1,106 @@
-/* upload-stream.js — Streaming multipart upload handler
- *
- * GatewayOrchestrationDesign §3.2: streams upload to temp file,
- * computes SHA-256 during streaming, detects PNG dimensions.
- * Never buffers entire file in memory.
- */
+/* upload-stream.js — bounded streaming multipart parser for v2 assets */
 
+import Busboy from "busboy";
 import { createHash } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { tmpdir } from "node:os";
-import { resolve, basename } from "node:path";
+import { createWriteStream, existsSync, mkdirSync, unlinkSync } from "node:fs";
+import { resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
-import { createReadStream, existsSync, mkdirSync, unlinkSync } from "node:fs";
-import { PassThrough } from "node:stream";
 import config from "../config.js";
-import logger from "../utils/logger.js";
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024; /* 100 MB */
-const PNG_MAGIC = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-
-/* ═══════════════════════════════════════════════════════════════════
- * handleUpload(req, dataDir) → { tempPath, sha256, sizeBytes, mime }
- *
- * Streams the request body to a temp file while computing SHA-256.
- * Reads enough of the start to detect PNG magic + dimensions.
- * ═══════════════════════════════════════════════════════════════════ */
+const ALLOWED_KINDS = new Set(["source", "editMask", "subjectMask", "reference", "artifact"]);
+const ALLOWED_MIME = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 export async function handleUpload(req, dataDir) {
-  return new Promise((resolve, reject) => {
-    const hash = createHash("sha256");
-    const tempDir = dataDir || config.dataDir || tmpdir();
-    const tempName = "upload_" + Date.now().toString(36) + "_" + Math.floor(Math.random() * 10000).toString(36);
-    const tempPath = resolve(tempDir, tempName);
+  const maxBytes = (config.uploadMaxMb || 100) * 1024 * 1024;
+  const tempDir = resolve(dataDir || config.dataDir, "incoming");
+  if (!existsSync(tempDir)) mkdirSync(tempDir, { recursive: true });
 
-    if (!existsSync(tempDir)) {
-      mkdirSync(tempDir, { recursive: true });
-    }
+  const fields = {};
+  let upload = null;
+  let uploadError = null;
+  const fileTasks = [];
 
-    /* Content-Type validation */
-    const contentType = req.headers["content-type"] || "";
-    if (contentType.indexOf("multipart/form-data") === -1) {
-      reject(Object.assign(new Error("Expected multipart/form-data"), { statusCode: 400, code: "INVALID_CONTENT_TYPE" }));
+  const busboy = Busboy({
+    headers: req.headers,
+    limits: { files: 1, fields: 8, fileSize: maxBytes, fieldSize: 1024 },
+  });
+
+  busboy.on("field", (name, value) => {
+    fields[name] = value;
+  });
+
+  busboy.on("file", (name, stream, info) => {
+    if (name !== "file" || upload) {
+      stream.resume();
+      uploadError = uploadError || new Error("Exactly one file field is required");
       return;
     }
 
-    const writeStream = createWriteStream(tempPath);
-    let totalBytes = 0;
-    let mime = "image/png";
-    let pngHeaderBuf = Buffer.alloc(0);
-    let headerChecked = false;
+    const tempPath = resolve(tempDir, "upload_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2));
+    const hash = createHash("sha256");
+    let sizeBytes = 0;
+    let firstBytes = Buffer.alloc(0);
+    const output = createWriteStream(tempPath, { flags: "wx" });
 
-    /* Hash transform stream */
-    const hashStream = new PassThrough();
-    hashStream.on("data", (chunk) => {
-      totalBytes += chunk.length;
-      if (totalBytes > MAX_FILE_SIZE) {
-        hashStream.destroy();
-        writeStream.destroy();
-        try { unlinkSync(tempPath); } catch (_) {}
-        reject(Object.assign(new Error("File too large: " + (totalBytes / 1024 / 1024).toFixed(1) + " MB"), { statusCode: 413, code: "FILE_TOO_LARGE" }));
-        return;
-      }
-
+    stream.on("data", (chunk) => {
+      sizeBytes += chunk.length;
       hash.update(chunk);
-
-      /* Check PNG header from first bytes */
-      if (!headerChecked && totalBytes >= 8) {
-        headerChecked = true;
-        /* The PNG header check is best-effort for multipart — the actual
-         * PNG validation happens in the asset store after parsing. */
-      }
+      if (firstBytes.length < 16) firstBytes = Buffer.concat([firstBytes, chunk]).subarray(0, 16);
+    });
+    stream.on("limit", () => {
+      uploadError = new Error("File exceeds configured upload limit");
     });
 
-    /* Pipe: req → hashStream → writeStream */
-    pipeline(req, hashStream, writeStream)
-      .then(() => {
-        const sha256 = hash.digest("hex");
-
-        /* Detect MIME type from file header */
-        try {
-          const { readFileSync } = require("fs");
-          const header = readFileSync(tempPath, { start: 0, end: 7 });
-          if (header.length >= 8) {
-            const isPng = PNG_MAGIC.every((b, i) => header[i] === b);
-            mime = isPng ? "image/png" : "application/octet-stream";
-          }
-        } catch (_) {}
-
-        resolve({
-          tempPath,
-          sha256,
-          sizeBytes: totalBytes,
-          mime,
-        });
-      })
-      .catch((err) => {
-        try { unlinkSync(tempPath); } catch (_) {}
-        reject(err);
-      });
+    const task = pipeline(stream, output).then(() => {
+      if (uploadError) throw uploadError;
+      upload = {
+        tempPath,
+        sha256: hash.digest("hex"),
+        sizeBytes,
+        mime: detectMime(firstBytes),
+        originalMime: info.mimeType,
+        filename: info.filename,
+      };
+    });
+    fileTasks.push(task);
   });
-}
 
-/* ═══════════════════════════════════════════════════════════════════
- * parseMultipart(buffer, boundary) → [{ headers, body: Buffer }]
- *
- * Simple multipart parser for the upload handler.
- * ═══════════════════════════════════════════════════════════════════ */
+  const finished = new Promise((resolvePromise, rejectPromise) => {
+    busboy.once("finish", resolvePromise);
+    busboy.once("error", rejectPromise);
+  });
+  req.pipe(busboy);
+  await finished;
+  await Promise.all(fileTasks);
 
-export function parseMultipart(buffer, boundary) {
-  const parts = [];
-  const boundaryBuffer = Buffer.from("--" + boundary);
-  const endBoundary = Buffer.from("--" + boundary + "--");
-
-  let pos = 0;
-  while (pos < buffer.length) {
-    /* Find next boundary */
-    const boundaryPos = buffer.indexOf(boundaryBuffer, pos);
-    if (boundaryPos === -1) break;
-    if (buffer.indexOf(endBoundary, boundaryPos) === boundaryPos) break; /* End */
-
-    /* Find headers end (double CRLF) */
-    const headerStart = boundaryPos + boundaryBuffer.length + 2; /* +2 for CRLF after boundary */
-    const headerEnd = buffer.indexOf("\r\n\r\n", headerStart);
-    if (headerEnd === -1) break;
-
-    /* Parse headers */
-    const headerText = buffer.subarray(headerStart, headerEnd).toString("utf8");
-    const headers = {};
-    for (const line of headerText.split("\r\n")) {
-      const colonIdx = line.indexOf(":");
-      if (colonIdx > 0) {
-        headers[line.substring(0, colonIdx).trim().toLowerCase()] = line.substring(colonIdx + 1).trim();
-      }
-    }
-
-    /* Body */
-    const bodyStart = headerEnd + 4; /* +4 for \r\n\r\n */
-    const nextBoundary = buffer.indexOf(boundaryBuffer, bodyStart);
-    const bodyEnd = nextBoundary !== -1 ? nextBoundary - 2 : buffer.length; /* -2 for CRLF before boundary */
-
-    parts.push({
-      headers,
-      body: buffer.subarray(bodyStart, bodyEnd),
-    });
-
-    pos = bodyEnd;
+  if (uploadError) {
+    if (upload?.tempPath) safeUnlink(upload.tempPath);
+    throw uploadError;
+  }
+  if (!upload) throw new Error("No file field found in upload");
+  if (!ALLOWED_MIME.has(upload.mime)) {
+    safeUnlink(upload.tempPath);
+    throw new Error("Unsupported image format");
   }
 
-  return parts;
+  const kind = fields.kind || "source";
+  if (!ALLOWED_KINDS.has(kind)) {
+    safeUnlink(upload.tempPath);
+    throw new Error("Unsupported asset kind");
+  }
+
+  return { ...upload, kind, correlationId: fields.correlationId || "" };
 }
 
-export default { handleUpload, parseMultipart };
+function detectMime(header) {
+  if (header.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return "image/png";
+  if (header[0] === 0xff && header[1] === 0xd8) return "image/jpeg";
+  if (header.subarray(0, 4).toString("ascii") === "RIFF" && header.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
+  return "application/octet-stream";
+}
+
+function safeUnlink(path) {
+  try { unlinkSync(path); } catch (_) { /* best effort */ }
+}
+
+export default { handleUpload };

@@ -7,13 +7,12 @@
 import { writeJson } from "../../utils/errors.js";
 import config from "../../config.js";
 import logger from "../../utils/logger.js";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statfsSync } from "node:fs";
 import { resolve } from "node:path";
-import { execSync } from "node:child_process";
 
 export async function handleHealth(req, res, params) {
   const depth = params.get("depth") || "basic";
-  const result = { gateway: "ok", timestamp: new Date().toISOString() };
+  const result = { status: "ok", gateway: "ok", timestamp: new Date().toISOString() };
 
   /* ComfyUI probe */
   try {
@@ -73,20 +72,10 @@ export async function handleHealth(req, res, params) {
 
     /* Disk */
     try {
-      const dataDir = config.dataDir || "E:/PixelOasisData";
-      const { execSync } = await import("node:child_process");
-      let freeGb = 0;
-      try {
-        if (process.platform === "win32") {
-          const drive = dataDir.substring(0, 2);
-          const out = execSync("wmic logicaldisk where DeviceID='" + drive + "' get FreeSpace /value", { timeout: 5000 }).toString();
-          const match = out.match(/FreeSpace=(\d+)/);
-          if (match) freeGb = Math.round(parseInt(match[1]) / 1024 / 1024 / 1024);
-        }
-      } catch (_) { freeGb = 50; /* assume OK */ }
-      result.disk = { free_gb: freeGb };
-    } catch (_) {
-      result.disk = { free_gb: 50 };
+      const stats = statfsSync(config.dataDir || process.cwd());
+      result.disk = { free_gb: Math.floor((Number(stats.bavail) * Number(stats.bsize)) / 1024 / 1024 / 1024) };
+    } catch (error) {
+      result.disk = { free_gb: null, error: "unavailable" };
     }
 
     /* Profile */

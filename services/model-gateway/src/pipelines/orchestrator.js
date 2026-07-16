@@ -58,12 +58,15 @@ export async function executePipeline(jobId, pipelineName, inputs) {
       /* Stage recovery: retry once for retryable errors */
       if (e.retryable !== false && stageRecord.attempt < 1) {
         logger.info("pipeline.stage_retry", { component: "orchestrator", data: { jobId, stage: stage.name, attempt: 1 } });
-        jobRepo.addStage(jobId, { name: stage.name, ordinal: i, attempt: 1 });
+        const retryStage = jobRepo.addStage(jobId, { name: stage.name, ordinal: i, attempt: 1, input: { config: stage.config } });
         try {
           const retryResult = await runner(ctx, stage.config);
           ctx.stageResults.push({ name: stage.name, result: retryResult, retried: true });
+          if (retryResult.outputs) Object.assign(ctx.outputs, retryResult.outputs);
+          jobRepo.updateStage(retryStage.id, { state: "completed", output: retryResult, endedAt: new Date().toISOString() });
           continue;
         } catch (retryErr) {
+          jobRepo.updateStage(retryStage.id, { state: "failed", error: { message: retryErr.message, code: retryErr.code }, endedAt: new Date().toISOString() });
           logger.error("pipeline.stage_retry_failed", { component: "orchestrator", error: retryErr, data: { jobId, stage: stage.name } });
         }
       }

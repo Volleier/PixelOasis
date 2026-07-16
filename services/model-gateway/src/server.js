@@ -29,8 +29,8 @@ try {
   console.log("  Database: ready (SQLite WAL)");
   logger.info("database.initialized", { component: "server" });
 } catch (err) {
-  console.warn("  Database: initialization warning — " + err.message);
-  logger.warn("database.init_warning", { component: "server", error: err });
+  logger.error("database.init_failed", { component: "server", error: err });
+  throw new Error("Gateway database initialization failed: " + err.message);
 }
 
 /* Init capability registry (v2) — loads *.capability.json files */
@@ -40,8 +40,8 @@ try {
   console.log("  Capabilities: registry loaded");
   logger.info("capabilities.initialized", { component: "server" });
 } catch (err) {
-  console.warn("  Capabilities: initialization warning — " + err.message);
-  logger.warn("capabilities.init_warning", { component: "server", error: err });
+  logger.error("capabilities.init_failed", { component: "server", error: err });
+  throw new Error("Gateway capability registry initialization failed: " + err.message);
 }
 
 /* Load pipeline definitions (v2 Stage 5-7) */

@@ -8,37 +8,24 @@
  * GET    /v2/jobs/{id}/events   → SSE event stream
  */
 
-import { writeJson, v2BadRequest, v2NotFound, v2Conflict, v2Unprocessable, v2ServerError } from "../../utils/errors.js";
-import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { writeJson, v2BadRequest, v2NotFound, v2Conflict, v2Unprocessable, v2ServerError, v2QueueFull, v2DependencyMissing } from "../../utils/errors.js";
 import * as jobRepo from "../../jobs/job-repository.js";
 import * as eventRepo from "../../jobs/event-repository.js";
 import { isActive, isTerminal } from "../../jobs/state-machine.js";
 import { getAsset } from "../../assets/asset-store.js";
+import { getCapability } from "../../capabilities/registry-instance.js";
+import config from "../../config.js";
 import logger from "../../utils/logger.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-/* Load schema */
-let _schema = null;
-function getSchema() {
-  if (!_schema) {
-    _schema = JSON.parse(readFileSync(resolve(__dirname, "schemas/job-request.schema.json"), "utf8"));
-  }
-  return _schema;
-}
+const MAX_JOB_BODY_BYTES = () => (config.jobInputMaxMb || 300) * 1024 * 1024;
 
 /* ═══════════════════════════════════════════════════════════════════
  * POST /v2/jobs — create job
  * ═══════════════════════════════════════════════════════════════════ */
 
 export async function handleCreateJob(req, res, params) {
-  let body = "";
-  req.on("data", chunk => { body += chunk; });
-  req.on("end", async () => {
-    try {
-      const payload = JSON.parse(body);
+  try {
+      const payload = await readJsonBody(req, MAX_JOB_BODY_BYTES());
 
       /* Validate schemaVersion */
       if (payload.schemaVersion !== "2.0") {
@@ -51,6 +38,25 @@ export async function handleCreateJob(req, res, params) {
         v2BadRequest(res, "REQUEST_SCHEMA_INVALID", "capabilityId is required");
         return;
       }
+
+      const capability = getCapability(payload.capabilityId);
+      if (!capability || capability.enabled === false) {
+        v2NotFound(res, "CAPABILITY_NOT_FOUND", "Capability not found or disabled");
+        return;
+      }
+
+      const clientId = req.headers["x-client-id"] || "default";
+      const requestError = validateRequestShape(payload, clientId);
+      if (requestError) {
+        v2BadRequest(res, "REQUEST_SCHEMA_INVALID", requestError);
+        return;
+      }
+      const activeJobs = jobRepo.getRecoverable(clientId);
+      if (activeJobs.length >= (config.maxQueuedPerClient || 3)) {
+        v2QueueFull(res, "QUEUE_LIMIT_EXCEEDED", "Too many active jobs for this client");
+        return;
+      }
+
       if (!payload.source || !payload.source.assetId) {
         v2BadRequest(res, "REQUEST_SCHEMA_INVALID", "source.assetId is required");
         return;
@@ -63,9 +69,36 @@ export async function handleCreateJob(req, res, params) {
         return;
       }
 
+      if (sourceAsset.clientId !== clientId) {
+        v2Unprocessable(res, "ASSET_NOT_FOUND", "Source asset is not owned by this client");
+        return;
+      }
+      if (sourceAsset.kind !== "source") {
+        v2Unprocessable(res, "ASSET_KIND_INVALID", "source.assetId must reference a source asset");
+        return;
+      }
+
+      const contractError = validateInputContract(payload, capability, clientId);
+      if (contractError) {
+        v2Unprocessable(res, contractError.code, contractError.message);
+        return;
+      }
+
+      const parameterError = validateParameters(payload.parameters || {}, capability.parameterSchema || {});
+      if (parameterError) {
+        v2BadRequest(res, "REQUEST_SCHEMA_INVALID", parameterError);
+        return;
+      }
+
+      const availability = capability.availability || {};
+      if (availability.state !== "ready" && availability.state !== "degraded") {
+        v2DependencyMissing(res, "CAPABILITY_NOT_READY", "Capability dependencies are not ready", availability.details || null);
+        return;
+      }
+
       /* Idempotency check */
       if (payload.idempotencyKey) {
-        const existing = jobRepo.findByIdempotencyKey(payload.idempotencyKey);
+        const existing = jobRepo.findByIdempotencyKey(payload.idempotencyKey, clientId);
         if (existing) {
           writeJson(res, 200, {
             jobId: existing.id,
@@ -86,7 +119,7 @@ export async function handleCreateJob(req, res, params) {
 
       /* Create job */
       const job = jobRepo.create({
-        clientId: req.headers["x-client-id"] || "default",
+        clientId,
         correlationId: payload.correlationId || ("gw-" + Date.now().toString(36)),
         idempotencyKey: payload.idempotencyKey || null,
         capabilityId: payload.capabilityId,
@@ -108,16 +141,134 @@ export async function handleCreateJob(req, res, params) {
         data: { jobId: job.id, capabilityId: payload.capabilityId, idempotencyKey: payload.idempotencyKey },
       });
 
-    } catch (e) {
+  } catch (e) {
       if (e.code === "INVALID_STATE_TRANSITION") {
         v2Conflict(res, "INVALID_STATE_TRANSITION", e.message);
+      } else if (e.code === "PAYLOAD_TOO_LARGE") {
+        v2BadRequest(res, "REQUEST_TOO_LARGE", "Job request exceeds configured limit");
       } else if (e.message && e.message.indexOf("JSON") !== -1) {
         v2BadRequest(res, "REQUEST_SCHEMA_INVALID", "Invalid JSON body");
       } else {
         v2ServerError(res, "JOB_CREATE_FAILED", e.message);
       }
+  }
+}
+
+async function readJsonBody(req, maxBytes) {
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of req) {
+    total += chunk.length;
+    if (total > maxBytes) {
+      const error = new Error("Payload too large");
+      error.code = "PAYLOAD_TOO_LARGE";
+      throw error;
     }
-  });
+    chunks.push(chunk);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+function validateInputContract(payload, capability, clientId) {
+  const input = capability.input || {};
+  if (input.source && payload.source.scope !== input.source) {
+    return { code: "INPUT_SOURCE_INVALID", message: "Source scope does not satisfy this capability" };
+  }
+  const inputs = payload.inputs || {};
+  if ((input.mask === "required" || input.editMask === "required") && !inputs.editMaskAssetId) {
+    return { code: "INPUT_MASK_REQUIRED", message: "An edit mask is required" };
+  }
+  if (input.subjectMask === "required" && !inputs.subjectMaskAssetId) {
+    return { code: "SUBJECT_MASK_REQUIRED", message: "A subject mask is required" };
+  }
+  if (input.points === "two" && (!Array.isArray(inputs.points) || inputs.points.length !== 2)) {
+    return { code: "POINTS_REQUIRED", message: "Exactly two points are required" };
+  }
+  for (const key of ["editMaskAssetId", "subjectMaskAssetId"]) {
+    if (inputs[key]) {
+      const asset = getAsset(inputs[key]);
+      if (!asset || asset.clientId !== clientId) {
+        return { code: "ASSET_NOT_FOUND", message: "Referenced input asset is missing or not owned by this client" };
+      }
+      const expectedKind = key === "editMaskAssetId" ? "editMask" : "subjectMask";
+      if (asset.kind !== expectedKind) {
+        return { code: "ASSET_KIND_INVALID", message: key + " must reference a " + expectedKind + " asset" };
+      }
+    }
+  }
+  if (inputs.referenceAssetIds !== undefined) {
+    if (!Array.isArray(inputs.referenceAssetIds) || inputs.referenceAssetIds.length > 5) {
+      return { code: "REFERENCE_ASSETS_INVALID", message: "referenceAssetIds must contain at most five asset IDs" };
+    }
+    for (const assetId of inputs.referenceAssetIds) {
+      const asset = getAsset(assetId);
+      if (!asset || asset.clientId !== clientId || asset.kind !== "reference") {
+        return { code: "ASSET_NOT_FOUND", message: "Reference asset is missing, invalid, or not owned by this client" };
+      }
+    }
+  }
+  if (inputs.points !== undefined) {
+    if (!Array.isArray(inputs.points) || inputs.points.some(point => !point || !Number.isFinite(point.x) || !Number.isFinite(point.y))) {
+      return { code: "POINTS_INVALID", message: "Each point must contain finite x and y coordinates" };
+    }
+  }
+  return null;
+}
+
+function validateRequestShape(payload, clientId) {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(clientId)) return "Invalid X-Client-Id";
+  if (typeof payload.capabilityId !== "string" || payload.capabilityId.length > 128) return "Invalid capabilityId";
+  if (payload.correlationId !== undefined && (typeof payload.correlationId !== "string" || payload.correlationId.length > 256)) return "Invalid correlationId";
+  if (payload.idempotencyKey !== undefined && (typeof payload.idempotencyKey !== "string" || payload.idempotencyKey.length > 512)) return "Invalid idempotencyKey";
+
+  const source = payload.source;
+  if (!source || typeof source.assetId !== "string" || !/^[A-Za-z0-9_-]+$/.test(source.assetId)) return "Invalid source.assetId";
+  if (!["document", "selection", "subject"].includes(source.scope)) return "Invalid source.scope";
+  if (!isBounds(source.bounds)) return "Invalid source.bounds";
+  if (source.document !== undefined && !isDocument(source.document)) return "Invalid source.document";
+
+  if (payload.parameters !== undefined && !isPlainObject(payload.parameters)) return "parameters must be an object";
+  if (payload.inputs !== undefined && !isPlainObject(payload.inputs)) return "inputs must be an object";
+  if (payload.options !== undefined && !isPlainObject(payload.options)) return "options must be an object";
+  if (payload.options && payload.options.profile !== undefined && !["quality_16gb", "balanced_16gb", "safe_low_vram"].includes(payload.options.profile)) return "Invalid options.profile";
+  return null;
+}
+
+function isBounds(bounds) {
+  return isPlainObject(bounds) && Number.isFinite(bounds.left) && bounds.left >= 0 &&
+    Number.isFinite(bounds.top) && bounds.top >= 0 && Number.isFinite(bounds.width) &&
+    bounds.width >= 1 && Number.isFinite(bounds.height) && bounds.height >= 1;
+}
+
+function isDocument(document) {
+  return isPlainObject(document) &&
+    (document.id === undefined || typeof document.id === "string") &&
+    (document.width === undefined || (Number.isInteger(document.width) && document.width >= 1)) &&
+    (document.height === undefined || (Number.isInteger(document.height) && document.height >= 1)) &&
+    (document.colorMode === undefined || typeof document.colorMode === "string") &&
+    (document.bitDepth === undefined || (Number.isInteger(document.bitDepth) && document.bitDepth >= 1 && document.bitDepth <= 32));
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function validateParameters(parameters, schema) {
+  const properties = schema.properties || {};
+  for (const [key, value] of Object.entries(parameters)) {
+    const rule = properties[key];
+    if (!rule) return "Unknown parameter: " + key;
+    if (rule.enum && !rule.enum.includes(value)) return "Invalid value for parameter: " + key;
+    if ((rule.type === "number" || rule.type === "integer") && !Number.isFinite(value)) return "Parameter must be numeric: " + key;
+    if (rule.type === "integer" && !Number.isInteger(value)) return "Parameter must be an integer: " + key;
+    if (rule.minimum !== undefined && value < rule.minimum) return "Parameter below minimum: " + key;
+    if (rule.maximum !== undefined && value > rule.maximum) return "Parameter above maximum: " + key;
+    if (rule.type === "string" && rule.maxLength !== undefined && String(value).length > rule.maxLength) return "Parameter too long: " + key;
+  }
+  for (const key of schema.required || []) {
+    if (parameters[key] === undefined) return "Missing required parameter: " + key;
+  }
+  return null;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -127,7 +278,7 @@ export async function handleCreateJob(req, res, params) {
 export async function handleGetJob(req, res, routeParams) {
   const jobId = routeParams.id;
   const job = jobRepo.getById(jobId);
-  if (!job) {
+  if (!job || !isJobOwnedBy(req, job)) {
     v2NotFound(res, "JOB_NOT_FOUND", "Job not found: " + jobId);
     return;
   }
@@ -158,7 +309,7 @@ function _estimateProgress(job) {
  * ═══════════════════════════════════════════════════════════════════ */
 
 export async function handleListJobs(req, res, params) {
-  const clientId = params.get("clientId") || req.headers["x-client-id"] || "default";
+  const clientId = req.headers["x-client-id"] || "default";
   const state = params.get("state") || null;
   const jobs = jobRepo.listByClient(clientId, state);
   writeJson(res, 200, jobs.map(j => ({
@@ -178,7 +329,7 @@ export async function handleListJobs(req, res, params) {
 export async function handleCancelJob(req, res, routeParams) {
   const jobId = routeParams.id;
   const job = jobRepo.getById(jobId);
-  if (!job) {
+  if (!job || !isJobOwnedBy(req, job)) {
     v2NotFound(res, "JOB_NOT_FOUND", "Job not found: " + jobId);
     return;
   }
@@ -201,7 +352,7 @@ export async function handleCancelJob(req, res, routeParams) {
 export async function handleRetryJob(req, res, routeParams) {
   const jobId = routeParams.id;
   const job = jobRepo.getById(jobId);
-  if (!job) {
+  if (!job || !isJobOwnedBy(req, job)) {
     v2NotFound(res, "JOB_NOT_FOUND", "Job not found: " + jobId);
     return;
   }
@@ -211,15 +362,11 @@ export async function handleRetryJob(req, res, routeParams) {
     return;
   }
 
-  jobRepo.updateState(jobId, "queued", { message: "Retry requested" });
-  writeJson(res, 202, {
-    jobId,
-    state: "queued",
-    statusUrl: "/v2/jobs/" + jobId,
-    eventsUrl: "/v2/jobs/" + jobId + "/events",
-  });
-
-  logger.info("job.retried_v2", { component: "jobs-route", data: { jobId } });
+  /* A terminal job cannot be moved back to queued. The v2 schema currently
+     stores only sanitized parameters, not the source/mask asset graph needed
+     to safely clone a job. Returning a stable conflict is safer than throwing
+     INVALID_STATE_TRANSITION (500) or silently reusing stale assets. */
+  v2Conflict(res, "RETRY_REQUIRES_RESUBMIT", "Retry requires submitting the source assets again");
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -229,7 +376,7 @@ export async function handleRetryJob(req, res, routeParams) {
 export async function handleJobEvents(req, res, routeParams, queryParams) {
   const jobId = routeParams.id;
   const job = jobRepo.getById(jobId);
-  if (!job) {
+  if (!job || !isJobOwnedBy(req, job, queryParams)) {
     v2NotFound(res, "JOB_NOT_FOUND", "Job not found: " + jobId);
     return;
   }
@@ -276,6 +423,13 @@ export async function handleJobEvents(req, res, routeParams, queryParams) {
     clearInterval(interval);
     clearInterval(heartbeat);
   });
+}
+
+function isJobOwnedBy(req, job, queryParams) {
+  const headerClientId = req.headers["x-client-id"];
+  const queryClientId = queryParams && queryParams.get("clientId");
+  const clientId = headerClientId || queryClientId || "default";
+  return job.clientId === clientId;
 }
 
 function _sendSSE(res, event, data, id) {

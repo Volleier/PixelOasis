@@ -74,8 +74,8 @@ export default {
   comfyuiModelsDir: loaded.comfyui.models_dir || "",
 
   /* ── v2: Data & persistence ──────────────────────── */
-  dataDir: loaded.model_gateway.data_dir || "E:/PixelOasisData",
-  sqlitePath: loaded.model_gateway.sqlite_path || "",
+  dataDir: process.env.PO_DATA_DIR || loaded.model_gateway.data_dir || "E:/PixelOasisData",
+  sqlitePath: process.env.PO_SQLITE_PATH || loaded.model_gateway.sqlite_path || "",
   sqliteDir: "E:/PixelOasisData",
   gpuConcurrency: loaded.model_gateway.gpu_concurrency || 1,
   cpuConcurrency: loaded.model_gateway.cpu_concurrency || 2,

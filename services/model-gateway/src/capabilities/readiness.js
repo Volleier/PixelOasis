@@ -56,6 +56,18 @@ export async function computeAll(capabilities) {
     let missingNodes = [];
     let missingModels = [];
 
+    if (variants.length === 0) {
+      results.push({
+        ...cap,
+        availability: {
+          state: "missing_nodes",
+          profile: null,
+          details: { reason: "no_executable_variant" },
+        },
+      });
+      continue;
+    }
+
     if (variants.length > 0) {
       /* Check preferred variant */
       const preferred = variants.find(v => v.profile === "quality_16gb") || variants[0];
@@ -90,7 +102,7 @@ export async function computeAll(capabilities) {
         }
       }
 
-      profile = preferred.profile || profile;
+      if (state !== "degraded") profile = preferred.profile || profile;
     }
 
     results.push({
