@@ -14,6 +14,7 @@ import { writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import logger from "../../utils/logger.js";
 import config from "../../config.js";
+import { writeAuditEvent } from "../../observability/audit-repository.js";
 
 /* ═══════════════════════════════════════════════════════════════════
  * run(workflowApiJson, meta, inputs, parameters, options) → outputs
@@ -25,11 +26,14 @@ export async function run(workflowApiJson, meta, inputs, parameters, options = {
   const jobId = options.jobId || ("job-" + Date.now().toString(36));
   const clientId = options.clientId || jobId;
   const timeoutMs = options.timeoutMs || (meta.timeoutMs || 600000); /* 10 min default */
+  const traceId = options.traceId || null;
   const bindings = meta.bindings || [];
   const outputMapping = meta.outputs || [];
 
   logger.info("prompt_runner.starting", {
     component: "prompt-runner",
+    traceId,
+    jobId,
     data: { jobId, clientId, timeoutMs },
   });
 
@@ -40,7 +44,17 @@ export async function run(workflowApiJson, meta, inputs, parameters, options = {
       await uploadImage(img.filePath, filename, false);
       logger.info("prompt_runner.image_uploaded", {
         component: "prompt-runner",
-        data: { jobId, filename },
+        traceId,
+        jobId,
+        asset: {
+          role: img.role || "source",
+          originalName: img.name || "source.png",
+          storedName: filename,
+          mimeType: img.mimeType || "image/png",
+          sizeBytes: img.sizeBytes || null,
+          width: img.width || null,
+          height: img.height || null,
+        },
       });
     }
   }
@@ -61,6 +75,8 @@ export async function run(workflowApiJson, meta, inputs, parameters, options = {
     const normalized = normalize(e);
     logger.error("prompt_runner.submit_failed", {
       component: "prompt-runner",
+      traceId,
+      jobId,
       error: normalized,
       data: { jobId },
     });
@@ -70,26 +86,32 @@ export async function run(workflowApiJson, meta, inputs, parameters, options = {
   const promptId = promptResult.prompt_id;
   logger.info("prompt_runner.submitted", {
     component: "prompt-runner",
-    data: { jobId, promptId },
+    traceId,
+    jobId,
+    promptId,
   });
+  writeAuditEvent(jobId, traceId, "comfyui.prompt.submitted", "info", { promptId });
 
   /* ── 4.5 Build node map for human-readable logging ── */
   const nodeMap = _buildNodeMap(patched);
 
   /* ── 5. Monitor via WebSocket + polling fallback ── */
-  const historyEntry = await _monitorExecution(promptId, clientId, timeoutMs, options, nodeMap, jobId);
+  const historyEntry = await _monitorExecution(promptId, clientId, timeoutMs, options, nodeMap, jobId, traceId);
 
   /* ── 6. Collect outputs ── */
   if (options.onStageChange) options.onStageChange("postprocessing");
 
-  const outputs = await collect(historyEntry, outputMapping, { jobId });
+  const outputs = await collect(historyEntry, outputMapping, { jobId, traceId, promptId });
   if (outputs.length === 0) {
     throw Object.assign(new Error("No output images produced"), { code: "ARTIFACT_INVALID" });
   }
 
   logger.info("prompt_runner.completed", {
     component: "prompt-runner",
-    data: { jobId, promptId, outputCount: outputs.length },
+    traceId,
+    jobId,
+    promptId,
+    data: { outputCount: outputs.length },
   });
 
   return outputs;
@@ -118,7 +140,7 @@ export async function cancel(promptId) {
 }
 
 /* ── Monitor: WebSocket preferred, polling fallback ── */
-async function _monitorExecution(promptId, clientId, timeoutMs, options, nodeMap, jobId) {
+async function _monitorExecution(promptId, clientId, timeoutMs, options, nodeMap, jobId, traceId) {
   const startTime = Date.now();
   const pollInterval = 1500;
   let ws = null;
@@ -135,15 +157,18 @@ async function _monitorExecution(promptId, clientId, timeoutMs, options, nodeMap
     ws.onNodeStart(function (evt) {
       logger.info("comfyui.node.started", {
         component: "prompt-runner",
+        traceId,
         jobId: jobId,
         promptId: promptId,
         data: { nodeId: evt.nodeId, classType: evt.classType, title: evt.title },
       });
+      writeAuditEvent(jobId, traceId, "comfyui.node.started", "info", evt);
     });
 
     ws.onNodeProgress(function (evt) {
       logger.debug("comfyui.node.progress", {
         component: "prompt-runner",
+        traceId,
         jobId: jobId,
         promptId: promptId,
         data: { nodeId: evt.nodeId, classType: evt.classType, progress: evt.progress },
@@ -153,25 +178,30 @@ async function _monitorExecution(promptId, clientId, timeoutMs, options, nodeMap
     ws.onNodeComplete(function (evt) {
       logger.info("comfyui.node.completed", {
         component: "prompt-runner",
+        traceId,
         jobId: jobId,
         promptId: promptId,
         durationMs: evt.durationMs,
         data: { nodeId: evt.nodeId, classType: evt.classType, title: evt.title },
       });
+      writeAuditEvent(jobId, traceId, "comfyui.node.completed", "info", evt);
     });
 
     ws.onNodeCached(function (evt) {
       logger.info("comfyui.node.cached", {
         component: "prompt-runner",
+        traceId,
         jobId: jobId,
         promptId: promptId,
         data: { nodeId: evt.nodeId, classType: evt.classType, title: evt.title },
       });
+      writeAuditEvent(jobId, traceId, "comfyui.node.cached", "info", evt);
     });
 
     ws.onNodeFailed(function (evt) {
       logger.error("comfyui.node.failed", {
         component: "prompt-runner",
+        traceId,
         jobId: jobId,
         promptId: promptId,
         data: {
@@ -179,21 +209,25 @@ async function _monitorExecution(promptId, clientId, timeoutMs, options, nodeMap
           errorType: evt.errorType, errorMessage: evt.errorMessage,
         },
       });
+      writeAuditEvent(jobId, traceId, "comfyui.node.failed", "error", evt);
     });
 
     ws.onExecuted((data) => {
       if (data.prompt_id === promptId) {
-        logger.info("prompt_runner.ws_executed", { component: "prompt-runner", data: { promptId } });
+        logger.info("prompt_runner.ws_executed", { component: "prompt-runner", traceId, jobId, promptId });
       }
     });
     ws.onError((data) => {
-      logger.warn("prompt_runner.ws_error", { component: "prompt-runner", data: { promptId, error: data } });
+      logger.warn("prompt_runner.ws_error", { component: "prompt-runner", traceId, jobId, promptId, data: { error: data } });
     });
     ws.connect(clientId);
     wsUsed = true;
   } catch (e) {
     logger.info("prompt_runner.ws_unavailable_fallback_polling", {
       component: "prompt-runner",
+      traceId,
+      jobId,
+      promptId,
       data: { promptId },
     });
   }
@@ -201,6 +235,7 @@ async function _monitorExecution(promptId, clientId, timeoutMs, options, nodeMap
   if (!wsUsed) {
     logger.info("comfyui.monitor.polling_fallback", {
       component: "prompt-runner",
+      traceId,
       jobId: jobId,
       promptId: promptId,
     });
@@ -254,13 +289,22 @@ function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function _buildNodeMap(workflow) {
   const map = {};
   if (!workflow || typeof workflow !== "object") return map;
-  const nodes = workflow.nodes || workflow;
-  if (!Array.isArray(nodes)) return map;
+  const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : null;
+  if (nodes) {
+    for (const node of nodes) {
+      if (!node || node.id === undefined || node.id === null) continue;
+      map[String(node.id)] = {
+        classType: node.type || node.class_type || null,
+        title: (node._meta && node._meta.title) || node.title || null,
+      };
+    }
+    return map;
+  }
 
-  for (const node of nodes) {
-    if (!node || !node.id) continue;
-    map[String(node.id)] = {
-      classType: node.type || node.class_type || null,
+  for (const [nodeId, node] of Object.entries(workflow)) {
+    if (!node || typeof node !== "object" || !node.class_type) continue;
+    map[String(nodeId)] = {
+      classType: node.class_type,
       title: (node._meta && node._meta.title) || node.title || null,
     };
   }

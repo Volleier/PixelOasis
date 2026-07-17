@@ -28,12 +28,12 @@ function respondJobError(res, status, code, message, details, context) {
   const rejectionStage = context.rejectionStage || "unknown";
   logger.info("job.create.rejected", {
     component: "jobs-route",
+    traceId: context.traceId,
+    correlationId: context.correlationId,
     data: {
       status: status,
       code: code,
       rejectionStage: rejectionStage,
-      traceId: context.traceId || null,
-      correlationId: context.correlationId || null,
       clientId: (context.clientId || "").substring(0, 8) + "...",
       capabilityId: context.capabilityId || null,
     },
@@ -58,16 +58,17 @@ function safeDetails(raw) {
  * ═══════════════════════════════════════════════════════════════════ */
 
 export async function handleCreateJob(req, res, params) {
-  const traceId = req.headers["x-correlation-id"] || ("gw-" + Date.now().toString(36));
+  const requestTrace = req._traceContext || null;
+  const traceId = requestTrace?.traceId || req.headers["x-trace-id"] || req.headers["x-correlation-id"] || ("tr_" + Date.now().toString(36) + "_gateway");
   const clientId = req.headers["x-client-id"] || "default";
-  const ctx = { traceId: traceId, clientId: clientId };
+  const ctx = { traceId: traceId, correlationId: requestTrace?.correlationId || traceId, clientId: clientId };
   const startMs = Date.now();
 
   try {
       await refreshCapabilityReadiness();
       const payload = await readJsonBody(req, MAX_JOB_BODY_BYTES());
 
-      ctx.correlationId = payload.correlationId || traceId;
+      ctx.correlationId = payload.correlationId || ctx.correlationId;
 
       /* Validate schemaVersion */
       if (payload.schemaVersion !== "2.0") {
@@ -153,6 +154,9 @@ export async function handleCreateJob(req, res, params) {
           });
           logger.info("job.idempotency_hit", {
             component: "jobs-route",
+            traceId: existing.traceId || traceId,
+            correlationId: existing.correlationId,
+            jobId: existing.id,
             data: { idempotencyKey: payload.idempotencyKey, jobId: existing.id },
           });
           return;
@@ -162,10 +166,11 @@ export async function handleCreateJob(req, res, params) {
       /* Create job — log acceptance before writing response */
       logger.info("job.create.accepted", {
         component: "jobs-route",
+        traceId: traceId,
+        correlationId: ctx.correlationId,
         data: {
           capabilityId: payload.capabilityId,
           correlationId: ctx.correlationId,
-          traceId: traceId,
           clientId: (clientId || "").substring(0, 8) + "...",
           durationMs: Date.now() - startMs,
         },
@@ -174,6 +179,7 @@ export async function handleCreateJob(req, res, params) {
       const job = jobRepo.create({
         clientId,
         correlationId: payload.correlationId || ("gw-" + Date.now().toString(36)),
+        traceId,
         idempotencyKey: payload.idempotencyKey || null,
         capabilityId: payload.capabilityId,
         profile: (payload.options && payload.options.profile) || "quality_16gb",
@@ -186,6 +192,10 @@ export async function handleCreateJob(req, res, params) {
       });
 
       enqueue(job.id);
+      writeAuditEvent(job.id, traceId, "job.created", "info", {
+        capabilityId: payload.capabilityId,
+        profile: job.profile,
+      });
 
       writeJson(res, 202, {
         jobId: job.id,
@@ -198,6 +208,9 @@ export async function handleCreateJob(req, res, params) {
 
       logger.info("job.created_v2", {
         component: "jobs-route",
+        traceId: traceId,
+        correlationId: job.correlationId,
+        jobId: job.id,
         data: { jobId: job.id, capabilityId: payload.capabilityId, idempotencyKey: payload.idempotencyKey },
       });
 
@@ -474,16 +487,18 @@ export async function handleJobEvents(req, res, routeParams, queryParams) {
       _sendSSE(res, "complete", { state: current.state, artifacts: artifacts });
 
       /* Send audit summary as a separate named event */
-      const auditSummary = buildAuditSummary(jobId, current.trace_id || current.correlationId, current, artifacts);
+      const auditSummary = buildAuditSummary(jobId, current.traceId || current.correlationId, current, artifacts);
       _sendSSE(res, "audit_complete", auditSummary);
 
       logger.info("sse.audit.sent", {
         component: "jobs-route",
         jobId: jobId,
+        traceId: current.traceId || current.correlationId,
         data: { artifactCount: artifacts.length },
       });
 
       clearInterval(interval);
+      clearInterval(heartbeat);
       res.end();
     }
   }, 1000);
@@ -502,20 +517,27 @@ export async function handleJobEvents(req, res, routeParams, queryParams) {
 
 function getJobArtifacts(jobId) {
   return getDb().prepare(`
-    SELECT artifacts.id, artifacts.role, assets.mime, assets.sha256, assets.size_bytes, artifacts.placement_json
+    SELECT artifacts.id, artifacts.role, assets.mime, assets.sha256, assets.size_bytes,
+           artifacts.width, artifacts.height, artifacts.placement_json
     FROM artifacts
     JOIN assets ON assets.id = artifacts.asset_id
     WHERE artifacts.job_id = ?
     ORDER BY artifacts.created_at ASC
-  `).all(jobId).map(artifact => ({
+  `).all(jobId).map(artifact => {
+    const placement = artifact.placement_json ? JSON.parse(artifact.placement_json) : {};
+    return {
     id: artifact.id,
     role: artifact.role,
     mimeType: artifact.mime,
     sha256: artifact.sha256,
     sizeBytes: artifact.size_bytes,
+    width: artifact.width,
+    height: artifact.height,
     downloadUrl: "/v2/artifacts/" + artifact.id,
-    placement: artifact.placement_json ? JSON.parse(artifact.placement_json) : {},
-  }));
+    placement: placement,
+    previewOnly: placement.previewOnly === true,
+  };
+  });
 }
 
 function isJobOwnedBy(req, job, queryParams) {
@@ -546,7 +568,7 @@ export async function handleGetJobAudit(req, res, routeParams) {
   const events = getAuditEvents(jobId, Math.min(limit, 500));
   writeJson(res, 200, {
     jobId: jobId,
-    traceId: job.trace_id || job.correlationId,
+    traceId: job.traceId || job.correlationId,
     state: job.state,
     events: events,
   });
@@ -554,6 +576,8 @@ export async function handleGetJobAudit(req, res, routeParams) {
   logger.info("job.audit.served", {
     component: "jobs-route",
     jobId: jobId,
+    traceId: job.traceId || job.correlationId,
+    correlationId: job.correlationId,
     data: { eventCount: events.length },
   });
 }
@@ -587,12 +611,12 @@ export async function handleClientEvent(req, res, routeParams) {
   /* Mark plugin-reported events clearly */
   data.reportedBy = "plugin";
 
-  writeAuditEvent(jobId, job.trace_id || job.correlationId, event, "info", data);
+  writeAuditEvent(jobId, job.traceId || job.correlationId, event, "info", data);
 
   logger.info("client." + event, {
     component: "jobs-route",
     jobId: jobId,
-    traceId: job.trace_id || job.correlationId,
+    traceId: job.traceId || job.correlationId,
     data: data,
   });
 

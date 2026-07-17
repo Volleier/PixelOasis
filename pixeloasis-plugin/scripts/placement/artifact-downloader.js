@@ -20,6 +20,15 @@ window.PO.ArtifactDownloader = (function () {
   var MAX_FILE_SIZE = 100 * 1024 * 1024; /* 100 MB */
   var PNG_MAGIC = [137, 80, 78, 71, 13, 10, 26, 10];
 
+  function _reportClientEvent(jobId, event, data) {
+    try {
+      var job = window.PO.JobStore && window.PO.JobStore.get(jobId);
+      var traceId = job && job.traceId;
+      var report = window.PO.GatewayV2Client.sendClientEvent(jobId, event, data, traceId);
+      if (report && typeof report.catch === "function") report.catch(function () {});
+    } catch (_) { /* Observability must not block downloads. */ }
+  }
+
   /* ── Validate artifactId format ── */
   function _validateId(id) {
     if (!id || typeof id !== "string") return false;
@@ -59,6 +68,7 @@ window.PO.ArtifactDownloader = (function () {
       component: "artifact-downloader",
       data: { artifactId: artifact.id, jobId: jobId },
     });
+    _reportClientEvent(jobId, "artifact.download.started", { artifactId: artifact.id, role: artifact.role || null });
 
     /* Fetch */
     var resp;
@@ -171,6 +181,11 @@ window.PO.ArtifactDownloader = (function () {
         jobId: jobId,
         sizeBytes: arrayBuffer.byteLength,
       },
+    });
+    _reportClientEvent(jobId, "artifact.download.completed", {
+      artifactId: artifact.id,
+      role: artifact.role || null,
+      sizeBytes: arrayBuffer.byteLength,
     });
 
     return { fileEntry: file, filename: filename, localPath: file.nativePath };

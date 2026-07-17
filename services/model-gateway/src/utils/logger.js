@@ -319,7 +319,11 @@ async function close() {
       runId: runId,
       totalLines: lineCount,
       writeErrors: errorCount,
-      uptimeSeconds: runStartedAt ? Math.round((Date.now() - new Date(runStartedAt.replace(/-/g, "/")).getTime()) / 1000) : 0,
+      uptimeSeconds: runStartedAt && runStartedAt.length === 19
+        ? Math.round((Date.now() - Date.parse(
+          runStartedAt.substring(0, 10) + "T" + runStartedAt.substring(11, 13) + ":" + runStartedAt.substring(14, 16) + ":" + runStartedAt.substring(17, 19)
+        )) / 1000)
+        : 0,
     },
   };
 

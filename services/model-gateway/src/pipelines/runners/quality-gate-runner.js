@@ -8,9 +8,9 @@ import sharp from "sharp";
 import logger from "../../utils/logger.js";
 
 export async function runQualityGate(ctx, config) {
-  const { jobId, outputs } = ctx;
+  const { jobId, traceId, outputs } = ctx;
   const gate = config.gate;
-  logger.info("quality_gate.checking", { component: "quality-gate-runner", data: { jobId, gate } });
+  logger.info("quality_gate.checking", { component: "quality-gate-runner", traceId, jobId, data: { gate } });
 
   switch (gate) {
     case "dimensions": {

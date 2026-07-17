@@ -20,7 +20,7 @@ export async function handleArtifactDownload(req, res, routeParams) {
     return;
   }
 
-  const job = db.prepare("SELECT client_id FROM jobs WHERE id = ?").get(artifact.job_id);
+  const job = db.prepare("SELECT client_id, trace_id, correlation_id FROM jobs WHERE id = ?").get(artifact.job_id);
   const clientId = req.headers["x-client-id"] || "default";
   if (!job || job.client_id !== clientId) {
     v2NotFound(res, "ARTIFACT_NOT_FOUND", "Artifact not found");
@@ -76,6 +76,18 @@ export async function handleArtifactDownload(req, res, routeParams) {
 
   logger.info("artifact.download_v2", {
     component: "artifacts-route",
-    data: { artifactId, assetId: artifact.asset_id, sizeBytes: fileSize },
+    traceId: job.trace_id || job.correlation_id,
+    correlationId: job.correlation_id,
+    jobId: artifact.job_id,
+    asset: {
+      role: artifact.role,
+      originalName: artifact.id + ".png",
+      mimeType: asset.mime || "image/png",
+      sizeBytes: fileSize,
+      width: artifact.width || asset.width || null,
+      height: artifact.height || asset.height || null,
+      sha256Prefix: asset.sha256 ? asset.sha256.substring(0, 12) : null,
+    },
+    data: { artifactId, assetId: artifact.asset_id },
   });
 }

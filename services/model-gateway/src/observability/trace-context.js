@@ -14,8 +14,8 @@ const TRACE_ID_RE = /^tr_[a-z0-9]{6,14}_[a-z0-9]{4,10}$/;
 /* ── Create a gateway-generated trace ID ── */
 export function generateTraceId() {
   const ts = Date.now().toString(36);
-  const rnd = Math.floor(Math.random() * 100000).toString(36);
-  return "gw_" + ts + "_" + rnd;
+  const rnd = Math.floor(Math.random() * 0x1000000).toString(36).padStart(4, "0");
+  return "tr_" + ts + "_" + rnd;
 }
 
 /* ── Validate a client-supplied trace ID ── */
@@ -33,13 +33,9 @@ export function attachTraceContext(req, res) {
 
   let generatedByGateway = false;
 
-  if (traceId && isValidTraceId(traceId)) {
-    /* Client-supplied valid trace ID */
-  } else if (correlationId) {
-    /* Fall back to correlation ID */
-    traceId = correlationId;
-  } else {
-    /* Generate gateway trace ID */
+  if (!isValidTraceId(traceId)) {
+    /* Correlation IDs from older clients are not trace IDs. Keep them for
+       compatibility, but always generate a valid trace identifier. */
     traceId = generateTraceId();
     generatedByGateway = true;
   }

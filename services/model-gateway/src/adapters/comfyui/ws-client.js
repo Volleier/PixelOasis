@@ -115,6 +115,7 @@ export class ComfyUIWebSocket {
 
       case "progress": {
         if (!msg.data || !this._callbacks.onNodeProgress) break;
+        if (this._promptId && msg.data.prompt_id && msg.data.prompt_id !== this._promptId) break;
         const { value, max, node: nodeId } = msg.data;
         if (!nodeId) break;
         const nodeKey = String(nodeId);
@@ -165,6 +166,7 @@ export class ComfyUIWebSocket {
 
       case "execution_cached": {
         if (!msg.data) break;
+        if (this._promptId && msg.data.prompt_id && msg.data.prompt_id !== this._promptId) break;
         const cachedNodes = msg.data.nodes || (msg.data.node ? [msg.data.node] : []);
         for (const cn of cachedNodes) {
           const cachedId = String(cn);

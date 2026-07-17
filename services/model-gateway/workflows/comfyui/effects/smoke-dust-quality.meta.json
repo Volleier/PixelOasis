@@ -16,8 +16,10 @@
     "points": "optional"
   },
   "outputs": [
-    { "nodeId": "80", "role": "smoke", "title": "Save Smoke RGBA" },
-    { "nodeId": "81", "role": "dust", "title": "Save Dust RGBA" },
+    { "nodeId": "80", "role": "smokeBack", "title": "Save Smoke Back RGBA" },
+    { "nodeId": "81", "role": "smokeFront", "title": "Save Smoke Front RGBA" },
+    { "nodeId": "82", "role": "dustBack", "title": "Save Dust Back RGBA" },
+    { "nodeId": "83", "role": "dustFront", "title": "Save Dust Front RGBA" },
     { "nodeId": "90", "role": "compositePreview", "title": "Save Composite Preview" }
   ],
   "bindings": [
@@ -44,13 +46,15 @@
     { "nodeId": "30", "field": "occlusion", "type": "enum", "source": "occlusion" }
     ,{ "nodeId": "31", "field": "occlusion", "type": "enum", "source": "occlusion" }
     ,{ "nodeId": "80", "field": "filename_prefix", "type": "string", "source": "smokeOutputPrefix" }
-    ,{ "nodeId": "81", "field": "filename_prefix", "type": "string", "source": "dustOutputPrefix" }
+    ,{ "nodeId": "81", "field": "filename_prefix", "type": "string", "source": "smokeFrontOutputPrefix" }
+    ,{ "nodeId": "82", "field": "filename_prefix", "type": "string", "source": "dustOutputPrefix" }
+    ,{ "nodeId": "83", "field": "filename_prefix", "type": "string", "source": "dustFrontOutputPrefix" }
     ,{ "nodeId": "90", "field": "filename_prefix", "type": "string", "source": "compositeOutputPrefix" }
   ],
   "sizePolicy": {
     "mode": "matchSelection",
     "allowResize": true,
-    "maxLongEdge": 1024
+    "maxLongEdge": 2048
   },
   "placementPolicy": {
     "type": "layered",
@@ -58,6 +62,7 @@
   },
   "requiredNodes": [
     "PO_DepthEstimate",
+    "PO_SubjectMaskResolve",
     "PO_FractalSmokeRGBA",
     "PO_DustParticlesRGBA",
     "PO_DepthSplitRGBA",

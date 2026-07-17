@@ -95,7 +95,11 @@ window.PO.AssetUploader = (function () {
     for (var attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         var controller = new AbortController();
-        var result = await window.PO.GatewayV2Client.uploadAsset(formData, controller.signal);
+        var result = await window.PO.GatewayV2Client.uploadAsset(
+          formData,
+          controller.signal,
+          metadata.traceId || correlationId
+        );
 
         var assetId = (result.data && result.data.assetId) || result.data;
         if (typeof assetId === "object") assetId = assetId.assetId;

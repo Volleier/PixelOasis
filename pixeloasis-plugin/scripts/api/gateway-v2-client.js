@@ -59,7 +59,7 @@ window.PO.GatewayV2Client = (function () {
   /* ── Generate trace ID (once per operation, persisted across retries) ── */
   function createTraceId() {
     var ts = Date.now().toString(36);
-    var rnd = Math.floor(Math.random() * 100000).toString(36);
+    var rnd = Math.floor(Math.random() * 0x1000000).toString(36).padStart(4, "0");
     return "tr_" + ts + "_" + rnd;
   }
 
@@ -254,10 +254,12 @@ window.PO.GatewayV2Client = (function () {
   }
 
   /* Upload asset (multipart) */
-  async function uploadAsset(formData, signal) {
+  async function uploadAsset(formData, signal, traceId) {
     return requestJson("POST", "/v2/assets", {
       body: formData,
       signal: signal,
+      correlationId: traceId,
+      traceId: traceId,
       timeoutMs: UPLOAD_TIMEOUT_MS,
     });
   }
@@ -283,6 +285,7 @@ window.PO.GatewayV2Client = (function () {
     return requestJson("POST", "/v2/jobs", {
       body: body,
       correlationId: payload.correlationId,
+      traceId: payload.traceId,
       timeoutMs: 60000,
     });
   }
@@ -341,6 +344,7 @@ window.PO.GatewayV2Client = (function () {
     if (!_validateId(jobId)) return;
     return requestJson("POST", "/v2/jobs/" + encodeURIComponent(jobId) + "/client-events", {
       body: JSON.stringify({ event: event, data: data || {} }),
+      correlationId: traceId,
       traceId: traceId,
       timeoutMs: 10000,
     });

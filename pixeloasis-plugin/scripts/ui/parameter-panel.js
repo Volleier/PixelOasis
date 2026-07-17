@@ -34,7 +34,7 @@ window.PO.ParameterPanel = (function () {
     _currentCapture = opts.capture || null;
     _currentPreflight = opts.preflight || null;
     _adultConfirmed = false;
-    _traceId = "po-" + Date.now().toString(36) + "-" + Math.floor(Math.random() * 10000).toString(36);
+    _traceId = window.PO.GatewayV2Client.createTraceId();
 
     if (!_currentCapability) return;
 
@@ -509,6 +509,7 @@ window.PO.ParameterPanel = (function () {
         values: result.values,
         preflight: _currentPreflight,
         subjectMode: _subjectMode,
+        traceId: _traceId,
       });
 
       /* State: queued — job created */

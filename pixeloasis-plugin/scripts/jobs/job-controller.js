@@ -141,13 +141,14 @@ window.PO.JobController = (function () {
     var values = opts.values || {};
     var preflight = opts.preflight;
     var subjectMode = opts.subjectMode || "auto";
+    var traceId = opts.traceId || window.PO.GatewayV2Client.createTraceId();
 
     if (!capability || !capture) {
       throw new Error("缺少能力或采集数据");
     }
 
     /* Generate IDs */
-    var correlationId = "po-" + Date.now().toString(36) + "-" + Math.floor(Math.random() * 10000).toString(36);
+    var correlationId = traceId;
     var docInfo = capture.documentInfo || window.PO.CaptureUtils.getDocumentInfo();
     var documentId = docInfo ? docInfo.id : "0";
     var historyStateId = "0"; /* P2: simplified; real history state ID from Photoshop API */
@@ -192,7 +193,7 @@ window.PO.JobController = (function () {
       /* Source image (always required) */
       var sourceB64 = capture.imagePngBase64 || capture.contextImagePngBase64;
       var sourceMeta = window.PO.CaptureUtils.buildSourceMetadata(capture);
-      sourceMeta.traceId = correlationId;
+      sourceMeta.traceId = traceId;
       if (sourceB64) {
         try {
           var sourceResult = await window.PO.AssetUploader.uploadAsset(
@@ -208,7 +209,7 @@ window.PO.JobController = (function () {
       if (capture.editMaskPngBase64) {
         try {
           var maskResult = await window.PO.AssetUploader.uploadAsset(
-            "editMask", capture.editMaskPngBase64, correlationId, documentId
+            "editMask", capture.editMaskPngBase64, correlationId, documentId, { traceId: traceId }
           );
           editMaskAssetId = maskResult.assetId;
         } catch (e) {
@@ -229,7 +230,7 @@ window.PO.JobController = (function () {
       if (capture.subjectMaskPngBase64) {
         try {
           var subjResult = await window.PO.AssetUploader.uploadAsset(
-            "subjectMask", capture.subjectMaskPngBase64, correlationId, documentId
+            "subjectMask", capture.subjectMaskPngBase64, correlationId, documentId, { traceId: traceId }
           );
           subjectMaskAssetId = subjResult.assetId;
         } catch (e) {
@@ -253,6 +254,7 @@ window.PO.JobController = (function () {
         editMaskAssetId: editMaskAssetId,
         subjectMaskAssetId: subjectMaskAssetId,
       });
+      payload.traceId = traceId;
 
       /* ── Validate payload before sending ── */
       var validationError = _validatePayloadSummary(payload);
@@ -317,7 +319,7 @@ window.PO.JobController = (function () {
         progress: 0,
         createdAt: Date.now(),
         stages: [],
-        traceId: _traceId || correlationId,
+        traceId: traceId,
       });
 
       /* ── Render ProgressPanel BEFORE subscribing to SSE ── */
@@ -354,7 +356,14 @@ window.PO.JobController = (function () {
       /* Capture is consumed by the gateway — safe to release */
       window.PO.CaptureUtils.releaseCapture(capture);
 
-      return { jobId: jobId, correlationId: correlationId, mock: useMock, captureConsumed: true };
+      return {
+        jobId: jobId,
+        correlationId: correlationId,
+        traceId: traceId,
+        mock: useMock,
+        idempotent: isIdempotent,
+        captureConsumed: true,
+      };
 
     } catch (e) {
       /* Upload or create failed — DO NOT release capture.

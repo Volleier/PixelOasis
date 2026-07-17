@@ -34,6 +34,7 @@ window.PO.CaptureUtils = (function () {
 
       return {
         id:         String(doc.id),
+        name:       String(doc.name || "Untitled-" + doc.id),
         width:      width,
         height:     height,
         mode:       String(doc.mode).replace(/ColorMode$/i, ""),
@@ -179,7 +180,7 @@ window.PO.CaptureUtils = (function () {
     var bounds = capture.editBounds || capture.subjectBounds || capture.bounds;
     var imagePng = capture.imagePngBase64 || capture.contextImagePngBase64;
     return {
-      originalName: docInfo ? ("Untitled-" + docInfo.id + ".png") : "capture.png",
+      originalName: docInfo ? (docInfo.name + ".png") : "capture.png",
       clientWidth: bounds ? bounds.width : (docInfo ? docInfo.width : 0),
       clientHeight: bounds ? bounds.height : (docInfo ? docInfo.height : 0),
       sourceScale: capture.sourceScale || 1,

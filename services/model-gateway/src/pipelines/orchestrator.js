@@ -27,9 +27,11 @@ export async function executePipeline(jobId, pipelineName, inputs) {
   const pipeline = getPipeline(pipelineName);
   if (!pipeline) throw new Error("Unknown pipeline: " + pipelineName);
 
-  const ctx = { jobId, inputs, outputs: {}, stageResults: [], warnings: [] };
+  const job = jobRepo.getById(jobId);
+  const traceId = inputs.traceId || job?.traceId || null;
+  const ctx = { jobId, traceId, inputs, outputs: {}, stageResults: [], warnings: [] };
 
-  logger.info("pipeline.starting", { component: "orchestrator", data: { jobId, pipeline: pipelineName, stages: pipeline.stages.length } });
+  logger.info("pipeline.starting", { component: "orchestrator", traceId, jobId, data: { pipeline: pipelineName, stages: pipeline.stages.length } });
 
   for (let i = 0; i < pipeline.stages.length; i++) {
     const stage = pipeline.stages[i];
@@ -40,7 +42,7 @@ export async function executePipeline(jobId, pipelineName, inputs) {
     const stageRecord = jobRepo.addStage(jobId, { name: stage.name, ordinal: i, attempt: 0, input: { config: stage.config } });
 
     try {
-      logger.info("pipeline.stage_starting", { component: "orchestrator", data: { jobId, stage: stage.name, runner: stage.runner } });
+      logger.info("pipeline.stage_starting", { component: "orchestrator", traceId, jobId, data: { stage: stage.name, runner: stage.runner } });
       const result = await runner(ctx, stage.config);
       ctx.stageResults.push({ name: stage.name, result });
 
@@ -51,7 +53,7 @@ export async function executePipeline(jobId, pipelineName, inputs) {
 
       /* Check quality gate if present */
       if (result.qualityGateFailed) {
-        logger.warn("pipeline.quality_gate_failed", { component: "orchestrator", data: { jobId, stage: stage.name } });
+        logger.warn("pipeline.quality_gate_failed", { component: "orchestrator", traceId, jobId, data: { stage: stage.name } });
         throw Object.assign(new Error("Quality gate failed: " + stage.name), { code: "QUALITY_GATE_FAILED" });
       }
 
@@ -60,7 +62,7 @@ export async function executePipeline(jobId, pipelineName, inputs) {
 
       /* Stage recovery: retry once for retryable errors */
       if (e.retryable !== false && stageRecord.attempt < 1) {
-        logger.info("pipeline.stage_retry", { component: "orchestrator", data: { jobId, stage: stage.name, attempt: 1 } });
+        logger.info("pipeline.stage_retry", { component: "orchestrator", traceId, jobId, data: { stage: stage.name, attempt: 1 } });
         const retryStage = jobRepo.addStage(jobId, { name: stage.name, ordinal: i, attempt: 1, input: { config: stage.config } });
         try {
           const retryResult = await runner(ctx, stage.config);
@@ -70,7 +72,7 @@ export async function executePipeline(jobId, pipelineName, inputs) {
           continue;
         } catch (retryErr) {
           jobRepo.updateStage(retryStage.id, { state: "failed", error: { message: retryErr.message, code: retryErr.code }, endedAt: new Date().toISOString() });
-          logger.error("pipeline.stage_retry_failed", { component: "orchestrator", error: retryErr, data: { jobId, stage: stage.name } });
+          logger.error("pipeline.stage_retry_failed", { component: "orchestrator", traceId, jobId, error: retryErr, data: { stage: stage.name } });
         }
       }
 
@@ -78,7 +80,7 @@ export async function executePipeline(jobId, pipelineName, inputs) {
     }
   }
 
-  logger.info("pipeline.completed", { component: "orchestrator", data: { jobId, pipeline: pipelineName } });
+  logger.info("pipeline.completed", { component: "orchestrator", traceId, jobId, data: { pipeline: pipelineName } });
   return ctx;
 }
 

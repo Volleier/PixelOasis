@@ -26,8 +26,10 @@
   },
   "outputSchema": {
     "artifacts": [
-      { "role": "smoke", "layerName": "黑色烟雾", "blendMode": "normal", "opacity": 100 },
-      { "role": "dust", "layerName": "烟尘颗粒", "blendMode": "normal", "opacity": 100 },
+      { "role": "smokeBack", "layerName": "黑色烟雾（主体后）", "blendMode": "normal", "opacity": 100 },
+      { "role": "smokeFront", "layerName": "黑色烟雾（主体前）", "blendMode": "normal", "opacity": 100 },
+      { "role": "dustBack", "layerName": "烟尘颗粒（主体后）", "blendMode": "normal", "opacity": 100 },
+      { "role": "dustFront", "layerName": "烟尘颗粒（主体前）", "blendMode": "normal", "opacity": 100 },
       { "role": "compositePreview", "layerName": "黑色烟尘预览", "blendMode": "normal", "opacity": 100, "previewOnly": true }
     ]
   },
@@ -40,7 +42,7 @@
       "minVramGb": 14,
       "priority": 100,
       "enabled": true,
-      "requiredNodes": ["PO_DepthEstimate", "PO_FractalSmokeRGBA", "PO_DustParticlesRGBA", "PO_DepthSplitRGBA", "PO_MergeRGBA", "PO_RGBAComposite", "PO_SaveLayeredImage", "SaveImage"],
+      "requiredNodes": ["PO_DepthEstimate", "PO_SubjectMaskResolve", "PO_FractalSmokeRGBA", "PO_DustParticlesRGBA", "PO_DepthSplitRGBA", "PO_MergeRGBA", "PO_RGBAComposite", "PO_SaveLayeredImage", "SaveImage"],
       "requiredModels": [{ "name": "depth_anything_v2_vitl_fp16.safetensors", "path": "depthanything/depth_anything_v2_vitl_fp16.safetensors", "minSizeBytes": 500000000 }],
       "optionalNodes": ["TextEncodeQwenImageEdit"],
       "optionalModels": [{ "name": "qwen-image-edit", "path": "qwen/qwen-image-edit-*.safetensors" }]

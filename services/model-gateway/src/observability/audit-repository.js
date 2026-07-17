@@ -25,8 +25,8 @@ export function writeAuditEvent(jobId, traceId, event, level, payload) {
     "SELECT COUNT(*) as cnt FROM job_audit_events WHERE job_id = ?"
   ).get(jobId);
 
-  if (count && count.cnt >= MAX_EVENTS_PER_JOB) {
-    if (count.cnt === MAX_EVENTS_PER_JOB) {
+  if (count && count.cnt >= MAX_EVENTS_PER_JOB - 1) {
+    if (count.cnt === MAX_EVENTS_PER_JOB - 1) {
       /* Write truncation marker exactly once */
       db.prepare(`
         INSERT INTO job_audit_events (id, job_id, trace_id, event, level, payload_json, created_at)
@@ -93,7 +93,7 @@ export function buildAuditSummary(jobId, traceId, job, artifacts) {
       return {
         id: a.id,
         role: a.role,
-        mimeType: a.mime,
+        mimeType: a.mimeType || a.mime || null,
         sha256Prefix: a.sha256 ? a.sha256.substring(0, 12) : null,
         sizeBytes: a.sizeBytes,
         width: a.width,

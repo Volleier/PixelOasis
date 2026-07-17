@@ -207,6 +207,16 @@ function validateMetaSchema(meta, filePath) {
   }
 }
 
+/* Pipeline v2 uses workflow-repository.js and its own contract:
+ * bindings is an array and outputs is an array of role mappings. The legacy
+ * registry below powers only /generate, whose input/output schema is
+ * intentionally different. Do not validate a v2 file as a legacy workflow
+ * or emit a misleading startup warning for it. */
+function isV2PipelineMetadata(meta) {
+  return !!meta && typeof meta.capabilityId === "string" &&
+    Array.isArray(meta.bindings) && Array.isArray(meta.outputs);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
  * Recursive *.meta.json discovery
  * ═══════════════════════════════════════════════════════════════════════ */
@@ -331,6 +341,13 @@ export async function loadWorkflows(workflowsDir) {
     try {
       var raw = await readFile(metaPath, "utf-8");
       meta = JSON.parse(raw);
+      if (isV2PipelineMetadata(meta)) {
+        logger.debug("workflow_loader.v2_metadata_delegated", {
+          component: "workflow-loader",
+          data: { workflowId: meta.workflowId, variantId: meta.variantId },
+        });
+        continue;
+      }
       validateMetaSchema(meta, metaPath);
     } catch (err) {
       warnings.push("Skipping " + metaPath + ": " + err.message);

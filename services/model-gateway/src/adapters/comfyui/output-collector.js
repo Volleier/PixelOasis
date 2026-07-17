@@ -15,8 +15,11 @@ import logger from "../../utils/logger.js";
  * ═══════════════════════════════════════════════════════════════════ */
 
 export async function collect(historyEntry, outputMapping, options = {}) {
+  const traceId = options.traceId || null;
+  const jobId = options.jobId || null;
+  const promptId = options.promptId || null;
   if (!historyEntry || !historyEntry.outputs) {
-    logger.warn("output_collector.no_outputs", { component: "output-collector" });
+    logger.warn("output_collector.no_outputs", { component: "output-collector", traceId, jobId, promptId });
     return [];
   }
 
@@ -34,6 +37,9 @@ export async function collect(historyEntry, outputMapping, options = {}) {
 
   logger.info("output_collector.collecting", {
     component: "output-collector",
+    traceId,
+    jobId,
+    promptId,
     data: { nodeCount: nodeIds.length, mappingCount: mapping.length },
   });
 
@@ -46,6 +52,9 @@ export async function collect(historyEntry, outputMapping, options = {}) {
     if (!nodeEntry.images || nodeEntry.images.length === 0) {
       logger.warn("output_collector.node_has_no_images", {
         component: "output-collector",
+        traceId,
+        jobId,
+        promptId,
         data: { nodeId: map.nodeId, nodeTitle: map.nodeTitle },
       });
       continue;
@@ -72,11 +81,25 @@ export async function collect(historyEntry, outputMapping, options = {}) {
 
         logger.info("output_collector.collected", {
           component: "output-collector",
+          traceId,
+          jobId,
+          promptId,
+          asset: {
+            role: map.role || "output",
+            originalName: img.filename,
+            mimeType: "image/png",
+            sizeBytes: buf.length,
+            width: dims?.width || null,
+            height: dims?.height || null,
+          },
           data: { role: map.role, filename: img.filename, width: dims?.width, height: dims?.height },
         });
       } catch (e) {
         logger.warn("output_collector.download_failed", {
           component: "output-collector",
+          traceId,
+          jobId,
+          promptId,
           error: e,
           data: { filename: img.filename },
         });

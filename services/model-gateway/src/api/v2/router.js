@@ -11,6 +11,7 @@ import { handleCreateJob, handleGetJob, handleListJobs, handleCancelJob, handleR
 import { handleArtifactDownload } from "./artifacts-route.js";
 import { v2NotFound, v2ServerError } from "../../utils/errors.js";
 import logger from "../../utils/logger.js";
+import { attachTraceContext } from "../../observability/trace-context.js";
 
 /* ── Exact routes (method + path) ── */
 const EXACT_ROUTES = {
@@ -49,7 +50,8 @@ const PARAM_ROUTES = [
 
 export async function dispatch(method, pathname, req, res, queryParams) {
   /* Set common headers */
-  const corrId = req.headers["x-correlation-id"] || ("gw-" + Date.now().toString(36));
+  const traceContext = attachTraceContext(req, res);
+  const corrId = traceContext.correlationId;
   res.setHeader("X-Correlation-Id", corrId);
   res.setHeader("Cache-Control", "no-store");
 
@@ -63,7 +65,9 @@ export async function dispatch(method, pathname, req, res, queryParams) {
       await exactHandler(req, res, queryParams);
       logger.info("v2.request_completed", {
         component: "v2-router",
-        data: { method, path: pathname, httpStatus: res.statusCode, traceId: corrId },
+        data: { method, path: pathname, httpStatus: res.statusCode },
+        traceId: traceContext.traceId,
+        correlationId: corrId,
         durationMs: Date.now() - reqStart,
       });
       return;
@@ -81,7 +85,9 @@ export async function dispatch(method, pathname, req, res, queryParams) {
         await route.handler(req, res, params, queryParams);
         logger.info("v2.request_completed", {
           component: "v2-router",
-          data: { method, path: pathname, params, httpStatus: res.statusCode, traceId: corrId },
+          data: { method, path: pathname, params, httpStatus: res.statusCode },
+          traceId: traceContext.traceId,
+          correlationId: corrId,
           durationMs: Date.now() - reqStart,
         });
         return;
@@ -92,12 +98,16 @@ export async function dispatch(method, pathname, req, res, queryParams) {
     v2NotFound(res, "NOT_FOUND", "Endpoint not found: " + method + " " + pathname);
     logger.debug("v2.not_found", {
       component: "v2-router",
-      data: { method, path: pathname, httpStatus: 404, traceId: corrId },
+      data: { method, path: pathname, httpStatus: 404 },
+      traceId: traceContext.traceId,
+      correlationId: corrId,
     });
   } catch (err) {
     logger.error("v2.handler_error", {
       component: "v2-router",
-      data: { method, path: pathname, httpStatus: 500, traceId: corrId, errorClass: err.constructor ? err.constructor.name : typeof err },
+      data: { method, path: pathname, httpStatus: 500, errorClass: err.constructor ? err.constructor.name : typeof err },
+      traceId: traceContext.traceId,
+      correlationId: corrId,
       error: err,
       durationMs: Date.now() - reqStart,
     });

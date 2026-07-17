@@ -30,12 +30,13 @@ export function create(jobData) {
   const inputJson = jobData.input ? JSON.stringify(jobData.input) : null;
 
   db.prepare(`
-    INSERT INTO jobs (id, client_id, correlation_id, idempotency_key, capability_id, state, profile, params_json, input_json, created_at, updated_at, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO jobs (id, client_id, correlation_id, trace_id, idempotency_key, capability_id, state, profile, params_json, input_json, created_at, updated_at, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     jobData.clientId || "default",
     jobData.correlationId || "",
+    jobData.traceId || jobData.correlationId || ("legacy_" + id),
     jobData.idempotencyKey || null,
     jobData.capabilityId || "unknown",
     "queued",
@@ -51,11 +52,14 @@ export function create(jobData) {
   recordEvent(id, "job_created", {
     capabilityId: jobData.capabilityId,
     clientId: jobData.clientId,
-  });
+  }, jobData.traceId || jobData.correlationId);
 
   logger.info("job.created", {
     component: "job-repository",
-    data: { jobId: id, capabilityId: jobData.capabilityId },
+    traceId: jobData.traceId || jobData.correlationId,
+    correlationId: jobData.correlationId,
+    jobId: id,
+    data: { capabilityId: jobData.capabilityId },
   });
 
   return getById(id);
@@ -79,6 +83,7 @@ export function getById(id) {
     id: job.id,
     clientId: job.client_id,
     correlationId: job.correlation_id,
+    traceId: job.trace_id,
     idempotencyKey: job.idempotency_key,
     capabilityId: job.capability_id,
     state: job.state,
@@ -124,7 +129,7 @@ export function updateState(id, newState, opts) {
   opts = opts || {};
   const db = getDb();
 
-  const current = db.prepare("SELECT state, updated_at FROM jobs WHERE id = ?").get(id);
+  const current = db.prepare("SELECT state, updated_at, trace_id, correlation_id FROM jobs WHERE id = ?").get(id);
   if (!current) throw new Error("Job not found: " + id);
 
   /* Validate transition */
@@ -163,11 +168,14 @@ export function updateState(id, newState, opts) {
     ...(opts.progress !== undefined ? { progress: opts.progress } : {}),
     ...(opts.message ? { message: opts.message } : {}),
   };
-  recordEvent(id, "state_change", eventPayload);
+  recordEvent(id, "state_change", eventPayload, current.trace_id || current.correlation_id);
 
   logger.info("job.state_changed", {
     component: "job-repository",
-    data: { jobId: id, from: current.state, to: newState },
+    traceId: current.trace_id || current.correlation_id,
+    correlationId: current.correlation_id,
+    jobId: id,
+    data: { from: current.state, to: newState },
   });
 
   return getById(id);
@@ -227,6 +235,8 @@ export function getRecoverable(clientId) {
 export function addStage(jobId, stageData) {
   const db = getDb();
   const now = new Date().toISOString();
+  const jobTrace = db.prepare("SELECT trace_id, correlation_id FROM jobs WHERE id = ?").get(jobId);
+  if (!jobTrace) throw new Error("Job not found: " + jobId);
 
   const inputJson = stageData.input ? JSON.stringify(stageData.input) : null;
 
@@ -247,7 +257,7 @@ export function addStage(jobId, stageData) {
     stageId: result.lastInsertRowid,
     name: stageData.name,
     ordinal: stageData.ordinal,
-  });
+  }, jobTrace.trace_id || jobTrace.correlation_id);
 
   return { id: result.lastInsertRowid, ...stageData };
 }
@@ -296,7 +306,14 @@ export function updateStage(stageId, data) {
 
 export function deleteJob(id) {
   const db = getDb();
-  const result = db.prepare("DELETE FROM jobs WHERE id = ?").run(id);
+  const deleteTransaction = db.transaction(function () {
+    /* The audit table was introduced after the original job foreign key and
+       intentionally retains its own schema. Remove its rows first so an
+       audited job remains deletable on every migrated database. */
+    db.prepare("DELETE FROM job_audit_events WHERE job_id = ?").run(id);
+    return db.prepare("DELETE FROM jobs WHERE id = ?").run(id);
+  });
+  const result = deleteTransaction();
   return result.changes > 0;
 }
 
@@ -318,9 +335,11 @@ export function cleanupExpired() {
   /* Delete (cascade removes stages, events, artifacts) */
   const ids = expired.map(r => r.id);
   const placeholders = ids.map(() => "?").join(", ");
-  const result = db.prepare(
-    "DELETE FROM jobs WHERE id IN (" + placeholders + ")"
-  ).run(...ids);
+  const cleanupTransaction = db.transaction(function () {
+    db.prepare("DELETE FROM job_audit_events WHERE job_id IN (" + placeholders + ")").run(...ids);
+    return db.prepare("DELETE FROM jobs WHERE id IN (" + placeholders + ")").run(...ids);
+  });
+  const result = cleanupTransaction();
 
   logger.info("job.cleanup_expired", {
     component: "job-repository",
