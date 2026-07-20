@@ -18,7 +18,7 @@ definePipeline("desert-sandstorm-v1", [
 ]);
 
 definePipeline("black-smoke-v1", [
-  { name: "smokeGen",     runner: "comfyui", config: { workflow: "smoke-dust-quality", timeoutMs: 180000 } },
+  { name: "smokeGen",     runner: "comfyui", config: { workflow: "smoke-dust-quality", timeoutMs: 600000 } },
   { name: "blank",        runner: "qualityGate", config: { gate: "blankOrCorrupt" } },
   { name: "dimensions",   runner: "qualityGate", config: { gate: "dimensions" } },
 ]);

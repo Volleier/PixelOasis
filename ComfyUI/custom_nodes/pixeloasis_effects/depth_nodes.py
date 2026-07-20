@@ -42,6 +42,7 @@ class PO_DepthEstimate:
         return {
             "required": {
                 "image": ("IMAGE",),
+                "max_side": ("INT", {"default": 2048, "min": 512, "max": 4096, "step": 64}),
             }
         }
 
@@ -77,12 +78,24 @@ class PO_DepthEstimate:
         self.model = model.eval().to(self.device)
         return self.model
 
-    def estimate(self, image):
+    def estimate(self, image, max_side=2048):
         with torch.inference_mode():
             model = self._load_model()
             depth_maps = []
             for sample in image:
-                rgb = sample[..., :3].detach().float().cpu().numpy()
+                rgb_tensor = sample[..., :3].detach().float().cpu()
+                source_height, source_width = rgb_tensor.shape[:2]
+                scale = min(1.0, float(max_side) / max(source_width, source_height))
+                target_width = max(1, round(source_width * scale))
+                target_height = max(1, round(source_height * scale))
+                if (target_width, target_height) != (source_width, source_height):
+                    rgb_tensor = F.interpolate(
+                        rgb_tensor.permute(2, 0, 1).unsqueeze(0),
+                        size=(target_height, target_width),
+                        mode="bicubic",
+                        align_corners=False,
+                    ).squeeze(0).permute(1, 2, 0)
+                rgb = rgb_tensor.numpy()
                 bgr = np.ascontiguousarray(np.clip(rgb[..., ::-1] * 255.0, 0, 255).astype(np.uint8))
                 depth = model.infer_image(bgr, input_size=756)
                 depth = torch.from_numpy(depth).to(dtype=torch.float32)

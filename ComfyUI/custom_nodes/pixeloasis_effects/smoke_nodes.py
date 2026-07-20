@@ -1,224 +1,157 @@
-"""
-PO_FractalSmokeRGBA — Multi-octave FBM fractal smoke generator (RGBA output).
-PO_DustParticlesRGBA — Particle dust field generator (RGBA output).
+"""Controllable, layered RGBA smoke and dust nodes for ComfyUI."""
 
-Both nodes produce deterministic output for a given seed.
-All processing uses torch.inference_mode(), FP16 inference, and explicit
-tensor cleanup. Fixed seed must produce byte-identical output.
-"""
+import math
 
+import numpy as np
 import torch
 import torch.nn.functional as F
-import numpy as np
+
+
+def _direction_vector(direction):
+    vectors = {
+        "upRight": (0.58, -0.82), "upLeft": (-0.58, -0.82),
+        "right": (0.98, -0.12), "left": (-0.98, -0.12),
+        "up": (0.0, -1.0), "auto": (0.35, -0.94),
+    }
+    dx, dy = vectors.get(direction, vectors["auto"])
+    norm = math.sqrt(dx * dx + dy * dy)
+    return dx / norm, dy / norm
+
+
+def _noise_field(rng, width, height, cells, blur_mix=0.0):
+    grid_h = max(2, int(cells * height / max(width, height)))
+    grid_w = max(2, int(cells * width / max(width, height)))
+    grid = torch.from_numpy(rng.random((grid_h, grid_w)).astype(np.float32))
+    field = F.interpolate(grid.unsqueeze(0).unsqueeze(0), size=(height, width), mode="bicubic", align_corners=False).squeeze()
+    if blur_mix > 0:
+        field = (1.0 - blur_mix) * field + blur_mix * F.avg_pool2d(field.unsqueeze(0).unsqueeze(0), 5, 1, 2).squeeze()
+    return field.clamp(0.0, 1.0)
+
+
+def _ambient_charcoal(source, anchor_x, anchor_y):
+    if source is None or not isinstance(source, torch.Tensor) or source.numel() == 0:
+        return torch.tensor([0.055, 0.06, 0.07], dtype=torch.float32)
+    image = source[0, ..., :3].detach().float().cpu()
+    height, width = image.shape[:2]
+    cx, cy = min(width - 1, max(0, int(anchor_x * width))), min(height - 1, max(0, int(anchor_y * height)))
+    radius = max(8, min(width, height) // 18)
+    patch = image[max(0, cy - radius):min(height, cy + radius), max(0, cx - radius):min(width, cx + radius)]
+    luminance = patch.mean(dim=(0, 1)).clamp(0.0, 1.0) if patch.numel() else image.mean(dim=(0, 1)).clamp(0.0, 1.0)
+    return (luminance * 0.16 + torch.tensor([0.025, 0.028, 0.035])).clamp(0.025, 0.16)
+
+
+class PO_SubjectMaskResolve:
+    """Use an artist mask when non-empty, otherwise use depth foreground."""
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"automatic_mask": ("MASK",)}, "optional": {"user_mask": ("MASK",)}}
+
+    RETURN_TYPES = ("MASK",)
+    RETURN_NAMES = ("subject_mask",)
+    FUNCTION = "resolve"
+    CATEGORY = "PixelOasis/Effects"
+
+    def resolve(self, automatic_mask, user_mask=None):
+        candidate = user_mask
+        if candidate is not None and candidate.numel() > 0:
+            coverage = float(candidate.detach().float().mean().cpu())
+            if coverage < 0.002 or coverage > 0.985:
+                candidate = None
+        mask = candidate if candidate is not None else automatic_mask
+        if mask.dim() == 2:
+            mask = mask.unsqueeze(0)
+        soft = F.avg_pool2d(mask.detach().float().clamp(0.0, 1.0).unsqueeze(1), 9, 1, 4).squeeze(1)
+        return (soft.clamp(0.0, 1.0),)
 
 
 class PO_FractalSmokeRGBA:
-    """Generate fractal smoke as RGBA image using multi-octave FBM + curl noise.
-
-    Inputs:
-        width, height    — output dimensions in pixels
-        anchor_x, anchor_y — smoke origin (0..1 normalized)
-        direction        — "upRight", "upLeft", "right", "left", "up", "auto"
-        density          — 0.05..1.0, opacity and coverage
-        spread           — 0.10..1.0, plume spread angle
-        turbulence       — 0.0..1.0, noise curl intensity
-        seed             — integer for reproducibility
-    Outputs:
-        IMAGE            — RGBA image tensor (B, H, W, 4)
-        MASK             — alpha mask (B, H, W, 1)
-    """
-
+    """Generate a directionally advected, multi-scale charcoal smoke layer."""
     @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "width": ("INT", {"default": 1024, "min": 64, "max": 4096, "step": 64}),
-                "height": ("INT", {"default": 1024, "min": 64, "max": 4096, "step": 64}),
-                "anchor_x": ("FLOAT", {"default": 0.58, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "anchor_y": ("FLOAT", {"default": 0.72, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "direction": (["upRight", "upLeft", "right", "left", "up", "auto"], {"default": "upRight"}),
-                "density": ("FLOAT", {"default": 0.50, "min": 0.05, "max": 1.0, "step": 0.01}),
-                "spread": ("FLOAT", {"default": 0.45, "min": 0.10, "max": 1.0, "step": 0.01}),
-                "turbulence": ("FLOAT", {"default": 0.55, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffff}),
-            }
-        }
+    def INPUT_TYPES(cls):
+        return {"required": {
+            "width": ("INT", {"default": 2048, "min": 64, "max": 4096, "step": 64}),
+            "height": ("INT", {"default": 2048, "min": 64, "max": 4096, "step": 64}),
+            "anchor_x": ("FLOAT", {"default": 0.58, "min": 0.0, "max": 1.0, "step": 0.01}),
+            "anchor_y": ("FLOAT", {"default": 0.72, "min": 0.0, "max": 1.0, "step": 0.01}),
+            "direction": (["upRight", "upLeft", "right", "left", "up", "auto"], {"default": "upRight"}),
+            "density": ("FLOAT", {"default": 0.42, "min": 0.05, "max": 1.0, "step": 0.01}),
+            "spread": ("FLOAT", {"default": 0.42, "min": 0.10, "max": 1.0, "step": 0.01}),
+            "turbulence": ("FLOAT", {"default": 0.62, "min": 0.0, "max": 1.0, "step": 0.01}),
+            "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffff}),
+        }, "optional": {"source": ("IMAGE",)}}
 
     RETURN_TYPES = ("IMAGE", "MASK")
     RETURN_NAMES = ("rgba", "alpha")
     FUNCTION = "generate"
     CATEGORY = "PixelOasis/Effects"
 
-    def generate(self, width, height, anchor_x, anchor_y, direction, density,
-                 spread, turbulence, seed):
+    def generate(self, width, height, anchor_x, anchor_y, direction, density, spread, turbulence, seed, source=None):
         with torch.inference_mode():
             rng = np.random.RandomState(seed)
-
-            # Compute direction vector
-            dir_map = {
-                "upRight": (0.5, 0.7), "upLeft": (-0.5, 0.7),
-                "right": (0.8, 0.1), "left": (-0.8, 0.1),
-                "up": (0.0, 0.9), "auto": (0.3, 0.6),
-            }
-            dx, dy = dir_map.get(direction, (0.3, 0.6))
-
-            # Generate multi-octave FBM noise field
-            octaves = 5
-            noise_field = self._fbm_noise(rng, width, height, octaves, turbulence)
-
-            # Build smoke plume from anchor point with direction + spread
-            y_coords = torch.linspace(0, 1, height, dtype=torch.float32)
-            x_coords = torch.linspace(0, 1, width, dtype=torch.float32)
-            gy, gx = torch.meshgrid(y_coords, x_coords, indexing="ij")
-
-            plume_x = (gx - anchor_x) * (1.0 / max(spread, 0.01))
-            plume_y = (gy - anchor_y) * (1.0 / max(spread, 0.01))
-            plume_dist = torch.sqrt(plume_x ** 2 + plume_y ** 2)
-
-            # Directional bias
-            dir_bias = (gx - anchor_x) * (-dy) + (gy - anchor_y) * dx
-            plume_mask = torch.sigmoid((1.0 - plume_dist * 2.5 + dir_bias * 0.5) * 5.0)
-
-            # Apply density + noise
-            alpha = plume_mask * density * (0.6 + 0.4 * noise_field)
-            alpha = torch.clamp(alpha, 0.0, 1.0)
-
-            # RGBA output (smoke color: dark gray-black)
-            rgba = torch.zeros(height, width, 4, dtype=torch.float32)
-            rgba[..., 0] = 0.08   # R
-            rgba[..., 1] = 0.08   # G
-            rgba[..., 2] = 0.10   # B
-            rgba[..., 3] = alpha  # A
-
-            # Batch dimension
-            rgba = rgba.unsqueeze(0)
-            mask = alpha.unsqueeze(0).unsqueeze(-1)
-
-            del gx, gy, plume_x, plume_y, plume_dist, dir_bias, plume_mask
-            del noise_field
-
-        return (rgba, mask)
-
-    def _fbm_noise(self, rng, w, h, octaves, turbulence):
-        """Multi-octave FBM noise using value noise at multiple scales."""
-        field = torch.zeros(h, w, dtype=torch.float32)
-        amplitude = 0.5
-        frequency = 1.0
-        max_val = 0.0
-
-        for o in range(octaves):
-            scale_w = max(2, int(w * frequency / 8))
-            scale_h = max(2, int(h * frequency / 8))
-            noise = torch.from_numpy(
-                rng.rand(scale_h, scale_w).astype(np.float32)
-            )
-            noise = F.interpolate(
-                noise.unsqueeze(0).unsqueeze(0),
-                size=(h, w), mode='bilinear', align_corners=False
-            ).squeeze()
-
-            field += noise * amplitude * turbulence
-            max_val += amplitude
-            amplitude *= 0.5
-            frequency *= 2.0
-
-        field = field / max(max_val, 0.001)
-        return (field - field.min()) / (field.max() - field.min() + 0.001)
+            dx, dy = _direction_vector(direction)
+            y, x = torch.meshgrid(torch.linspace(0.0, 1.0, height), torch.linspace(0.0, 1.0, width), indexing="ij")
+            large, medium, fine = _noise_field(rng, width, height, 5, 0.5), _noise_field(rng, width, height, 15), _noise_field(rng, width, height, 42)
+            rel_x = x + (medium - 0.5) * turbulence * 0.16 + (fine - 0.5) * turbulence * 0.035 - anchor_x
+            rel_y = y + (large - 0.5) * turbulence * 0.10 + (medium - 0.5) * turbulence * 0.055 - anchor_y
+            longitudinal, lateral = rel_x * dx + rel_y * dy, rel_x * (-dy) + rel_y * dx
+            forward = torch.sigmoid((longitudinal + 0.025) * 38.0)
+            tail = torch.sigmoid((1.18 - longitudinal) * 7.0)
+            local_width = 0.035 + spread * (0.10 + 0.34 * longitudinal.clamp(0.0, 1.0))
+            body = torch.exp(-0.5 * (lateral / local_width.clamp_min(0.012)) ** 2) * forward * tail
+            texture = (0.45 * large + 0.37 * medium + 0.18 * fine).clamp(0.0, 1.0)
+            alpha = body * (0.34 + 0.86 * texture) * density
+            for _ in range(11):
+                along, offset = rng.uniform(0.08, 0.98), rng.normal(0.0, spread * (0.05 + 0.12 * rng.uniform()))
+                wisp = torch.exp(-0.5 * ((longitudinal - along) / rng.uniform(0.08, 0.25)) ** 2)
+                wisp *= torch.exp(-0.5 * ((lateral - offset) / (rng.uniform(0.025, 0.09) * (0.55 + spread))) ** 2)
+                alpha = torch.maximum(alpha, wisp * density * rng.uniform(0.07, 0.20) * (0.55 + medium))
+            alpha = F.avg_pool2d(alpha.unsqueeze(0).unsqueeze(0), 3, 1, 1).squeeze().clamp(0.0, min(0.72, 0.14 + density * 0.62))
+            charcoal = _ambient_charcoal(source, anchor_x, anchor_y)
+            rgb = charcoal.view(1, 1, 3) * (0.82 + 0.24 * large).unsqueeze(-1)
+            rgba = torch.cat((rgb, alpha.unsqueeze(-1)), dim=-1).unsqueeze(0)
+            return (rgba.clamp(0.0, 1.0), alpha.unsqueeze(0).unsqueeze(-1))
 
 
 class PO_DustParticlesRGBA:
-    """Generate dust/debris particle field as RGBA image.
-
-    Inputs:
-        width, height    — output dimensions
-        anchor_x, anchor_y — emission origin (0..1)
-        direction        — wind direction
-        particleAmount   — 0..1, particle count and brightness
-        spread           — spread angle
-        turbulence       — randomness in particle trajectories
-        seed             — reproducibility
-    Outputs:
-        IMAGE            — RGBA image tensor (B, H, W, 4)
-        MASK             — alpha mask (B, H, W, 1)
-    """
-
-    MAX_PARTICLES = 1200
-
+    """Generate soft, multi-scale, wind-driven dust rather than square pixels."""
     @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "width": ("INT", {"default": 1024, "min": 64, "max": 4096, "step": 64}),
-                "height": ("INT", {"default": 1024, "min": 64, "max": 4096, "step": 64}),
-                "anchor_x": ("FLOAT", {"default": 0.58, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "anchor_y": ("FLOAT", {"default": 0.72, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "direction": (["upRight", "upLeft", "right", "left", "up", "auto"], {"default": "upRight"}),
-                "particleAmount": ("FLOAT", {"default": 0.35, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "spread": ("FLOAT", {"default": 0.45, "min": 0.10, "max": 1.0, "step": 0.01}),
-                "turbulence": ("FLOAT", {"default": 0.55, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffff}),
-            }
-        }
+    def INPUT_TYPES(cls):
+        return {"required": {
+            "width": ("INT", {"default": 2048, "min": 64, "max": 4096, "step": 64}),
+            "height": ("INT", {"default": 2048, "min": 64, "max": 4096, "step": 64}),
+            "anchor_x": ("FLOAT", {"default": 0.58, "min": 0.0, "max": 1.0, "step": 0.01}),
+            "anchor_y": ("FLOAT", {"default": 0.72, "min": 0.0, "max": 1.0, "step": 0.01}),
+            "direction": (["upRight", "upLeft", "right", "left", "up", "auto"], {"default": "upRight"}),
+            "particleAmount": ("FLOAT", {"default": 0.38, "min": 0.0, "max": 1.0, "step": 0.01}),
+            "spread": ("FLOAT", {"default": 0.42, "min": 0.10, "max": 1.0, "step": 0.01}),
+            "turbulence": ("FLOAT", {"default": 0.62, "min": 0.0, "max": 1.0, "step": 0.01}),
+            "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffff}),
+        }, "optional": {"source": ("IMAGE",)}}
 
     RETURN_TYPES = ("IMAGE", "MASK")
     RETURN_NAMES = ("rgba", "alpha")
     FUNCTION = "generate"
     CATEGORY = "PixelOasis/Effects"
 
-    def generate(self, width, height, anchor_x, anchor_y, direction,
-                 particleAmount, spread, turbulence, seed):
+    def generate(self, width, height, anchor_x, anchor_y, direction, particleAmount, spread, turbulence, seed, source=None):
         with torch.inference_mode():
-            rng = np.random.RandomState(seed)
-
-            num_particles = int(particleAmount * self.MAX_PARTICLES)
-            if num_particles <= 0:
-                empty_rgba = torch.zeros(1, height, width, 4, dtype=torch.float32)
-                empty_mask = torch.zeros(1, height, width, 1, dtype=torch.float32)
-                return (empty_rgba, empty_mask)
-
-            dir_map = {
-                "upRight": (0.5, 0.7), "upLeft": (-0.5, 0.7),
-                "right": (0.8, 0.1), "left": (-0.8, 0.1),
-                "up": (0.0, 0.9), "auto": (0.3, 0.6),
-            }
-            dx, dy = dir_map.get(direction, (0.3, 0.6))
-
-            # Generate particle positions
-            px = rng.rand(num_particles).astype(np.float32) * spread * width + (anchor_x - spread * 0.5) * width
-            py = rng.rand(num_particles).astype(np.float32) * spread * height * 0.6 + anchor_y * height
-
-            # Displace by direction + turbulence
-            px += dx * width * rng.randn(num_particles).astype(np.float32) * 0.15 * turbulence
-            py += -dy * height * 0.4 + rng.randn(num_particles).astype(np.float32) * height * 0.1 * turbulence
-
-            # Particle sizes and opacities
-            sizes = rng.rand(num_particles).astype(np.float32) * 4.0 + 1.0  # 1-5 px
-            alphas = rng.rand(num_particles).astype(np.float32) * 0.6 + 0.2  # 0.2-0.8
-
-            # Render particles onto RGBA canvas
-            rgba = torch.zeros(height, width, 4, dtype=torch.float32)
-            px_t = torch.from_numpy(px).long()
-            py_t = torch.from_numpy(py).long()
-            sizes_t = torch.from_numpy(sizes)
-            alphas_t = torch.from_numpy(alphas)
-
-            valid = (px_t >= 0) & (px_t < width) & (py_t >= 0) & (py_t < height)
-            px_t = px_t[valid]; py_t = py_t[valid]
-            sizes_t = sizes_t[valid]; alphas_t = alphas_t[valid]
-
-            for i in range(len(px_t)):
-                r = max(1, int(sizes_t[i].item()))
-                x0, x1 = max(0, px_t[i].item() - r), min(width, px_t[i].item() + r + 1)
-                y0, y1 = max(0, py_t[i].item() - r), min(height, py_t[i].item() + r + 1)
-                rgba[y0:y1, x0:x1, 0] += 0.15 * alphas_t[i]
-                rgba[y0:y1, x0:x1, 1] += 0.15 * alphas_t[i]
-                rgba[y0:y1, x0:x1, 2] += 0.18 * alphas_t[i]
-                rgba[y0:y1, x0:x1, 3] += alphas_t[i] / (r * 2)
-
-            rgba[..., :3] = torch.clamp(rgba[..., :3], 0.0, 1.0)
-            rgba[..., 3] = torch.clamp(rgba[..., 3], 0.0, 1.0)
-
-            rgba = rgba.unsqueeze(0)
-            mask = rgba[..., 3:4]
-
-        return (rgba, mask)
+            rng, (dx, dy) = np.random.RandomState(seed + 7919), _direction_vector(direction)
+            canvas, count, base_scale = np.zeros((height, width), dtype=np.float32), int(1200 + particleAmount * 5600), min(width, height) / 1024.0
+            for _ in range(count):
+                band = rng.choice((0, 1, 2), p=(0.30, 0.52, 0.18))
+                along, lateral = rng.beta(1.6, 2.2) * (0.30 + spread * 0.95), rng.normal(0.0, (0.025 + 0.15 * spread) * (0.40 + rng.uniform()))
+                x, y = (anchor_x + dx * along - dy * lateral) * width, (anchor_y + dy * along + dx * lateral) * height
+                if band == 0: radius, opacity = rng.uniform(0.45, 1.35) * base_scale, rng.uniform(0.025, 0.10)
+                elif band == 1: radius, opacity = rng.uniform(0.8, 2.9) * base_scale, rng.uniform(0.045, 0.18)
+                else: radius, opacity = rng.uniform(2.0, 6.0) * base_scale, rng.uniform(0.05, 0.20)
+                rx, ry, pad = max(0.75, radius * (1.0 + turbulence * rng.uniform(0.0, 1.4))), max(0.75, radius * rng.uniform(0.65, 1.05)), int(math.ceil(radius * 6))
+                x0, x1, y0, y1 = max(0, int(x) - pad), min(width, int(x) + pad + 1), max(0, int(y) - pad), min(height, int(y) + pad + 1)
+                if x0 >= x1 or y0 >= y1: continue
+                yy, xx = np.mgrid[y0:y1, x0:x1].astype(np.float32)
+                parallel, perpendicular = (xx - x) * dx + (yy - y) * dy, (xx - x) * (-dy) + (yy - y) * dx
+                stamp = np.exp(-2.35 * ((parallel / rx) ** 2 + (perpendicular / ry) ** 2)) * opacity
+                canvas[y0:y1, x0:x1] = np.maximum(canvas[y0:y1, x0:x1], stamp.astype(np.float32))
+            alpha = torch.from_numpy(canvas).clamp(0.0, 0.42)
+            rgb = (_ambient_charcoal(source, anchor_x, anchor_y) * 1.35).view(1, 1, 3).expand(height, width, 3)
+            rgba = torch.cat((rgb, alpha.unsqueeze(-1)), dim=-1).unsqueeze(0)
+            return (rgba.clamp(0.0, 1.0), alpha.unsqueeze(0).unsqueeze(-1))

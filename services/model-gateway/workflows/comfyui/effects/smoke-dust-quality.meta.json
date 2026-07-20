@@ -7,75 +7,68 @@
   "priority": 100,
   "profile": "quality_16gb",
   "minVramGb": 14,
-  "timeoutMs": 180000,
+  "timeoutMs": 600000,
   "apiWorkflowFile": "smoke-dust-quality.api.json",
   "inputs": {
     "source": "required",
     "subjectMask": "optional",
-    "editMask": "optional",
     "points": "optional"
   },
   "outputs": [
-    { "nodeId": "80", "role": "smokeBack", "title": "Save Smoke Back RGBA" },
-    { "nodeId": "81", "role": "smokeFront", "title": "Save Smoke Front RGBA" },
-    { "nodeId": "82", "role": "dustBack", "title": "Save Dust Back RGBA" },
-    { "nodeId": "83", "role": "dustFront", "title": "Save Dust Front RGBA" },
-    { "nodeId": "90", "role": "compositePreview", "title": "Save Composite Preview" }
+    { "nodeId": "90", "role": "result", "title": "Save Cinematic Smoke Result" }
   ],
   "bindings": [
     { "nodeId": "10", "field": "image", "type": "image", "source": "sourceFilename" },
     { "nodeId": "11", "field": "image", "type": "mask", "source": "subjectMaskFilename" },
-    { "nodeId": "20", "field": "width", "type": "integer", "source": "width" },
-    { "nodeId": "20", "field": "height", "type": "integer", "source": "height" },
-    { "nodeId": "20", "field": "anchor_x", "type": "number", "source": "anchorX" },
-    { "nodeId": "20", "field": "anchor_y", "type": "number", "source": "anchorY" },
-    { "nodeId": "20", "field": "density", "type": "number", "source": "density" },
-    { "nodeId": "20", "field": "direction", "type": "enum", "source": "direction" },
-    { "nodeId": "20", "field": "spread", "type": "number", "source": "spread" },
-    { "nodeId": "20", "field": "turbulence", "type": "number", "source": "turbulence" },
-    { "nodeId": "20", "field": "seed", "type": "seed", "source": "seed" },
-    { "nodeId": "21", "field": "width", "type": "integer", "source": "width" },
-    { "nodeId": "21", "field": "height", "type": "integer", "source": "height" },
-    { "nodeId": "21", "field": "anchor_x", "type": "number", "source": "anchorX" },
-    { "nodeId": "21", "field": "anchor_y", "type": "number", "source": "anchorY" },
-    { "nodeId": "21", "field": "particleAmount", "type": "number", "source": "particleAmount" },
-    { "nodeId": "21", "field": "direction", "type": "enum", "source": "direction" },
-    { "nodeId": "21", "field": "spread", "type": "number", "source": "spread" },
-    { "nodeId": "21", "field": "turbulence", "type": "number", "source": "turbulence" },
-    { "nodeId": "21", "field": "seed", "type": "seed", "source": "seed" },
-    { "nodeId": "30", "field": "occlusion", "type": "enum", "source": "occlusion" }
-    ,{ "nodeId": "31", "field": "occlusion", "type": "enum", "source": "occlusion" }
-    ,{ "nodeId": "80", "field": "filename_prefix", "type": "string", "source": "smokeOutputPrefix" }
-    ,{ "nodeId": "81", "field": "filename_prefix", "type": "string", "source": "smokeFrontOutputPrefix" }
-    ,{ "nodeId": "82", "field": "filename_prefix", "type": "string", "source": "dustOutputPrefix" }
-    ,{ "nodeId": "83", "field": "filename_prefix", "type": "string", "source": "dustFrontOutputPrefix" }
-    ,{ "nodeId": "90", "field": "filename_prefix", "type": "string", "source": "compositeOutputPrefix" }
+    { "nodeId": "24", "field": "direction", "type": "enum", "source": "direction" },
+    { "nodeId": "24", "field": "particle_amount", "type": "number", "source": "particleAmount" },
+    { "nodeId": "27", "field": "width", "type": "integer", "source": "width" },
+    { "nodeId": "27", "field": "height", "type": "integer", "source": "height" },
+    { "nodeId": "28", "field": "seed", "type": "seed", "source": "seed" },
+    { "nodeId": "40", "field": "effect_strength", "type": "number", "source": "density" },
+    { "nodeId": "40", "field": "effect_scale", "type": "number", "source": "spread" },
+    { "nodeId": "40", "field": "anchor_x", "type": "number", "source": "anchorX" },
+    { "nodeId": "40", "field": "anchor_y", "type": "number", "source": "anchorY" },
+    { "nodeId": "90", "field": "filename_prefix", "type": "string", "source": "compositeOutputPrefix" }
   ],
   "sizePolicy": {
     "mode": "matchSelection",
     "allowResize": true,
-    "maxLongEdge": 2048
+    "maxLongEdge": 2048,
+    "alignment": 16
   },
   "placementPolicy": {
-    "type": "layered",
+    "type": "singleResult",
     "group": "PixelOasis/黑色烟尘"
   },
   "requiredNodes": [
+    "LoadImage",
+    "LoadImageMask",
     "PO_DepthEstimate",
     "PO_SubjectMaskResolve",
-    "PO_FractalSmokeRGBA",
-    "PO_DustParticlesRGBA",
-    "PO_DepthSplitRGBA",
-    "PO_MergeRGBA",
-    "PO_RGBAComposite",
-    "PO_SaveLayeredImage",
+    "UNETLoader",
+    "CLIPLoader",
+    "VAELoader",
+    "ModelSamplingAuraFlow",
+    "PO_VFXPromptBuilder",
+    "CLIPTextEncode",
+    "ConditioningZeroOut",
+    "EmptySD3LatentImage",
+    "KSampler",
+    "VAEDecode",
+    "PO_VFXPlateComposite",
     "SaveImage"
   ],
   "requiredModels": [
-    { "name": "depth_anything_v2_vitl_fp16.safetensors", "path": "depthanything/depth_anything_v2_vitl_fp16.safetensors" }
+    { "name": "depth_anything_v2_vitl_fp16.safetensors", "path": "depthanything/depth_anything_v2_vitl_fp16.safetensors" },
+    { "name": "z_image_turbo_bf16.safetensors", "path": "unet/z_image_turbo_bf16.safetensors" },
+    { "name": "qwen_3_4b.safetensors", "path": "text_encoders/qwen_3_4b.safetensors" },
+    { "name": "ae.safetensors", "path": "vae/ae.safetensors" }
   ],
-  "optionalNodes": ["TextEncodeQwenImageEdit"],
-  "optionalModels": [
-    { "name": "qwen-image-edit", "path": "qwen/qwen-image-edit-*.safetensors" }
+  "recommendedModels": [
+    { "name": "BiRefNet-HR", "purpose": "subject segmentation" },
+    { "name": "Z-Image-Turbo-Fun-Controlnet-Union", "purpose": "spatial control" },
+    { "name": "4x-UltraSharp", "purpose": "particle detail recovery" },
+    { "name": "Qwen-Image-Edit or FLUX.1 Kontext", "purpose": "final integration refinement" }
   ]
 }

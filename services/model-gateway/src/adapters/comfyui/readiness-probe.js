@@ -46,7 +46,7 @@ export async function probeNodes(requiredNodes = []) {
 
 export function probeModels(requiredModels = []) {
   const comfyRoot = config.comfyuiRoot || "";
-  const modelsDir = config.modelAssetsDir || config.comfyuiModelsDir || resolve(comfyRoot, "models");
+  const modelsDir = config.comfyuiModelsDir || config.modelAssetsDir || resolve(comfyRoot, "models");
 
   const missing = [];
   for (const model of requiredModels) {

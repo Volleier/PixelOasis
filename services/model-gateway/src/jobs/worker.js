@@ -313,8 +313,8 @@ function _workflowSize(bounds) {
   const height = Math.max(1, Math.round(bounds?.height || 1024));
   const scale = Math.min(1, 2048 / Math.max(width, height));
   return {
-    width: Math.max(64, Math.round(width * scale)),
-    height: Math.max(64, Math.round(height * scale)),
+    width: Math.max(64, Math.round((width * scale) / 16) * 16),
+    height: Math.max(64, Math.round((height * scale) / 16) * 16),
   };
 }
 
