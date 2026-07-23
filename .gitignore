@@ -5,7 +5,6 @@ pixeloasis-plugin/dist
 coverage
 *.log
 PixelOasis/
-docs/
 config.yaml
 tools/cache/
 logs/debug-workflows/
