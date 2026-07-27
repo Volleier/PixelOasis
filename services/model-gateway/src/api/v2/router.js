@@ -7,10 +7,11 @@
 import { handleHealth } from "./health-route.js";
 import { handleCapabilities, handleCapabilityById } from "./capabilities-route.js";
 import { handleAssetUpload, handleAssetHead } from "./assets-route.js";
-import { handleCreateJob, handleGetJob, handleListJobs, handleCancelJob, handleRetryJob, handleJobEvents } from "./jobs-route.js";
+import { handleCreateJob, handleGetJob, handleListJobs, handleCancelJob, handleRetryJob, handleJobEvents, handleGetJobAudit, handleClientEvent } from "./jobs-route.js";
 import { handleArtifactDownload } from "./artifacts-route.js";
 import { v2NotFound, v2ServerError } from "../../utils/errors.js";
 import logger from "../../utils/logger.js";
+import { attachTraceContext } from "../../observability/trace-context.js";
 
 /* ── Exact routes (method + path) ── */
 const EXACT_ROUTES = {
@@ -37,6 +38,10 @@ const PARAM_ROUTES = [
   { method: "DELETE", pattern: /^\/v2\/jobs\/([A-Za-z0-9_-]+)$/, handler: handleCancelJob, paramKeys: ["id"] },
   /* /v2/artifacts/{id} */
   { method: "GET", pattern: /^\/v2\/artifacts\/([A-Za-z0-9_-]+)$/, handler: handleArtifactDownload, paramKeys: ["id"] },
+  /* /v2/jobs/{id}/audit */
+  { method: "GET", pattern: /^\/v2\/jobs\/([A-Za-z0-9_-]+)\/audit$/, handler: handleGetJobAudit, paramKeys: ["id"] },
+  /* /v2/jobs/{id}/client-events */
+  { method: "POST", pattern: /^\/v2\/jobs\/([A-Za-z0-9_-]+)\/client-events$/, handler: handleClientEvent, paramKeys: ["id"] },
 ];
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -45,7 +50,8 @@ const PARAM_ROUTES = [
 
 export async function dispatch(method, pathname, req, res, queryParams) {
   /* Set common headers */
-  const corrId = req.headers["x-correlation-id"] || ("gw-" + Date.now().toString(36));
+  const traceContext = attachTraceContext(req, res);
+  const corrId = traceContext.correlationId;
   res.setHeader("X-Correlation-Id", corrId);
   res.setHeader("Cache-Control", "no-store");
 
@@ -59,7 +65,9 @@ export async function dispatch(method, pathname, req, res, queryParams) {
       await exactHandler(req, res, queryParams);
       logger.info("v2.request_completed", {
         component: "v2-router",
-        data: { method, path: pathname },
+        data: { method, path: pathname, httpStatus: res.statusCode },
+        traceId: traceContext.traceId,
+        correlationId: corrId,
         durationMs: Date.now() - reqStart,
       });
       return;
@@ -77,7 +85,9 @@ export async function dispatch(method, pathname, req, res, queryParams) {
         await route.handler(req, res, params, queryParams);
         logger.info("v2.request_completed", {
           component: "v2-router",
-          data: { method, path: pathname, params },
+          data: { method, path: pathname, params, httpStatus: res.statusCode },
+          traceId: traceContext.traceId,
+          correlationId: corrId,
           durationMs: Date.now() - reqStart,
         });
         return;
@@ -88,12 +98,16 @@ export async function dispatch(method, pathname, req, res, queryParams) {
     v2NotFound(res, "NOT_FOUND", "Endpoint not found: " + method + " " + pathname);
     logger.debug("v2.not_found", {
       component: "v2-router",
-      data: { method, path: pathname },
+      data: { method, path: pathname, httpStatus: 404 },
+      traceId: traceContext.traceId,
+      correlationId: corrId,
     });
   } catch (err) {
     logger.error("v2.handler_error", {
       component: "v2-router",
-      data: { method, path: pathname },
+      data: { method, path: pathname, httpStatus: 500, errorClass: err.constructor ? err.constructor.name : typeof err },
+      traceId: traceContext.traceId,
+      correlationId: corrId,
       error: err,
       durationMs: Date.now() - reqStart,
     });

@@ -19,6 +19,18 @@ window.PO.ResultGroup = (function () {
   function _app() { return _photoshop().app; }
   function _core() { return _photoshop().core; }
 
+  function _reportClientEvent(job, event, data) {
+    try {
+      var report = window.PO.GatewayV2Client.sendClientEvent(
+        job.jobId,
+        event,
+        data,
+        job.traceId || null
+      );
+      if (report && typeof report.catch === "function") report.catch(function () {});
+    } catch (_) { /* Observability must not block placement. */ }
+  }
+
   /* ═══════════════════════════════════════════════════════════════════
    * placeJobArtifacts(job, currentDocument) → boolean
    * ═══════════════════════════════════════════════════════════════════ */
@@ -28,7 +40,9 @@ window.PO.ResultGroup = (function () {
     if (!currentDocument) throw new Error("无活动文档");
 
     var jobId = job.jobId;
-    var artifacts = (job.result && job.result.artifacts) || [];
+    var artifacts = ((job.result && job.result.artifacts) || []).filter(function (artifact) {
+      return !(artifact.placement && artifact.placement.previewOnly === true);
+    });
     var rollbackGroupId = null;
     var rollbackLayerIds = [];
 
@@ -52,6 +66,7 @@ window.PO.ResultGroup = (function () {
       component: "result-group",
       data: { jobId: jobId, artifactCount: artifacts.length },
     });
+    _reportClientEvent(job, "placement.started", { artifactCount: artifacts.length });
 
     /* ── Pre-flight 2: Download all artifacts (OUTSIDE modal) ── */
     var downloaded;
@@ -155,6 +170,8 @@ window.PO.ResultGroup = (function () {
         component: "result-group",
         data: { jobId: jobId, layerCount: artifacts.length },
       });
+      _reportClientEvent(job, "placement.completed", { layerCount: artifacts.length, groupName: groupName });
+      _reportClientEvent(job, "placement.acknowledged", { layerCount: artifacts.length, groupName: groupName });
 
       return true;
 
@@ -167,6 +184,7 @@ window.PO.ResultGroup = (function () {
         error: e,
         data: { jobId: jobId, groupName: groupName },
       });
+      _reportClientEvent(job, "placement.failed", { message: e.message || "Placement failed" });
 
       window.PO.setStatus && window.PO.setStatus("回填失败：" + (e.message || "未知错误"));
       throw new Error("回填失败：" + (e.message || ""));

@@ -20,6 +20,117 @@ window.PO.JobController = (function () {
   var _submitting = {}; /* idempotencyKey → true — prevents double-submit */
 
   /* ═══════════════════════════════════════════════════════════════════
+   * _buildJobPayload({ capability, capture, values, ... })
+   *   Normalizes all fields to match gateway validateRequestShape().
+   * ═══════════════════════════════════════════════════════════════════ */
+
+  function _buildJobPayload(opts) {
+    var capability = opts.capability;
+    var capture = opts.capture;
+    var values = opts.values || {};
+    var correlationId = opts.correlationId;
+    var idempotencyKey = opts.idempotencyKey;
+    var subjectMode = opts.subjectMode || "auto";
+    var sourceAssetId = opts.sourceAssetId;
+    var editMaskAssetId = opts.editMaskAssetId || null;
+    var subjectMaskAssetId = opts.subjectMaskAssetId || null;
+
+    var docInfo = capture.documentInfo || window.PO.CaptureUtils.getDocumentInfo();
+    var documentId = docInfo ? String(docInfo.id) : "0";
+    var width  = docInfo ? Math.round(window.PO.normalizeNumber(docInfo.width))  : 0;
+    var height = docInfo ? Math.round(window.PO.normalizeNumber(docInfo.height)) : 0;
+    var bitDepth = docInfo ? Math.round(window.PO.normalizeNumber(docInfo.bitDepth)) : 8;
+
+    var bounds = capture.contextBounds || capture.subjectBounds || capture.bounds || capture.editBounds;
+    var normalizedBounds = window.PO.CaptureUtils.normalizeBounds(bounds) || { left: 0, top: 0, width: 0, height: 0 };
+
+    var payload = {
+      schemaVersion: "2.0",
+      capabilityId: capability.id,
+      correlationId: correlationId,
+      idempotencyKey: idempotencyKey,
+      source: {
+        assetId: sourceAssetId,
+        scope: capture.scope || "document",
+        document: {
+          id: documentId,
+          width: width,
+          height: height,
+          colorMode: docInfo ? docInfo.mode : "RGB",
+          bitDepth: bitDepth,
+        },
+        bounds: normalizedBounds,
+        editBounds: capture.editBounds ? window.PO.CaptureUtils.normalizeBounds(capture.editBounds) : null,
+        contextBounds: capture.contextBounds ? window.PO.CaptureUtils.normalizeBounds(capture.contextBounds) : null,
+        contextOffset: capture.contextOffset || null,
+        sourceScale: capture.sourceScale || 1,
+      },
+      inputs: {
+        editMaskAssetId: editMaskAssetId,
+        subjectMaskAssetId: subjectMaskAssetId,
+        referenceAssetIds: [],
+        points: _normalizePoints(values),
+        subjectSource: capture.subjectSource || subjectMode,
+      },
+      parameters: values,
+      options: {
+        profile: values.profile || "quality_16gb",
+      },
+      clientCapabilities: {
+        multiArtifact: true,
+        smartObject: true,
+        layerMask: true,
+      },
+    };
+
+    return payload;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+   * _validatePayloadSummary(payload)
+   *   Checks structure, scope, integer dimensions, finite bounds,
+   *   profile, and parameter schema BEFORE sending to gateway.
+   *   Returns null on success, or a standardized stage: "createJob" error.
+   * ═══════════════════════════════════════════════════════════════════ */
+
+  function _validatePayloadSummary(payload) {
+    if (!payload || typeof payload !== "object") {
+      return { stage: "createJob", code: "REQUEST_SCHEMA_INVALID", userMessage: "请求数据无效", retryable: false };
+    }
+    if (payload.schemaVersion !== "2.0") {
+      return { stage: "createJob", code: "REQUEST_SCHEMA_INVALID", userMessage: "协议版本不匹配", retryable: false };
+    }
+    if (!payload.capabilityId || typeof payload.capabilityId !== "string") {
+      return { stage: "createJob", code: "REQUEST_SCHEMA_INVALID", userMessage: "能力 ID 无效", retryable: false };
+    }
+    var src = payload.source;
+    if (!src || !src.assetId) {
+      return { stage: "createJob", code: "REQUEST_SCHEMA_INVALID", userMessage: "缺少源素材 ID", retryable: false };
+    }
+    if (!src.document || typeof src.document !== "object") {
+      return { stage: "createJob", code: "REQUEST_SCHEMA_INVALID", userMessage: "缺少文档信息", retryable: false };
+    }
+    if (!Number.isInteger(src.document.width) || src.document.width < 1 ||
+        !Number.isInteger(src.document.height) || src.document.height < 1) {
+      return { stage: "createJob", code: "INPUT_SOURCE_INVALID", userMessage: "文档尺寸无效", retryable: false };
+    }
+    if (!Number.isInteger(src.document.bitDepth) || src.document.bitDepth < 1 || src.document.bitDepth > 32) {
+      return { stage: "createJob", code: "REQUEST_SCHEMA_INVALID", userMessage: "文档位深度无效", retryable: false };
+    }
+    if (!src.bounds || !Number.isFinite(src.bounds.width) || src.bounds.width < 1) {
+      return { stage: "createJob", code: "INPUT_SOURCE_INVALID", userMessage: "文档边界信息无效", retryable: false };
+    }
+    if (!["document", "selection", "subject"].includes(src.scope)) {
+      return { stage: "createJob", code: "REQUEST_SCHEMA_INVALID", userMessage: "源范围类型无效", retryable: false };
+    }
+    if (payload.options && payload.options.profile &&
+        !["quality_16gb", "balanced_16gb", "safe_low_vram"].includes(payload.options.profile)) {
+      return { stage: "createJob", code: "REQUEST_SCHEMA_INVALID", userMessage: "配置档无效", retryable: false };
+    }
+    return null; /* valid */
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
    * createAndSubmit({ capability, capture, values, preflight })
    * ═══════════════════════════════════════════════════════════════════ */
 
@@ -30,13 +141,14 @@ window.PO.JobController = (function () {
     var values = opts.values || {};
     var preflight = opts.preflight;
     var subjectMode = opts.subjectMode || "auto";
+    var traceId = opts.traceId || window.PO.GatewayV2Client.createTraceId();
 
     if (!capability || !capture) {
       throw new Error("缺少能力或采集数据");
     }
 
     /* Generate IDs */
-    var correlationId = "po-" + Date.now().toString(36) + "-" + Math.floor(Math.random() * 10000).toString(36);
+    var correlationId = traceId;
     var docInfo = capture.documentInfo || window.PO.CaptureUtils.getDocumentInfo();
     var documentId = docInfo ? docInfo.id : "0";
     var historyStateId = "0"; /* P2: simplified; real history state ID from Photoshop API */
@@ -80,10 +192,12 @@ window.PO.JobController = (function () {
 
       /* Source image (always required) */
       var sourceB64 = capture.imagePngBase64 || capture.contextImagePngBase64;
+      var sourceMeta = window.PO.CaptureUtils.buildSourceMetadata(capture);
+      sourceMeta.traceId = traceId;
       if (sourceB64) {
         try {
           var sourceResult = await window.PO.AssetUploader.uploadAsset(
-            "source", sourceB64, correlationId, documentId
+            "source", sourceB64, correlationId, documentId, sourceMeta
           );
           sourceAssetId = sourceResult.assetId;
         } catch (e) {
@@ -95,7 +209,7 @@ window.PO.JobController = (function () {
       if (capture.editMaskPngBase64) {
         try {
           var maskResult = await window.PO.AssetUploader.uploadAsset(
-            "editMask", capture.editMaskPngBase64, correlationId, documentId
+            "editMask", capture.editMaskPngBase64, correlationId, documentId, { traceId: traceId }
           );
           editMaskAssetId = maskResult.assetId;
         } catch (e) {
@@ -116,7 +230,7 @@ window.PO.JobController = (function () {
       if (capture.subjectMaskPngBase64) {
         try {
           var subjResult = await window.PO.AssetUploader.uploadAsset(
-            "subjectMask", capture.subjectMaskPngBase64, correlationId, documentId
+            "subjectMask", capture.subjectMaskPngBase64, correlationId, documentId, { traceId: traceId }
           );
           subjectMaskAssetId = subjResult.assetId;
         } catch (e) {
@@ -129,54 +243,55 @@ window.PO.JobController = (function () {
       }
 
       /* ── Build job payload ── */
-      var bounds = capture.contextBounds || capture.subjectBounds || capture.bounds || capture.editBounds;
-      var payload = {
-        schemaVersion: "2.0",
-        capabilityId: capability.id,
+      var payload = _buildJobPayload({
+        capability: capability,
+        capture: capture,
+        values: values,
         correlationId: correlationId,
         idempotencyKey: idempotencyKey,
-        source: {
-          assetId: sourceAssetId,
-          scope: capture.scope || "document",
-          document: {
-            id: documentId,
-            width: docInfo ? docInfo.width : 0,
-            height: docInfo ? docInfo.height : 0,
-            colorMode: docInfo ? docInfo.mode : "RGB",
-            bitDepth: docInfo ? docInfo.bitDepth : 8,
+        subjectMode: subjectMode,
+        sourceAssetId: sourceAssetId,
+        editMaskAssetId: editMaskAssetId,
+        subjectMaskAssetId: subjectMaskAssetId,
+      });
+      payload.traceId = traceId;
+
+      /* ── Validate payload before sending ── */
+      var validationError = _validatePayloadSummary(payload);
+      if (validationError) {
+        window.PO.Logger && window.PO.Logger.warn("job.payload_validation_failed", {
+          component: "job-controller",
+          correlationId: correlationId,
+          data: {
+            capabilityId: capability.id,
+            code: validationError.code,
+            stage: validationError.stage,
           },
-          bounds: bounds || { left: 0, top: 0, width: 0, height: 0 },
-          editBounds: capture.editBounds || null,
-          contextBounds: capture.contextBounds || null,
-          contextOffset: capture.contextOffset || null,
-          sourceScale: capture.sourceScale || 1,
-        },
-        inputs: {
-          editMaskAssetId: editMaskAssetId || null,
-          subjectMaskAssetId: subjectMaskAssetId || null,
-          referenceAssetIds: [],
-          points: _normalizePoints(values),
-          subjectSource: capture.subjectSource || subjectMode,
-        },
-        parameters: values,
-        options: {
-          profile: values.profile || "quality_16gb",
-        },
-        clientCapabilities: {
-          multiArtifact: true,
-          smartObject: true,
-          layerMask: true,
-        },
-      };
+        });
+        throw validationError;
+      }
 
       /* ── Create job ── */
       var jobResult;
       var useMock = false;
+      var isIdempotent = false;
 
       try {
         var resp = await window.PO.GatewayV2Client.createJob(payload);
-        if (resp.ok && resp.status === 202) {
+        /* Accept 202 (new) or 200 (idempotent recovery) */
+        if (resp.ok && (resp.status === 202 || resp.status === 200)) {
           jobResult = resp.data;
+          if (resp.status === 200) {
+            if (!jobResult || !jobResult.jobId) {
+              throw new Error("幂等响应缺少 jobId");
+            }
+            isIdempotent = true;
+            window.PO.Logger && window.PO.Logger.info("job.idempotent_recovered", {
+              component: "job-controller",
+              correlationId: correlationId,
+              data: { jobId: jobResult.jobId, idempotencyKey: idempotencyKey },
+            });
+          }
         } else {
           throw new Error("Unexpected response: " + resp.status);
         }
@@ -203,7 +318,14 @@ window.PO.JobController = (function () {
         correlationId: correlationId,
         progress: 0,
         createdAt: Date.now(),
+        stages: [],
+        traceId: traceId,
       });
+
+      /* ── Render ProgressPanel BEFORE subscribing to SSE ── */
+      if (!useMock && window.PO.ProgressPanel) {
+        window.PO.ProgressPanel.show();
+      }
 
       /* ── Start tracking ── */
       if (useMock) {
@@ -228,12 +350,24 @@ window.PO.JobController = (function () {
       window.PO.Logger && window.PO.Logger.info("job.created", {
         component: "job-controller",
         correlationId: correlationId,
-        data: { jobId: jobId, capabilityId: capability.id, mock: useMock },
+        data: { jobId: jobId, capabilityId: capability.id, mock: useMock, idempotent: isIdempotent },
       });
 
-      return { jobId: jobId, correlationId: correlationId, mock: useMock };
+      /* Capture is consumed by the gateway — safe to release */
+      window.PO.CaptureUtils.releaseCapture(capture);
+
+      return {
+        jobId: jobId,
+        correlationId: correlationId,
+        traceId: traceId,
+        mock: useMock,
+        idempotent: isIdempotent,
+        captureConsumed: true,
+      };
 
     } catch (e) {
+      /* Upload or create failed — DO NOT release capture.
+         User can retry with the same capture data. */
       window.PO.Logger && window.PO.Logger.error("job.submit_failed", {
         component: "job-controller",
         correlationId: correlationId,
@@ -243,7 +377,6 @@ window.PO.JobController = (function () {
       throw e;
     } finally {
       delete _submitting[idempotencyKey];
-      window.PO.CaptureUtils.releaseCapture(capture);
     }
   }
 

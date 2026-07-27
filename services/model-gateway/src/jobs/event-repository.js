@@ -13,14 +13,14 @@ import logger from "../utils/logger.js";
  * recordEvent(jobId, type, payload) → sequence number
  * ═══════════════════════════════════════════════════════════════════ */
 
-export function recordEvent(jobId, type, payload) {
+export function recordEvent(jobId, type, payload, traceId) {
   const db = getDb();
   const payloadJson = payload ? JSON.stringify(payload) : null;
 
   const result = db.prepare(`
-    INSERT INTO job_events (job_id, type, payload_json)
-    VALUES (?, ?, ?)
-  `).run(jobId, type, payloadJson);
+    INSERT INTO job_events (job_id, type, payload_json, trace_id)
+    VALUES (?, ?, ?, ?)
+  `).run(jobId, type, payloadJson, traceId || "");
 
   return result.lastInsertRowid;
 }

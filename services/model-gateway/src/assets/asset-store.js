@@ -52,7 +52,7 @@ export function storeAsset(opts) {
         component: "asset-store",
         data: { sha256: opts.sha256.substring(0, 12), existingId: existing.id },
       });
-      return existing;
+      return Object.assign({}, existing, { reused: true });
     }
   }
 
@@ -109,8 +109,8 @@ export function storeAsset(opts) {
 
   /* Insert into database */
   db.prepare(`
-    INSERT INTO assets (id, client_id, kind, path, mime, width, height, sha256, size_bytes, expires_at, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO assets (id, client_id, kind, path, mime, width, height, sha256, size_bytes, expires_at, created_at, trace_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     opts.clientId || "default",
@@ -122,15 +122,17 @@ export function storeAsset(opts) {
     sha256,
     sizeBytes,
     expiresAt,
-    now
+    now,
+    opts.traceId || ""
   );
 
   logger.info("asset.stored", {
     component: "asset-store",
-    data: { id, kind: opts.kind, sha256: sha256.substring(0, 12), sizeBytes },
+    traceId: opts.traceId,
+    data: { id, kind: opts.kind, sha256: sha256.substring(0, 12), sizeBytes, width: opts.width || null, height: opts.height || null },
   });
 
-  return { id, path: destPath, mime: opts.mime || "image/png", sha256, sizeBytes, width: opts.width, height: opts.height, expiresAt };
+  return { id, path: destPath, mime: opts.mime || "image/png", sha256, sizeBytes, width: opts.width, height: opts.height, traceId: opts.traceId || "", expiresAt };
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -167,6 +169,7 @@ export function getAsset(id) {
     height: row.height,
     sha256: row.sha256,
     sizeBytes: row.size_bytes,
+    traceId: row.trace_id,
     expiresAt: row.expires_at,
     createdAt: row.created_at,
   };

@@ -61,7 +61,7 @@ function _applyBinding(workflow, binding, inputs, parameters) {
     }
     case "number":
     case "integer": {
-      const val = _resolveValue(source, parameters, binding.default);
+        const val = _resolveValue(source, inputs, parameters, binding.default);
       if (val !== undefined && val !== null) {
         node.inputs[field] = type === "integer" ? Math.round(Number(val)) : Number(val);
       }
@@ -69,21 +69,21 @@ function _applyBinding(workflow, binding, inputs, parameters) {
     }
     case "string":
     case "text": {
-      const val = _resolveValue(source, parameters, binding.default);
+        const val = _resolveValue(source, inputs, parameters, binding.default);
       if (val !== undefined && val !== null) {
         node.inputs[field] = String(val);
       }
       break;
     }
     case "enum": {
-      const val = _resolveValue(source, parameters, binding.default);
+        const val = _resolveValue(source, inputs, parameters, binding.default);
       if (val !== undefined && val !== null) {
         node.inputs[field] = val; /* Enum values passed as-is */
       }
       break;
     }
     case "seed": {
-      const val = _resolveValue(source, parameters, binding.default);
+        const val = _resolveValue(source, inputs, parameters, binding.default);
       if (val !== undefined && val !== null) {
         const seed = Number(val);
         node.inputs[field] = seed === -1 ? Math.floor(Math.random() * 0x7FFFFFFF) : seed;
@@ -91,7 +91,7 @@ function _applyBinding(workflow, binding, inputs, parameters) {
       break;
     }
     case "boolean": {
-      const val = _resolveValue(source, parameters, binding.default);
+        const val = _resolveValue(source, inputs, parameters, binding.default);
       if (val !== undefined && val !== null) {
         node.inputs[field] = Boolean(val);
       }
@@ -110,9 +110,11 @@ function _applyBinding(workflow, binding, inputs, parameters) {
 }
 
 /* ── Resolve value from parameters by dot-path source ── */
-function _resolveValue(source, parameters, defaultValue) {
+function _resolveValue(source, inputs, parameters, defaultValue) {
   if (source === undefined || source === null) return defaultValue;
   if (typeof source === "number" || typeof source === "boolean") return source;
+
+  if (typeof source === "string" && inputs && inputs[source] !== undefined) return inputs[source];
 
   /* Dot-path lookup: "intensity" or "params.intensity" */
   if (typeof source === "string" && source.indexOf(".") !== -1) {

@@ -48,6 +48,15 @@ window.PO.ResultPanel = (function () {
     title.textContent = "任务完成 — " + (job.capabilityTitle || job.capabilityId);
     header.appendChild(title);
 
+    /* Correlation ID for cross-referencing with gateway logs */
+    if (job.correlationId) {
+      var corrSpan = document.createElement("span");
+      corrSpan.className = "po-result-correlation";
+      corrSpan.textContent = "trace: " + (job.correlationId.length > 12 ? job.correlationId.substring(0, 12) + "…" : job.correlationId);
+      corrSpan.title = job.correlationId;
+      _container.appendChild(corrSpan);
+    }
+
     _container.appendChild(header);
 
     /* ── Artifact list ── */

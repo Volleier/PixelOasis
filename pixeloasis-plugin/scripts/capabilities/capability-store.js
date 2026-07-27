@@ -344,6 +344,16 @@ window.PO.CapabilityStore = (function () {
     return _status;
   }
 
+  function clearCache() {
+    try { localStorage.removeItem(CACHE_KEY); } catch (_) {}
+    _capabilities = [];
+    _byId = {};
+    _revision = null;
+    _status = "idle";
+    _error = null;
+    _syncState();
+  }
+
   return {
     refreshCapabilities: refreshCapabilities,
     getById:             getById,
@@ -353,5 +363,6 @@ window.PO.CapabilityStore = (function () {
     getAvailability:     getAvailability,
     getCount:            getCount,
     getStatus:           getStatus,
+    clearCache:          clearCache,
   };
 })();

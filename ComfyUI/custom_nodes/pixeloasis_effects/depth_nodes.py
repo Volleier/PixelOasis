@@ -1,14 +1,34 @@
-"""
-PO_DepthEstimate — Depth estimation using Depth Anything V2 Small.
-PO_DepthSplitRGBA — Split RGBA layer into back/front by depth + subject mask.
-"""
+"""Depth Anything V2 Large inference and RGBA depth splitting."""
 
+from pathlib import Path
+
+import numpy as np
 import torch
 import torch.nn.functional as F
+from safetensors.torch import load_file
+from depth_anything_v2.dpt import DepthAnythingV2
+
+
+MODEL_FILENAME = "depth_anything_v2_vitl_fp16.safetensors"
+MODEL_DIR = Path(__file__).resolve().parents[3] / "models" / "depthanything"
+
+
+def _model_path():
+    configured = Path(__import__("os").environ.get("PO_DEPTH_ANYTHING_MODEL", ""))
+    if configured.is_file():
+        return configured
+    try:
+        import folder_paths
+        shared_path = Path(folder_paths.models_dir) / "depthanything" / MODEL_FILENAME
+        if shared_path.is_file():
+            return shared_path
+    except ImportError:
+        pass
+    return MODEL_DIR / MODEL_FILENAME
 
 
 class PO_DepthEstimate:
-    """Load Depth Anything V2 and estimate depth map from input image.
+    """Load Depth Anything V2 Large and estimate a normalized depth map.
 
     Inputs:
         IMAGE          — source image (B, H, W, 3)
@@ -22,6 +42,7 @@ class PO_DepthEstimate:
         return {
             "required": {
                 "image": ("IMAGE",),
+                "max_side": ("INT", {"default": 2048, "min": 512, "max": 4096, "step": 64}),
             }
         }
 
@@ -30,28 +51,59 @@ class PO_DepthEstimate:
     FUNCTION = "estimate"
     CATEGORY = "PixelOasis/Effects"
 
-    def estimate(self, image):
+    def __init__(self):
+        self.model = None
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    def _load_model(self):
+        if self.model is not None:
+            return self.model
+
+        checkpoint_path = _model_path()
+        if not checkpoint_path.is_file():
+            raise RuntimeError("Depth Anything V2 Large model is missing: " + str(checkpoint_path))
+
+        model = DepthAnythingV2(
+            encoder="vitl",
+            features=256,
+            out_channels=[256, 512, 1024, 1024],
+        )
+        state_dict = load_file(str(checkpoint_path), device="cpu")
+        missing, unexpected = model.load_state_dict(state_dict, strict=False)
+        if missing or unexpected:
+            raise RuntimeError(
+                "Depth Anything V2 Large checkpoint is incompatible "
+                "(missing=%d, unexpected=%d)" % (len(missing), len(unexpected))
+            )
+        self.model = model.eval().to(self.device)
+        return self.model
+
+    def estimate(self, image, max_side=2048):
         with torch.inference_mode():
-            batch, height, width, channels = image.shape
+            model = self._load_model()
+            depth_maps = []
+            for sample in image:
+                rgb_tensor = sample[..., :3].detach().float().cpu()
+                source_height, source_width = rgb_tensor.shape[:2]
+                scale = min(1.0, float(max_side) / max(source_width, source_height))
+                target_width = max(1, round(source_width * scale))
+                target_height = max(1, round(source_height * scale))
+                if (target_width, target_height) != (source_width, source_height):
+                    rgb_tensor = F.interpolate(
+                        rgb_tensor.permute(2, 0, 1).unsqueeze(0),
+                        size=(target_height, target_width),
+                        mode="bicubic",
+                        align_corners=False,
+                    ).squeeze(0).permute(1, 2, 0)
+                rgb = rgb_tensor.numpy()
+                bgr = np.ascontiguousarray(np.clip(rgb[..., ::-1] * 255.0, 0, 255).astype(np.uint8))
+                depth = model.infer_image(bgr, input_size=756)
+                depth = torch.from_numpy(depth).to(dtype=torch.float32)
+                depth = (depth - depth.amin()) / (depth.amax() - depth.amin() + 1e-6)
+                depth_maps.append(depth)
 
-            # Placeholder: generate synthetic depth gradient for testing
-            # Real implementation loads Depth Anything V2 model
-            y_coords = torch.linspace(0, 1, height, dtype=torch.float32)
-            x_coords = torch.linspace(0, 1, width, dtype=torch.float32)
-            gy, gx = torch.meshgrid(y_coords, x_coords, indexing="ij")
-
-            # Synthetic depth: center is closer, edges are farther
-            depth = 1.0 - torch.sqrt((gx - 0.5) ** 2 + (gy - 0.5) ** 2) * 1.5
-            depth = torch.clamp(depth, 0.0, 1.0)
-            depth = depth.unsqueeze(0).unsqueeze(-1)
-
-            # Foreground confidence: brighter in center
-            fg_mask = (depth < 0.7).float()
-            fg_mask = fg_mask.squeeze(-1)
-
-            # Match batch size
-            depth = depth.expand(batch, -1, -1, -1)
-            fg_mask = fg_mask.expand(batch, -1, -1)
+            depth = torch.stack(depth_maps, dim=0).unsqueeze(-1).to(image.device)
+            fg_mask = (depth[..., 0] < 0.5).to(dtype=torch.float32)
 
         return (depth, fg_mask)
 

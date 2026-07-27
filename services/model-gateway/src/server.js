@@ -133,6 +133,25 @@ try {
   });
 }
 
+/* ── Shutdown: flush log and close gracefully ── */
+async function shutdown(signal) {
+  console.log("\nGateway shutting down (" + signal + ")...");
+  try {
+    await logger.close();
+    console.log("  Log flushed.");
+  } catch (e) {
+    console.error("  Log close error:", e.message);
+  }
+  process.exit(0);
+}
+
+process.on("SIGINT", function () { shutdown("SIGINT"); });
+process.on("SIGTERM", function () { shutdown("SIGTERM"); });
+process.on("beforeExit", function () {
+  /* Synchronous fallback — close() is async but beforeExit allows it */
+  if (!logger._closed) logger.close();
+});
+
 server.listen(config.port, config.host, function () {
   console.log("PixelOasis model-gateway listening at http://" + config.host + ":" + config.port);
   console.log("  Provider: " + config.modelProvider);

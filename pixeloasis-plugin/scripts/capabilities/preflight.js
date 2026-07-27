@@ -187,7 +187,8 @@ window.PO.Preflight = (function () {
 
     /* ── 4b. Occlusion guidance — when auto + no subjectMask ── */
     var hasSubjectMask = capability.input && capability.input.subjectMask === "optional";
-    if (hasSubjectMask && !_checkRealSelection(docInfo)) {
+    var hasSubjectSelection = hasSubjectMask ? await _checkRealSelection(docInfo) : false;
+    if (hasSubjectMask && !hasSubjectSelection) {
       warnings.push({
         type: "occlusionInfo",
         message: "未检测到主体选区 — 将仅生成后景烟雾（occlusion=back）",
@@ -239,23 +240,23 @@ window.PO.Preflight = (function () {
       warnings: warnings,
       requireAdultConfirm: requireAdultConfirm,
       requireSubjectChoice: requireSubjectChoice,
+      hasSubjectSelection: hasSubjectSelection,
       requiresSelection: needsSelection,
       pointsRequired: pointsRequired,
     };
   }
 
   /* ── Check for real (non-full-canvas) selection ── */
-  function _checkRealSelection(docInfo) {
+  async function _checkRealSelection(docInfo) {
     try {
       var photoshop = window.require("photoshop");
       var doc = photoshop.app.activeDocument;
       if (!doc) return false;
 
-      /* Use the existing selection detection */
-      var selectionPromise = window.PO.getSelectionBounds();
-      /* getSelectionBounds is async but throws if no selection — we need sync check */
-      /* Fallback: check via the Photoshop API directly */
-      return true; /* Will be verified async in controller */
+      var selection = await window.PO.getSelectionBounds();
+      if (!selection || selection.width <= 0 || selection.height <= 0) return false;
+      return !(selection.left === 0 && selection.top === 0 &&
+        selection.width === docInfo.width && selection.height === docInfo.height);
     } catch (e) {
       return false;
     }

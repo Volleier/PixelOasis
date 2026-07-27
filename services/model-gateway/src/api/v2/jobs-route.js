@@ -8,91 +8,134 @@
  * GET    /v2/jobs/{id}/events   → SSE event stream
  */
 
-import { writeJson, v2BadRequest, v2NotFound, v2Conflict, v2Unprocessable, v2ServerError, v2QueueFull, v2DependencyMissing } from "../../utils/errors.js";
+import { writeJson, v2BadRequest, v2NotFound, v2Conflict, v2Unprocessable, v2ServerError, v2QueueFull, v2DependencyMissing, buildV2Error } from "../../utils/errors.js";
 import * as jobRepo from "../../jobs/job-repository.js";
 import * as eventRepo from "../../jobs/event-repository.js";
 import { isActive, isTerminal } from "../../jobs/state-machine.js";
 import { getAsset } from "../../assets/asset-store.js";
-import { getCapability } from "../../capabilities/registry-instance.js";
+import { getCapability, refreshCapabilityReadiness } from "../../capabilities/registry-instance.js";
 import config from "../../config.js";
+import { enqueue, cancelQueued } from "../../jobs/scheduler.js";
+import { getDb } from "../../persistence/database.js";
 import logger from "../../utils/logger.js";
+import { getAuditEvents, buildAuditSummary, writeAuditEvent } from "../../observability/audit-repository.js";
 
 const MAX_JOB_BODY_BYTES = () => (config.jobInputMaxMb || 300) * 1024 * 1024;
+
+/* ── Standardised job rejection: logs + responds in one call ── */
+function respondJobError(res, status, code, message, details, context) {
+  context = context || {};
+  const rejectionStage = context.rejectionStage || "unknown";
+  logger.info("job.create.rejected", {
+    component: "jobs-route",
+    traceId: context.traceId,
+    correlationId: context.correlationId,
+    data: {
+      status: status,
+      code: code,
+      rejectionStage: rejectionStage,
+      clientId: (context.clientId || "").substring(0, 8) + "...",
+      capabilityId: context.capabilityId || null,
+    },
+  });
+  const err = buildV2Error(code, message, details);
+  writeJson(res, status, { error: err });
+}
+
+/* ── Safe logger details: whitelist field paths, max 256 chars ── */
+const ALLOWED_DETAIL_FIELDS = [
+  "source.bounds", "source.document.width", "source.document.height",
+  "source.document.bitDepth", "source.assetId", "source.scope",
+  "capabilityId", "parameterName", "assetKind", "maskKind",
+];
+function safeDetails(raw) {
+  if (!raw || typeof raw !== "string") return raw;
+  return raw.substring(0, 256);
+}
 
 /* ═══════════════════════════════════════════════════════════════════
  * POST /v2/jobs — create job
  * ═══════════════════════════════════════════════════════════════════ */
 
 export async function handleCreateJob(req, res, params) {
+  const requestTrace = req._traceContext || null;
+  const traceId = requestTrace?.traceId || req.headers["x-trace-id"] || req.headers["x-correlation-id"] || ("tr_" + Date.now().toString(36) + "_gateway");
+  const clientId = req.headers["x-client-id"] || "default";
+  const ctx = { traceId: traceId, correlationId: requestTrace?.correlationId || traceId, clientId: clientId };
+  const startMs = Date.now();
+
   try {
+      await refreshCapabilityReadiness();
       const payload = await readJsonBody(req, MAX_JOB_BODY_BYTES());
+
+      ctx.correlationId = payload.correlationId || ctx.correlationId;
 
       /* Validate schemaVersion */
       if (payload.schemaVersion !== "2.0") {
-        v2BadRequest(res, "REQUEST_SCHEMA_INVALID", "schemaVersion must be 2.0");
+        respondJobError(res, 400, "REQUEST_SCHEMA_INVALID", "schemaVersion must be 2.0", null, { ...ctx, rejectionStage: "schema" });
         return;
       }
 
       /* Validate required fields */
       if (!payload.capabilityId) {
-        v2BadRequest(res, "REQUEST_SCHEMA_INVALID", "capabilityId is required");
+        respondJobError(res, 400, "REQUEST_SCHEMA_INVALID", "capabilityId is required", null, { ...ctx, rejectionStage: "schema" });
         return;
       }
 
+      ctx.capabilityId = payload.capabilityId;
       const capability = getCapability(payload.capabilityId);
       if (!capability || capability.enabled === false) {
-        v2NotFound(res, "CAPABILITY_NOT_FOUND", "Capability not found or disabled");
+        respondJobError(res, 404, "CAPABILITY_NOT_FOUND", "Capability not found or disabled", null, { ...ctx, rejectionStage: "capability" });
         return;
       }
 
-      const clientId = req.headers["x-client-id"] || "default";
       const requestError = validateRequestShape(payload, clientId);
       if (requestError) {
-        v2BadRequest(res, "REQUEST_SCHEMA_INVALID", requestError);
+        respondJobError(res, 400, "REQUEST_SCHEMA_INVALID", requestError, null, { ...ctx, rejectionStage: "schema" });
         return;
       }
       const activeJobs = jobRepo.getRecoverable(clientId);
       if (activeJobs.length >= (config.maxQueuedPerClient || 3)) {
-        v2QueueFull(res, "QUEUE_LIMIT_EXCEEDED", "Too many active jobs for this client");
+        respondJobError(res, 429, "QUEUE_LIMIT_EXCEEDED", "Too many active jobs for this client", null, { ...ctx, rejectionStage: "queue" });
         return;
       }
 
       if (!payload.source || !payload.source.assetId) {
-        v2BadRequest(res, "REQUEST_SCHEMA_INVALID", "source.assetId is required");
+        respondJobError(res, 400, "REQUEST_SCHEMA_INVALID", "source.assetId is required", null, { ...ctx, rejectionStage: "schema" });
         return;
       }
 
       /* Verify source asset exists */
       const sourceAsset = getAsset(payload.source.assetId);
       if (!sourceAsset) {
-        v2Unprocessable(res, "ASSET_NOT_FOUND", "Source asset not found or expired");
+        respondJobError(res, 422, "ASSET_NOT_FOUND", "Source asset not found or expired", null, { ...ctx, rejectionStage: "asset" });
         return;
       }
 
       if (sourceAsset.clientId !== clientId) {
-        v2Unprocessable(res, "ASSET_NOT_FOUND", "Source asset is not owned by this client");
+        respondJobError(res, 422, "ASSET_NOT_FOUND", "Source asset is not owned by this client", null, { ...ctx, rejectionStage: "asset-owner" });
         return;
       }
       if (sourceAsset.kind !== "source") {
-        v2Unprocessable(res, "ASSET_KIND_INVALID", "source.assetId must reference a source asset");
+        respondJobError(res, 422, "ASSET_KIND_INVALID", "source.assetId must reference a source asset", null, { ...ctx, rejectionStage: "asset-kind" });
         return;
       }
 
       const contractError = validateInputContract(payload, capability, clientId);
       if (contractError) {
-        v2Unprocessable(res, contractError.code, contractError.message);
+        respondJobError(res, 422, contractError.code, contractError.message, null, { ...ctx, rejectionStage: "contract" });
         return;
       }
 
       const parameterError = validateParameters(payload.parameters || {}, capability.parameterSchema || {});
       if (parameterError) {
-        v2BadRequest(res, "REQUEST_SCHEMA_INVALID", parameterError);
+        respondJobError(res, 400, "REQUEST_SCHEMA_INVALID", parameterError, null, { ...ctx, rejectionStage: "parameter" });
         return;
       }
 
       const availability = capability.availability || {};
       if (availability.state !== "ready" && availability.state !== "degraded") {
-        v2DependencyMissing(res, "CAPABILITY_NOT_READY", "Capability dependencies are not ready", availability.details || null);
+        respondJobError(res, 424, "CAPABILITY_NOT_READY", "Capability dependencies are not ready", safeDetails(availability.details), { ...ctx, rejectionStage: "availability" });
         return;
       }
 
@@ -111,20 +154,47 @@ export async function handleCreateJob(req, res, params) {
           });
           logger.info("job.idempotency_hit", {
             component: "jobs-route",
+            traceId: existing.traceId || traceId,
+            correlationId: existing.correlationId,
+            jobId: existing.id,
             data: { idempotencyKey: payload.idempotencyKey, jobId: existing.id },
           });
           return;
         }
       }
 
-      /* Create job */
+      /* Create job — log acceptance before writing response */
+      logger.info("job.create.accepted", {
+        component: "jobs-route",
+        traceId: traceId,
+        correlationId: ctx.correlationId,
+        data: {
+          capabilityId: payload.capabilityId,
+          correlationId: ctx.correlationId,
+          clientId: (clientId || "").substring(0, 8) + "...",
+          durationMs: Date.now() - startMs,
+        },
+      });
+
       const job = jobRepo.create({
         clientId,
         correlationId: payload.correlationId || ("gw-" + Date.now().toString(36)),
+        traceId,
         idempotencyKey: payload.idempotencyKey || null,
         capabilityId: payload.capabilityId,
         profile: (payload.options && payload.options.profile) || "quality_16gb",
         params: payload.parameters || null,
+        input: {
+          source: payload.source,
+          inputs: payload.inputs || {},
+          options: payload.options || {},
+        },
+      });
+
+      enqueue(job.id);
+      writeAuditEvent(job.id, traceId, "job.created", "info", {
+        capabilityId: payload.capabilityId,
+        profile: job.profile,
       });
 
       writeJson(res, 202, {
@@ -138,18 +208,21 @@ export async function handleCreateJob(req, res, params) {
 
       logger.info("job.created_v2", {
         component: "jobs-route",
+        traceId: traceId,
+        correlationId: job.correlationId,
+        jobId: job.id,
         data: { jobId: job.id, capabilityId: payload.capabilityId, idempotencyKey: payload.idempotencyKey },
       });
 
   } catch (e) {
       if (e.code === "INVALID_STATE_TRANSITION") {
-        v2Conflict(res, "INVALID_STATE_TRANSITION", e.message);
+        respondJobError(res, 409, "INVALID_STATE_TRANSITION", e.message, null, { ...ctx, rejectionStage: "state-transition" });
       } else if (e.code === "PAYLOAD_TOO_LARGE") {
-        v2BadRequest(res, "REQUEST_TOO_LARGE", "Job request exceeds configured limit");
+        respondJobError(res, 400, "REQUEST_TOO_LARGE", "Job request exceeds configured limit", null, { ...ctx, rejectionStage: "payload-size" });
       } else if (e.message && e.message.indexOf("JSON") !== -1) {
-        v2BadRequest(res, "REQUEST_SCHEMA_INVALID", "Invalid JSON body");
+        respondJobError(res, 400, "REQUEST_SCHEMA_INVALID", "Invalid JSON body", null, { ...ctx, rejectionStage: "json-parse" });
       } else {
-        v2ServerError(res, "JOB_CREATE_FAILED", e.message);
+        respondJobError(res, 500, "JOB_CREATE_FAILED", e.message, null, { ...ctx, rejectionStage: "catch" });
       }
   }
 }
@@ -291,6 +364,7 @@ export async function handleGetJob(req, res, routeParams) {
     profile: job.profile,
     progress: _estimateProgress(job),
     stages: job.stages,
+    artifacts: getJobArtifacts(job.id),
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
   });
@@ -339,7 +413,9 @@ export async function handleCancelJob(req, res, routeParams) {
     return;
   }
 
-  jobRepo.updateState(jobId, "canceled", { message: "Canceled by user" });
+  if (!cancelQueued(jobId)) {
+    jobRepo.updateState(jobId, "canceled", { message: "Canceled by user" });
+  }
   writeJson(res, 200, { jobId, state: "canceled" });
 
   logger.info("job.canceled_v2", { component: "jobs-route", data: { jobId } });
@@ -407,8 +483,22 @@ export async function handleJobEvents(req, res, routeParams, queryParams) {
     /* Check if job reached terminal state */
     const current = jobRepo.getById(jobId);
     if (current && isTerminal(current.state)) {
-      _sendSSE(res, "complete", { state: current.state });
+      const artifacts = getJobArtifacts(jobId);
+      _sendSSE(res, "complete", { state: current.state, artifacts: artifacts });
+
+      /* Send audit summary as a separate named event */
+      const auditSummary = buildAuditSummary(jobId, current.traceId || current.correlationId, current, artifacts);
+      _sendSSE(res, "audit_complete", auditSummary);
+
+      logger.info("sse.audit.sent", {
+        component: "jobs-route",
+        jobId: jobId,
+        traceId: current.traceId || current.correlationId,
+        data: { artifactCount: artifacts.length },
+      });
+
       clearInterval(interval);
+      clearInterval(heartbeat);
       res.end();
     }
   }, 1000);
@@ -425,6 +515,31 @@ export async function handleJobEvents(req, res, routeParams, queryParams) {
   });
 }
 
+function getJobArtifacts(jobId) {
+  return getDb().prepare(`
+    SELECT artifacts.id, artifacts.role, assets.mime, assets.sha256, assets.size_bytes,
+           artifacts.width, artifacts.height, artifacts.placement_json
+    FROM artifacts
+    JOIN assets ON assets.id = artifacts.asset_id
+    WHERE artifacts.job_id = ?
+    ORDER BY artifacts.created_at ASC
+  `).all(jobId).map(artifact => {
+    const placement = artifact.placement_json ? JSON.parse(artifact.placement_json) : {};
+    return {
+    id: artifact.id,
+    role: artifact.role,
+    mimeType: artifact.mime,
+    sha256: artifact.sha256,
+    sizeBytes: artifact.size_bytes,
+    width: artifact.width,
+    height: artifact.height,
+    downloadUrl: "/v2/artifacts/" + artifact.id,
+    placement: placement,
+    previewOnly: placement.previewOnly === true,
+  };
+  });
+}
+
 function isJobOwnedBy(req, job, queryParams) {
   const headerClientId = req.headers["x-client-id"];
   const queryClientId = queryParams && queryParams.get("clientId");
@@ -436,4 +551,74 @@ function _sendSSE(res, event, data, id) {
   if (id) res.write("id: " + id + "\n");
   res.write("event: " + event + "\n");
   res.write("data: " + JSON.stringify(data) + "\n\n");
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * GET /v2/jobs/{id}/audit — replay task audit timeline
+ * ═══════════════════════════════════════════════════════════════════ */
+
+export async function handleGetJobAudit(req, res, routeParams) {
+  const jobId = routeParams.id;
+  const job = jobRepo.getById(jobId);
+  if (!job || !isJobOwnedBy(req, job)) {
+    v2NotFound(res, "JOB_NOT_FOUND", "Job not found: " + jobId);
+    return;
+  }
+  const limit = parseInt(req.url && req.url.indexOf("limit=") !== -1 ? new URLSearchParams(req.url.split("?")[1]).get("limit") : "200", 10) || 200;
+  const events = getAuditEvents(jobId, Math.min(limit, 500));
+  writeJson(res, 200, {
+    jobId: jobId,
+    traceId: job.traceId || job.correlationId,
+    state: job.state,
+    events: events,
+  });
+
+  logger.info("job.audit.served", {
+    component: "jobs-route",
+    jobId: jobId,
+    traceId: job.traceId || job.correlationId,
+    correlationId: job.correlationId,
+    data: { eventCount: events.length },
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * POST /v2/jobs/{id}/client-events — plugin reports download/placement
+ * ═══════════════════════════════════════════════════════════════════ */
+
+export async function handleClientEvent(req, res, routeParams) {
+  const jobId = routeParams.id;
+  const job = jobRepo.getById(jobId);
+  if (!job || !isJobOwnedBy(req, job)) {
+    v2NotFound(res, "JOB_NOT_FOUND", "Job not found: " + jobId);
+    return;
+  }
+
+  const body = await readJsonBody(req, 16 * 1024);
+  const allowedEvents = [
+    "artifact.download.started", "artifact.download.completed",
+    "placement.started", "placement.completed", "placement.failed",
+    "placement.acknowledged",
+  ];
+
+  const event = body.event;
+  if (!event || !allowedEvents.includes(event)) {
+    v2BadRequest(res, "REQUEST_SCHEMA_INVALID", "Unknown or disallowed client event: " + (event || ""));
+    return;
+  }
+
+  const data = body.data || {};
+  /* Mark plugin-reported events clearly */
+  data.reportedBy = "plugin";
+
+  writeAuditEvent(jobId, job.traceId || job.correlationId, event, "info", data);
+
+  logger.info("client." + event, {
+    component: "jobs-route",
+    jobId: jobId,
+    traceId: job.traceId || job.correlationId,
+    data: data,
+  });
+
+  writeJson(res, 201, { acknowledged: true, event: event });
 }

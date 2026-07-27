@@ -61,6 +61,8 @@ try {
   assert(tableNames.indexOf("assets") !== -1, "assets table exists");
   assert(tableNames.indexOf("artifacts") !== -1, "artifacts table exists");
   assert(tableNames.indexOf("_migrations") !== -1, "_migrations tracking table exists");
+  const jobColumns = db.prepare("PRAGMA table_info(jobs)").all().map(column => column.name);
+  assert(jobColumns.indexOf("input_json") !== -1, "jobs input graph column exists");
   console.log("");
 
   /* ── 2. State machine ── */

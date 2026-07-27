@@ -24,13 +24,22 @@ window.PO.CaptureUtils = (function () {
       var doc = photoshop.app.activeDocument;
       if (!doc) return null;
 
+      /* Normalize all numeric fields to plain integers */
+      var width  = Math.round(window.PO.normalizeNumber(doc.width));
+      var height = Math.round(window.PO.normalizeNumber(doc.height));
+      var bitDepth = Math.round(window.PO.normalizeNumber(doc.bitsPerChannel || 8));
+      var resolution = Math.round(window.PO.normalizeNumber(doc.resolution || 72));
+
+      if (!(width >= 1) || !(height >= 1)) return null;
+
       return {
-        id:        String(doc.id),
-        width:     doc.width,
-        height:    doc.height,
-        mode:      String(doc.mode).replace(/ColorMode$/i, ""),
-        bitDepth:  doc.bitsPerChannel || 8,
-        resolution: doc.resolution || 72,
+        id:         String(doc.id),
+        name:       String(doc.name || "Untitled-" + doc.id),
+        width:      width,
+        height:     height,
+        mode:       String(doc.mode).replace(/ColorMode$/i, ""),
+        bitDepth:   bitDepth,
+        resolution: resolution,
       };
     } catch (e) {
       return null;
@@ -164,15 +173,31 @@ window.PO.CaptureUtils = (function () {
     return "cap_" + ts + "_" + rnd;
   }
 
+  /* ── Build source metadata for trace/upload ── */
+  function buildSourceMetadata(capture) {
+    if (!capture) return {};
+    var docInfo = capture.documentInfo || getDocumentInfo();
+    var bounds = capture.editBounds || capture.subjectBounds || capture.bounds;
+    var imagePng = capture.imagePngBase64 || capture.contextImagePngBase64;
+    return {
+      originalName: docInfo ? (docInfo.name + ".png") : "capture.png",
+      clientWidth: bounds ? bounds.width : (docInfo ? docInfo.width : 0),
+      clientHeight: bounds ? bounds.height : (docInfo ? docInfo.height : 0),
+      sourceScale: capture.sourceScale || 1,
+      scope: capture.scope || "document",
+    };
+  }
+
   return {
-    getDocumentInfo:     getDocumentInfo,
-    normalizeBounds:     normalizeBounds,
-    expandAndClampBounds: expandAndClampBounds,
-    chooseProxySize:     chooseProxySize,
-    needsConversion:     needsConversion,
-    isConversionSafe:    isConversionSafe,
-    releaseCapture:      releaseCapture,
-    getDefaultPolicy:    getDefaultPolicy,
-    generateSessionId:   generateSessionId,
+    getDocumentInfo:      getDocumentInfo,
+    normalizeBounds:      normalizeBounds,
+    expandAndClampBounds:  expandAndClampBounds,
+    chooseProxySize:      chooseProxySize,
+    needsConversion:      needsConversion,
+    isConversionSafe:     isConversionSafe,
+    releaseCapture:       releaseCapture,
+    getDefaultPolicy:     getDefaultPolicy,
+    generateSessionId:    generateSessionId,
+    buildSourceMetadata:  buildSourceMetadata,
   };
 })();

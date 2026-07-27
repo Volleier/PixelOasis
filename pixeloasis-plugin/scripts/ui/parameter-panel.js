@@ -22,6 +22,7 @@ window.PO.ParameterPanel = (function () {
   var _formResult = null;       /* { fragment, hasUnsupported } */
   var _subjectMode = "auto";
   var _adultConfirmed = false;
+  var _traceId = null;          /* persists across retries within one panel session */
 
   /* ═══════════════════════════════════════════════════════════════════
    * open({ capability, capture, preflight, draftValues })
@@ -33,6 +34,7 @@ window.PO.ParameterPanel = (function () {
     _currentCapture = opts.capture || null;
     _currentPreflight = opts.preflight || null;
     _adultConfirmed = false;
+    _traceId = window.PO.GatewayV2Client.createTraceId();
 
     if (!_currentCapability) return;
 
@@ -92,7 +94,7 @@ window.PO.ParameterPanel = (function () {
       } catch (e) { /* ignore */ }
     }
 
-    /* Release capture data */
+    /* Release capture ONLY if not consumed by a successful job submission */
     if (_currentCapture) {
       window.PO.CaptureUtils.releaseCapture(_currentCapture);
       _currentCapture = null;
@@ -102,6 +104,7 @@ window.PO.ParameterPanel = (function () {
     _currentPreflight = null;
     _formResult = null;
     _adultConfirmed = false;
+    _traceId = null;
 
     if (_overlay) {
       _overlay.style.display = "none";
@@ -167,45 +170,37 @@ window.PO.ParameterPanel = (function () {
     var scroll = document.createElement("div");
     scroll.className = "po-param-overlay__scroll";
 
-    /* ── Capture summary ── */
+    /* ── Inline status/error notice (always first in scroll) ── */
+    var notice = document.createElement("div");
+    notice.className = "po-param-overlay__notice";
+    notice.setAttribute("role", "status");
+    notice.setAttribute("aria-live", "polite");
+    notice.style.display = "none";
+    scroll.appendChild(notice);
+
+    /* ── Capture summary (one-line, no preview here) ── */
     if (capture) {
       var summary = document.createElement("div");
       summary.className = "po-param-summary";
 
-      var summaryTitle = document.createElement("div");
-      summaryTitle.className = "po-param-summary__title";
-      summaryTitle.textContent = "输入范围";
-      summary.appendChild(summaryTitle);
-
-      /* Preview thumbnail */
-      if (capture.preview) {
-        var thumb = document.createElement("img");
-        thumb.className = "po-param-thumb";
-        thumb.src = window.PO.toDataUrl(capture.preview, "image/jpeg");
-        thumb.alt = "捕获预览";
-        summary.appendChild(thumb);
-      }
-
-      /* Scope info */
       var scopeInfo = document.createElement("div");
       scopeInfo.className = "po-param-summary__info";
       var scopeLabel = capture.scope === "document" ? "整图" :
                        capture.scope === "selection" ? "选区" :
                        capture.scope === "subject" ? "主体" : capture.scope;
-      scopeInfo.textContent = scopeLabel;
+      scopeInfo.textContent = "输入：" + scopeLabel;
 
       var bounds = capture.editBounds || capture.subjectBounds || capture.bounds;
       if (bounds) {
-        scopeInfo.textContent += " — " + bounds.width + " × " + bounds.height + " px";
+        scopeInfo.textContent += " · " + bounds.width + " × " + bounds.height + " px";
       }
       if (capture.sourceScale && capture.sourceScale < 1) {
-        scopeInfo.textContent += "（已缩放至 " + Math.round(capture.sourceScale * 100) + "% 处理）";
+        scopeInfo.textContent += "（已缩放至 " + Math.round(capture.sourceScale * 100) + "%）";
       }
       if (capture.conversionApplied) {
-        scopeInfo.textContent += " — 色彩已转换";
+        scopeInfo.textContent += " · 色彩已转换";
       }
       summary.appendChild(scopeInfo);
-
       scroll.appendChild(summary);
     }
 
@@ -343,6 +338,26 @@ window.PO.ParameterPanel = (function () {
 
     scroll.appendChild(formSection);
 
+    /* ── Input preview (collapsed <details> AFTER form) ── */
+    if (capture && capture.preview) {
+      var previewDetails = document.createElement("details");
+      previewDetails.className = "po-param-preview";
+
+      var previewSummary = document.createElement("summary");
+      var bounds = capture.editBounds || capture.subjectBounds || capture.bounds;
+      previewSummary.textContent = "输入预览" + (bounds ? "（" + bounds.width + " × " + bounds.height + " px）" : "");
+      previewDetails.appendChild(previewSummary);
+
+      var previewThumb = document.createElement("img");
+      previewThumb.className = "po-param-preview__thumb";
+      previewThumb.src = window.PO.toDataUrl(capture.preview, "image/jpeg");
+      previewThumb.alt = "输入预览";
+      previewThumb.loading = "lazy";
+      previewDetails.appendChild(previewThumb);
+
+      scroll.appendChild(previewDetails);
+    }
+
     _overlay.appendChild(scroll);
 
     /* ── Bottom actions ── */
@@ -357,7 +372,7 @@ window.PO.ParameterPanel = (function () {
     actions.appendChild(cancelBtn);
 
     var submitBtn = document.createElement("button");
-    submitBtn.id = "param-submit-btn";
+    submitBtn.id = "po-v2-param-submit-btn";
     submitBtn.className = "po-button po-button--primary";
     submitBtn.type = "button";
     submitBtn.textContent = "开始生成";
@@ -374,10 +389,10 @@ window.PO.ParameterPanel = (function () {
       }
     });
 
-    /* ── Append to app root ── */
-    var appRoot = document.getElementById("app");
-    if (appRoot) {
-      appRoot.appendChild(_overlay);
+    /* ── Append to .po-root (positioned container) ── */
+    var rootEl = document.querySelector(".po-root") || document.getElementById("app");
+    if (rootEl) {
+      rootEl.appendChild(_overlay);
     }
 
     /* Update submit button state */
@@ -386,7 +401,7 @@ window.PO.ParameterPanel = (function () {
 
   /* ── Update submit button disabled state ── */
   function _updateSubmitButton() {
-    var btn = document.getElementById("param-submit-btn");
+    var btn = document.getElementById("po-v2-param-submit-btn");
     if (!btn) return;
 
     var disabled = false;
@@ -420,12 +435,14 @@ window.PO.ParameterPanel = (function () {
     var formEl = _overlay.querySelector(".po-param-overlay__form");
     if (!formEl) return;
 
+    _clearInlineNotice();
+
     var result = window.PO.ParameterForm.getValues(formEl);
 
     var points = _readPoints();
     if (_currentPreflight && _currentPreflight.pointsRequired === 2) {
       if (!points || points.length !== 2) {
-        window.PO.showTransientStatus && window.PO.showTransientStatus("请填写效果起点和终点");
+        _showInlineError("capture", "POINTS_REQUIRED", "请填写效果起点和终点", false);
         return;
       }
       result.values.points = points;
@@ -459,8 +476,7 @@ window.PO.ParameterPanel = (function () {
         var input = firstErrorEl.parentElement.querySelector("input, select, textarea");
         if (input) input.focus();
       }
-      window.PO.showTransientStatus &&
-        window.PO.showTransientStatus("请修正参数错误后再提交");
+      _showInlineError("createJob", "REQUEST_SCHEMA_INVALID", "请修正参数错误后再提交", false);
       return;
     }
 
@@ -471,16 +487,21 @@ window.PO.ParameterPanel = (function () {
       result.values
     );
 
-    /* Update button state */
-    var submitBtn = document.getElementById("param-submit-btn");
+    /* ── State machine begins ── */
+    var submitBtn = document.getElementById("po-v2-param-submit-btn");
+
+    /* State: validating */
+    _setInlineStatus("validating", "正在校验参数…");
     if (submitBtn) {
-      submitBtn.textContent = "提交中…";
+      submitBtn.textContent = "校验中…";
       submitBtn.disabled = true;
+      submitBtn.setAttribute("aria-busy", "true");
     }
 
-    window.PO.setStatus && window.PO.setStatus("正在提交任务…");
+    /* State: uploadingSource */
+    _setInlineStatus("uploadingSource", "正在上传源图…");
 
-    /* ── Submit via JobController ── */
+    /* Submit via JobController */
     try {
       var jobResult = await window.PO.JobController.createAndSubmit({
         capability: _currentCapability,
@@ -488,15 +509,16 @@ window.PO.ParameterPanel = (function () {
         values: result.values,
         preflight: _currentPreflight,
         subjectMode: _subjectMode,
+        traceId: _traceId,
       });
 
-      /* Success — close parameter panel, show progress */
+      /* State: queued — job created */
+      _setInlineStatus("queued", "任务已加入队列 — " + (jobResult.jobId || ""));
+
       if (submitBtn) {
         submitBtn.textContent = "任务已加入队列";
+        submitBtn.setAttribute("aria-busy", "false");
       }
-
-      window.PO.showTransientStatus &&
-        window.PO.showTransientStatus("任务已加入队列 — " + (jobResult.jobId || ""));
 
       window.PO.Logger && window.PO.Logger.info("parameter_panel.submitted", {
         component: "parameter-panel",
@@ -505,36 +527,98 @@ window.PO.ParameterPanel = (function () {
           jobId: jobResult.jobId,
           capabilityId: _currentCapability.id,
           mock: jobResult.mock || false,
+          idempotent: jobResult.idempotent || false,
         },
       });
 
-      /* JobController releases the uploaded capture. Close without a second release. */
-      _currentCapture = null; /* Prevent releaseCapture from firing on close */
-      close();
+      /* JobController consumed the capture — prevent double-release on close */
+      if (jobResult.captureConsumed) {
+        _currentCapture = null;
+      }
 
-      /* Show progress panel */
+      /* Show progress panel BEFORE closing to prevent visual gap */
       if (window.PO.ProgressPanel) {
         window.PO.ProgressPanel.show();
       }
 
+      close();
+
     } catch (err) {
-      /* Submission failed — keep panel open, show error */
+      /* State: failed — keep panel open, show inline error */
       if (submitBtn) {
         submitBtn.textContent = "开始生成";
         submitBtn.disabled = false;
+        submitBtn.setAttribute("aria-busy", "false");
         _updateSubmitButton();
       }
 
-      window.PO.showTransientStatus &&
-        window.PO.showTransientStatus(
-          "提交失败：" + (err.userMessage || err.message || "未知错误")
-        );
+      var normalized = window.PO.ApiErrors.normalizeApiError(err);
+      _showInlineError(normalized.stage || "createJob", normalized.code, normalized.userMessage, normalized.retryable);
 
       window.PO.Logger && window.PO.Logger.error("parameter_panel.submit_failed", {
         component: "parameter-panel",
         error: err,
-        data: { capabilityId: _currentCapability.id },
+        data: { capabilityId: _currentCapability.id, traceId: _traceId },
       });
+    }
+  }
+
+  /* ── Inline status (inside overlay scroll area) ── */
+  function _setInlineStatus(stage, message) {
+    var notice = _overlay && _overlay.querySelector(".po-param-overlay__notice");
+    if (!notice) return;
+    notice.className = "po-param-overlay__notice po-param-overlay__notice--" + (stage || "info");
+    notice.setAttribute("role", "status");
+    notice.setAttribute("aria-live", "polite");
+    notice.textContent = message || "";
+    notice.style.display = message ? "" : "none";
+  }
+
+  /* ── Inline error with retry/recapture/back actions ── */
+  function _showInlineError(stage, code, userMessage, retryable) {
+    var notice = _overlay && _overlay.querySelector(".po-param-overlay__notice");
+    if (!notice) return;
+    notice.className = "po-param-overlay__notice po-param-overlay__notice--error";
+    notice.setAttribute("role", "alert");
+    notice.innerHTML = "";
+
+    var msg = document.createElement("div");
+    msg.className = "po-param-overlay__notice-text";
+    msg.textContent = (userMessage || "提交失败") + (code ? " [" + code + "]" : "");
+    notice.appendChild(msg);
+
+    /* Retry button — only if capture still valid */
+    if (retryable && _currentCapture) {
+      var retryBtn = document.createElement("button");
+      retryBtn.className = "po-button po-button--primary po-param-overlay__retry-btn";
+      retryBtn.type = "button";
+      retryBtn.textContent = "重试";
+      retryBtn.addEventListener("click", function (e) { e.preventDefault(); _handleSubmit(); });
+      notice.appendChild(retryBtn);
+    }
+
+    /* Recapture button */
+    var recapBtn = document.createElement("button");
+    recapBtn.className = "po-button po-button--secondary";
+    recapBtn.type = "button";
+    recapBtn.textContent = "重新采集";
+    recapBtn.style.marginLeft = "8px";
+    recapBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      if (_currentCapture) { window.PO.CaptureUtils.releaseCapture(_currentCapture); _currentCapture = null; }
+      close();
+    });
+    notice.appendChild(recapBtn);
+
+    notice.style.display = "";
+  }
+
+  /* ── Clear inline notice ── */
+  function _clearInlineNotice() {
+    var notice = _overlay && _overlay.querySelector(".po-param-overlay__notice");
+    if (notice) {
+      notice.innerHTML = "";
+      notice.style.display = "none";
     }
   }
 

@@ -75,3 +75,8 @@ export function v2DependencyMissing(response, code, message, details) {
     error: { code: code || "MODEL_MISSING", message: message || "Dependency not ready", retryable: false, details: details || null },
   });
 }
+
+/* ── v2 error descriptor (callable before response is ended) ── */
+export function buildV2Error(code, message, details) {
+  return { code: code || "UNKNOWN", message: message || "", retryable: false, details: details || null };
+}

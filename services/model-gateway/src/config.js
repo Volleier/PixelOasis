@@ -57,8 +57,8 @@ export default {
     enabled: process.env.PO_LOG_ENABLED !== "0",
     level: loaded.model_gateway.log_level || "info",
     dir: (loaded.logging && loaded.logging.dir) || process.env.PO_LOG_DIR || path.resolve(PROJECT_ROOT, "logs"),
-    maxFileBytes: 5 * 1024 * 1024,
-    retainFiles: 10,
+    retainRuns: (loaded.logging && loaded.logging.retainRuns) || 14,
+    warnFileSizeMb: (loaded.logging && loaded.logging.warnFileSizeMb) || 256,
     logPromptText: process.env.PO_LOG_PROMPT_TEXT === "1",
   },
 
@@ -72,6 +72,7 @@ export default {
   /* ── ComfyUI root path (for debug/model checks) ──── */
   comfyuiRoot: loaded.comfyui.root || "",
   comfyuiModelsDir: loaded.comfyui.models_dir || "",
+  modelAssetsDir: path.resolve(PROJECT_ROOT, "models"),
 
   /* ── v2: Data & persistence ──────────────────────── */
   dataDir: process.env.PO_DATA_DIR || loaded.model_gateway.data_dir || "E:/PixelOasisData",

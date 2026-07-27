@@ -30,10 +30,13 @@ export async function computeAll(capabilities) {
   /* Probe once, apply to all */
   let gpuInfo = null;
   let nodeInfo = null;
+  const allRequiredNodes = Array.from(new Set(capabilities.flatMap(capability =>
+    (capability.variants || []).flatMap(variant => variant.requiredNodes || [])
+  )));
 
   try {
     gpuInfo = await probeGPU();
-    nodeInfo = await probeNodes([]); /* Get all available nodes */
+    nodeInfo = await probeNodes(allRequiredNodes);
   } catch (e) {
     logger.warn("readiness.probe_failed", {
       component: "capability-readiness",
@@ -75,10 +78,12 @@ export async function computeAll(capabilities) {
       const reqModels = preferred.requiredModels || [];
 
       if (reqNodes.length > 0) {
-        const nodeStatus = await probeNodes(reqNodes);
-        if (nodeStatus.missing.length > 0) {
+        const unavailableNodes = nodeInfo
+          ? reqNodes.filter(node => nodeInfo.missing.includes(node))
+          : reqNodes;
+        if (unavailableNodes.length > 0) {
           state = "missing_nodes";
-          missingNodes = nodeStatus.missing;
+          missingNodes = unavailableNodes;
         }
       }
 
@@ -91,9 +96,9 @@ export async function computeAll(capabilities) {
       }
 
       /* Check GPU for profile */
-      if (state === "ready" && gpuInfo && gpuInfo.vramFreeGb !== null) {
+      if (state === "ready" && gpuInfo && gpuInfo.vramTotalGb !== null) {
         const minVram = preferred.minVramGb || 13;
-        if (gpuInfo.vramFreeGb < minVram) {
+        if (gpuInfo.vramTotalGb < minVram) {
           state = "degraded";
           /* Try to find a lower-profile variant */
           const fallback = variants.find(v => v.profile === "balanced_16gb");

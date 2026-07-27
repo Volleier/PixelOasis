@@ -112,7 +112,6 @@ window.PO.buildTemplate = function () {
     "</div>",
     "</div>",
     "</aside>",
-    window.PO.buildParameterPage ? window.PO.buildParameterPage() : "",
     "</div>",
   ].join("");
 };

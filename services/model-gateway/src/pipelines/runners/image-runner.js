@@ -8,9 +8,9 @@ import sharp from "sharp";
 import logger from "../../utils/logger.js";
 
 export async function runImageStage(ctx, config) {
-  const { jobId, inputs, outputs } = ctx;
+  const { jobId, traceId, inputs, outputs } = ctx;
   const operation = config.operation;
-  logger.info("image_runner.executing", { component: "image-runner", data: { jobId, operation } });
+  logger.info("image_runner.executing", { component: "image-runner", traceId, jobId, data: { operation } });
 
   switch (operation) {
     case "resizeProxy": {

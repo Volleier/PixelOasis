@@ -44,6 +44,15 @@ window.PO.CapabilityController = (function () {
         return;
       }
 
+      if (capability.availability && capability.availability.state !== "ready" &&
+          capability.availability.state !== "degraded") {
+        try {
+          await window.PO.CapabilityStore.refreshCapabilities({ force: true });
+          capability = window.PO.CapabilityStore.getById(capabilityId) || capability;
+          if (window.PO.CapabilitySections) window.PO.CapabilitySections.renderAll();
+        } catch (_) { /* Preflight will surface the current readiness state. */ }
+      }
+
       window.PO.Logger && window.PO.Logger.info("controller.open_capability", {
         component: "capability-controller",
         data: {
@@ -176,7 +185,9 @@ window.PO.CapabilityController = (function () {
           });
         }
         /* Plain document capture */
-        return await window.PO.DocumentCapture.captureDocumentComposite(policy);
+        return await window.PO.DocumentCapture.captureDocumentComposite(policy, {
+          captureSubjectSelection: preflight.hasSubjectSelection === true,
+        });
 
       default:
         /* Fallback: document capture */

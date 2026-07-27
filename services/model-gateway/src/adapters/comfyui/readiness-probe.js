@@ -5,7 +5,7 @@
  */
 
 import { getSystemStats, getObjectInfo } from "./http-client.js";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import config from "../../config.js";
 import logger from "../../utils/logger.js";
@@ -46,17 +46,25 @@ export async function probeNodes(requiredNodes = []) {
 
 export function probeModels(requiredModels = []) {
   const comfyRoot = config.comfyuiRoot || "";
-  const modelsDir = config.comfyuiModelsDir || resolve(comfyRoot, "models");
+  const modelsDir = config.comfyuiModelsDir || config.modelAssetsDir || resolve(comfyRoot, "models");
 
   const missing = [];
   for (const model of requiredModels) {
     const modelPath = resolve(modelsDir, model.path || model.name || model);
-    if (!existsSync(modelPath)) {
+    if (!existsSync(modelPath) || (model.minSizeBytes && _fileSize(modelPath) < model.minSizeBytes)) {
       missing.push(model.name || model.id || model);
     }
   }
 
   return { total: requiredModels.length, found: requiredModels.length - missing.length, missing };
+}
+
+function _fileSize(filePath) {
+  try {
+    return statSync(filePath).size;
+  } catch (_) {
+    return 0;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -68,11 +76,12 @@ export async function probeGPU() {
     const stats = await getSystemStats();
     if (!stats || !stats.system) return null;
 
-    const gpu = stats.system.gpu || {};
+    const gpu = stats.system.gpu || (Array.isArray(stats.devices) ? stats.devices.find(device => device.type === "cuda") : null) || {};
+    const toGb = value => value ? Math.round((value > 1024 * 1024 ? value / (1024 ** 3) : value / 1024)) : null;
     return {
       name: gpu.name || "GPU",
-      vramTotalGb: gpu.vram_total ? Math.round(gpu.vram_total / 1024) : null,
-      vramFreeGb: gpu.vram_free ? Math.round(gpu.vram_free / 1024) : null,
+      vramTotalGb: toGb(gpu.vram_total),
+      vramFreeGb: toGb(gpu.vram_free),
     };
   } catch (e) {
     logger.warn("readiness.gpu_probe_failed", { component: "readiness-probe", error: e });

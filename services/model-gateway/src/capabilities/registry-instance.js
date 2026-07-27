@@ -7,13 +7,16 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadAll } from "./loader.js";
 import { validateAll } from "./validator.js";
-import { computeAll } from "./readiness.js";
+import { computeAll, invalidateCache } from "./readiness.js";
 import logger from "../utils/logger.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CAP_DIR = resolve(__dirname, "..", "..", "capabilities");
 
 let _registry = null; /* { capabilities, byId, revision, errors } */
+let _lastReadinessRefresh = 0;
+let _readinessRefreshPromise = null;
+const READINESS_REFRESH_TTL_MS = 5000;
 
 export async function initCapabilityRegistry(capDir) {
   if (_registry) return _registry;
@@ -55,6 +58,7 @@ export async function initCapabilityRegistry(capDir) {
     loadErrors: errors,
     validationErrors,
   };
+  _lastReadinessRefresh = Date.now();
 
   /* Index by id */
   for (const cap of enriched) {
@@ -103,4 +107,23 @@ export async function refreshRegistry() {
   return initCapabilityRegistry();
 }
 
-export default { initCapabilityRegistry, getCapabilityRegistry, getCapabilities, getCapability, refreshRegistry };
+export async function refreshCapabilityReadiness(force = false) {
+  if (!_registry) return initCapabilityRegistry();
+  if (!force && Date.now() - _lastReadinessRefresh < READINESS_REFRESH_TTL_MS) return _registry;
+  if (_readinessRefreshPromise) return _readinessRefreshPromise;
+
+  _readinessRefreshPromise = (async () => {
+    invalidateCache();
+    const refreshed = (await computeAll(_registry.capabilities)).map(normalizeCapabilityForApi);
+    _registry.capabilities = refreshed;
+    _registry.byId = {};
+    for (const capability of refreshed) _registry.byId[capability.id] = capability;
+    _lastReadinessRefresh = Date.now();
+    return _registry;
+  })().finally(() => {
+    _readinessRefreshPromise = null;
+  });
+  return _readinessRefreshPromise;
+}
+
+export default { initCapabilityRegistry, getCapabilityRegistry, getCapabilities, getCapability, refreshRegistry, refreshCapabilityReadiness };

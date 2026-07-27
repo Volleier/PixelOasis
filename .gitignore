@@ -5,10 +5,13 @@ pixeloasis-plugin/dist
 coverage
 *.log
 PixelOasis/
-docs/
 config.yaml
 tools/cache/
 logs/debug-workflows/
 logs/debug-images/
 logs/comfyui-audit/
 logs/
+models/
+PixelOasisData/
+__pycache__/
+*.pyc

@@ -8,7 +8,7 @@
  */
 
 import { writeJson, v2NotFound } from "../../utils/errors.js";
-import { getCapabilities, getCapability } from "../../capabilities/registry-instance.js";
+import { getCapabilities, getCapability, refreshCapabilityReadiness } from "../../capabilities/registry-instance.js";
 import logger from "../../utils/logger.js";
 
 /* ── Fixture: fallback if registry not loaded ── */
@@ -49,6 +49,7 @@ const _byId = {};
 
 /* ── GET /v2/capabilities ── */
 export async function handleCapabilities(req, res, params) {
+  await refreshCapabilityReadiness();
   /* The v2 registry is authoritative. Fixture data must never advertise
      executable capabilities when the registry failed to initialise. */
   const registryCaps = getCapabilities();
@@ -72,6 +73,7 @@ export async function handleCapabilities(req, res, params) {
 
 /* ── GET /v2/capabilities/{id} ── */
 export async function handleCapabilityById(req, res, routeParams) {
+  await refreshCapabilityReadiness();
   const id = routeParams.id;
 
   /* Try registry first */

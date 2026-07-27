@@ -89,7 +89,7 @@ export async function handleUpload(req, dataDir) {
     throw new Error("Unsupported asset kind");
   }
 
-  return { ...upload, kind, correlationId: fields.correlationId || "" };
+  return { ...upload, kind, correlationId: fields.correlationId || "", fields };
 }
 
 function detectMime(header) {

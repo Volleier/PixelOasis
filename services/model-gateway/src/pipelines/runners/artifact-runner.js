@@ -8,11 +8,11 @@ import { getDb } from "../../persistence/database.js";
 import logger from "../../utils/logger.js";
 
 export async function runArtifactRunner(ctx, config) {
-  const { jobId, outputs } = ctx;
+  const { jobId, traceId, outputs } = ctx;
   const roles = config.roles || ["result"];
   const db = getDb();
 
-  logger.info("artifact_runner.packaging", { component: "artifact-runner", data: { jobId, roles } });
+  logger.info("artifact_runner.packaging", { component: "artifact-runner", traceId, jobId, data: { roles } });
 
   const results = [];
   for (let i = 0; i < roles.length; i++) {
@@ -21,7 +21,7 @@ export async function runArtifactRunner(ctx, config) {
     const buf = outputs[bufKey];
 
     if (!buf) {
-      logger.warn("artifact_runner.missing_buffer", { component: "artifact-runner", data: { jobId, role } });
+      logger.warn("artifact_runner.missing_buffer", { component: "artifact-runner", traceId, jobId, data: { role } });
       continue;
     }
 
@@ -50,7 +50,7 @@ export async function runArtifactRunner(ctx, config) {
     results.push({ role, registered: true });
   }
 
-  logger.info("artifact_runner.complete", { component: "artifact-runner", data: { jobId, count: results.length } });
+  logger.info("artifact_runner.complete", { component: "artifact-runner", traceId, jobId, data: { count: results.length } });
 
   return { stage: "artifact", outputs: {}, results };
 }
