@@ -68,6 +68,37 @@ window.PO.toggleSettings = function () {
 
 window.PO.initSettings = function () {
   var els = window.PO.elements;
+  var GATEWAY_PRESETS = {
+    local: "http://127.0.0.1:8787",
+    online: "http://127.0.0.1:8790",
+  };
+
+  function saveGatewaySettings() {
+    try {
+      localStorage.setItem("po.settings.v2", JSON.stringify({
+        gatewayMode: window.PO.state.gateway.mode,
+        gatewayUrl: window.PO.state.gatewayUrl,
+      }));
+    } catch (_) {}
+  }
+
+  function refreshGateway() {
+    window.PO.state.gateway.health = "unknown";
+    if (window.PO.CapabilityStore) {
+      window.PO.CapabilityStore.refreshCapabilities({ force: true }).then(function () {
+        if (window.PO.CapabilitySections) window.PO.CapabilitySections.renderAll();
+      }).catch(function () {});
+    }
+    window.PO.GatewayV2Client.getHealth("full").then(function (response) {
+      var data = response && response.data;
+      var healthy = !!(response && response.ok && data && data.status === "ok");
+      window.PO.state.gateway.health = healthy ? "online" : "offline";
+      if (window.PO.CapabilitySections) {
+        var backend = data && data.mode === "online" ? "在线 GPT Image" : "本地 ComfyUI";
+        window.PO.CapabilitySections.updateEnvStatus(healthy ? backend + " 已连接" : backend + " 未连接");
+      }
+    }).catch(function () { window.PO.state.gateway.health = "offline"; });
+  }
 
   if (window.PO.state && window.PO.state._settingsInitialized) return;
   if (window.PO.state) window.PO.state._settingsInitialized = true;
@@ -81,6 +112,21 @@ window.PO.initSettings = function () {
     }
   });
 
+  if (els.gatewayModeSelect) {
+    els.gatewayModeSelect.value = window.PO.state.gateway.mode || "local";
+    els.gatewayModeSelect.addEventListener("change", function () {
+      var mode = els.gatewayModeSelect.value;
+      window.PO.state.gateway.mode = mode;
+      if (GATEWAY_PRESETS[mode]) {
+        window.PO.state.gatewayUrl = GATEWAY_PRESETS[mode];
+        if (els.gatewayUrlInput) els.gatewayUrlInput.value = GATEWAY_PRESETS[mode];
+      }
+      saveGatewaySettings();
+      window.PO.showTransientStatus(mode === "online" ? "已切换到在线 GPT Image" : "已切换运算后端");
+      refreshGateway();
+    });
+  }
+
   /* Gateway URL — save on change */
   if (els.gatewayUrlInput) {
     els.gatewayUrlInput.value = window.PO.state.gatewayUrl || "http://127.0.0.1:8787";
@@ -89,9 +135,11 @@ window.PO.initSettings = function () {
       var oldUrl = window.PO.state.gatewayUrl;
       if (val) {
         window.PO.state.gatewayUrl = val;
-        try {
-          localStorage.setItem("po.settings.v2", JSON.stringify({ gatewayUrl: val }));
-        } catch (_) {}
+        if (window.PO.state.gateway.mode !== "custom" && val !== GATEWAY_PRESETS[window.PO.state.gateway.mode]) {
+          window.PO.state.gateway.mode = "custom";
+          if (els.gatewayModeSelect) els.gatewayModeSelect.value = "custom";
+        }
+        saveGatewaySettings();
         window.PO.Logger.info("settings.gateway_url_changed", {
           component: "settings",
           data: { oldUrl: oldUrl, newUrl: val },

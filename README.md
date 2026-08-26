@@ -6,6 +6,7 @@ Photoshop UXP plugin with a local Node.js model gateway for ComfyUI workflows.
 
 - `pixeloasis-plugin/` — Photoshop UXP plugin source and its distributable build.
 - `services/model-gateway/` — local API gateway, capability definitions, workflows, and tests.
+- `services/model-gateway-online/` — GPT Image online gateway with the same plugin contract.
 - `ComfyUI/custom_nodes/pixeloasis_effects/` — project-owned custom nodes to install into ComfyUI.
 - `tools/` — environment verification, deployment, gateway startup, and model utilities.
 - `docs/` — architecture, project overview, and technical designs.

@@ -4,6 +4,12 @@
   "private": true,
   "description": "PixelOasis — Photoshop UXP plugin with ComfyUI AI generation",
   "type": "module",
+  "scripts": {
+    "start:local": "node tools/start-gateway.mjs",
+    "start:online": "node tools/start-online-gateway.mjs",
+    "test:online": "npm test --prefix services/model-gateway-online",
+    "build:plugin": "npm run build:check --prefix pixeloasis-plugin"
+  },
   "dependencies": {
     "yaml": "^2.7.0"
   }

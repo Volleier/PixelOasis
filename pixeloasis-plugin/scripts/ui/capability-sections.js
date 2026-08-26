@@ -526,9 +526,22 @@ window.PO.CapabilitySections = (function () {
 
 
 
-    /* Gateway URL */
+    /* Gateway backend */
     var gwGroup = document.createElement("div");
     gwGroup.className = "po-setting-group";
+    var modeLabel = document.createElement("label");
+    modeLabel.className = "po-setting-row__label";
+    modeLabel.setAttribute("for", "gateway-mode-select");
+    modeLabel.textContent = "运算后端";
+    var modeSelect = document.createElement("select");
+    modeSelect.id = "gateway-mode-select";
+    modeSelect.className = "po-settings-url-input";
+    [["local", "本地 ComfyUI"], ["online", "在线 GPT Image"], ["custom", "自定义网关"]].forEach(function (item) {
+      var option = document.createElement("option");
+      option.value = item[0];
+      option.textContent = item[1];
+      modeSelect.appendChild(option);
+    });
     var gwLabel = document.createElement("label");
     gwLabel.className = "po-setting-row__label";
     gwLabel.setAttribute("for", "gateway-url-input");
@@ -538,6 +551,8 @@ window.PO.CapabilitySections = (function () {
     gwInput.className = "po-settings-url-input";
     gwInput.type = "text";
     gwInput.placeholder = "http://127.0.0.1:8787";
+    gwGroup.appendChild(modeLabel);
+    gwGroup.appendChild(modeSelect);
     gwGroup.appendChild(gwLabel);
     gwGroup.appendChild(gwInput);
     drawerBody.appendChild(gwGroup);
@@ -636,6 +651,7 @@ window.PO.CapabilitySections = (function () {
     els.settingsOverlay = settingsOverlay;
     els.settingsDrawer = settingsDrawer;
     els.gatewayUrlInput = gwInput;
+    els.gatewayModeSelect = modeSelect;
     els.statusNode = statusNode;
 
     /* Update status node reference for v1 status functions */

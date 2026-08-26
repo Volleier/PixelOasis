@@ -7,6 +7,7 @@ window.PO = window.PO || {};
 window.PO.state = {
   /* ── v2: gateway ── */
   gateway: {
+    mode: "local",        /* local | online | custom */
     baseUrl: "http://127.0.0.1:8787",
     health: "unknown",   /* unknown | online | offline */
     apiVersion: null,

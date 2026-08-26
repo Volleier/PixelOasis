@@ -77,6 +77,11 @@
       if (savedUrl) {
         var urlData = JSON.parse(savedUrl);
         var url = (urlData && urlData.gatewayUrl) || urlData;
+        var mode = urlData && urlData.gatewayMode;
+        if (mode === "local" || mode === "online" || mode === "custom") {
+          window.PO.state.gateway.mode = mode;
+          if (els && els.gatewayModeSelect) els.gatewayModeSelect.value = mode;
+        }
         if (typeof url === "string" && url.length > 0) {
           window.PO.state.gateway.baseUrl = url;
           if (els && els.gatewayUrlInput) {
@@ -163,16 +168,17 @@
     if (window.PO.GatewayV2Client && window.PO.GatewayV2Client.getHealth) {
       window.PO.GatewayV2Client.getHealth("full").then(function (response) {
         var healthy = !!(response && response.ok && response.data && response.data.status === "ok");
+        var backendName = response && response.data && response.data.mode === "online" ? "在线 GPT Image" : "本地 ComfyUI";
         window.PO.state.gateway.health = healthy ? "online" : "offline";
 
         if (window.PO.CapabilitySections && window.PO.CapabilitySections.updateEnvStatus) {
           window.PO.CapabilitySections.updateEnvStatus(
-            healthy ? "网关已连接" : "网关离线 — 使用本地缓存"
+            healthy ? backendName + " 已连接" : backendName + " 离线 — 使用本地缓存"
           );
         }
 
         if (healthy) {
-          window.PO.setStatus && window.PO.setStatus("网关就绪");
+          window.PO.setStatus && window.PO.setStatus(backendName + " 就绪");
           /* Try to refresh capabilities from live gateway */
           if (window.PO.CapabilityStore) {
             window.PO.CapabilityStore.refreshCapabilities({ force: true }).then(function () {
