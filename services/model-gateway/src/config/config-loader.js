@@ -2,7 +2,7 @@
  *
  * ImplList §1.3 — Gateway config loader.
  *
- * Priority: env var > config.yaml > built-in defaults.
+ * Priority: env var > config.local.yaml > config.yaml > built-in defaults.
  * Locates the project root by walking up from this module's location.
  */
 
@@ -131,10 +131,13 @@ export function loadConfig() {
   /* 1. Start from defaults */
   const config = JSON.parse(JSON.stringify(DEFAULTS));
 
-  /* 2. Layer on config.yaml (middle priority) */
-  const configPath = path.join(PROJECT_ROOT, "config.yaml");
+  /* 2. Layer on local config (middle priority). config.yaml remains a
+   * backwards-compatible fallback for existing installations. */
+  const configPaths = ["config.local.yaml", "config.yaml"]
+    .map(filename => path.join(PROJECT_ROOT, filename));
+  const configPath = configPaths.find(candidate => fs.existsSync(candidate));
 
-  if (fs.existsSync(configPath)) {
+  if (configPath) {
     try {
       const raw = fs.readFileSync(configPath, "utf-8");
       const parsed = parseYaml(raw);
@@ -146,7 +149,7 @@ export function loadConfig() {
       warnings.push("Failed to parse config.yaml: " + err.message);
     }
   } else {
-    warnings.push("config.yaml not found at " + configPath + " — using defaults");
+    warnings.push("No config.local.yaml or config.yaml found at project root — using defaults");
   }
 
   /* 3. Layer on env vars (highest priority) */

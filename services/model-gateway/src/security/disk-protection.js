@@ -13,7 +13,7 @@ const WARN_THRESHOLD_GB = 20;
 const REJECT_THRESHOLD_GB = 5;
 
 export function checkDiskSpace() {
-  const dataDir = config.dataDir || "E:/PixelOasisData";
+  const dataDir = config.dataDir;
   if (!existsSync(dataDir)) return { ok: true, freeGb: 100 };
 
   try {

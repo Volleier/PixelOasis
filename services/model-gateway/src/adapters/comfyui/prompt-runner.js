@@ -269,7 +269,7 @@ async function _monitorExecution(promptId, clientId, timeoutMs, options, nodeMap
 /* ── Save sanitized debug copy ── */
 function _saveDebugCopy(jobId, workflow) {
   try {
-    const debugDir = resolve(config.dataDir || "E:/PixelOasisData", "debug", "jobs", jobId);
+    const debugDir = resolve(config.dataDir, "debug", "jobs", jobId);
     if (!existsSync(debugDir)) mkdirSync(debugDir, { recursive: true });
     /* Sanitize: remove image data references */
     const clean = JSON.parse(JSON.stringify(workflow));

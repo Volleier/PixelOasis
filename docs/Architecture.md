@@ -8,9 +8,11 @@
 
 ```text
 PixelOasis/
-├── config.yaml                          ← 项目统一配置（ComfyUI、网关、模型、部署）
+├── config.example.yaml                  ← 可提交的本地配置模板
+├── config.local.yaml                    ← 本地配置（忽略）
 ├── package.json                         ← 根 package（pixeloasis，依赖 yaml）
 ├── README.md
+├── .pixeloasis/                         ← 默认运行数据（忽略）
 │
 ├── pixeloasis-plugin/                   ← Photoshop UXP 插件
 │   ├── manifest.json                    ← 插件清单（v5 for UDT）

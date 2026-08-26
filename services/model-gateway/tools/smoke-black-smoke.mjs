@@ -11,6 +11,7 @@ import { getCapability } from "../src/capabilities/registry-instance.js";
 import { storeAsset } from "../src/assets/asset-store.js";
 import * as jobRepo from "../src/jobs/job-repository.js";
 import { enqueue } from "../src/jobs/scheduler.js";
+import config from "../src/config.js";
 import { writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -75,9 +76,10 @@ try {
   console.log("[3] Test Asset");
   const pngHeader = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   const fakeSource = Buffer.concat([pngHeader, Buffer.alloc(500, 128)]);
-  const testPath = resolve("E:/PixelOasisData", "tmp", "smoke-test-source.png");
-  if (!existsSync(resolve("E:/PixelOasisData", "tmp"))) {
-    mkdirSync(resolve("E:/PixelOasisData", "tmp"), { recursive: true });
+  const tempDir = resolve(config.dataDir, "tmp");
+  const testPath = resolve(tempDir, "smoke-test-source.png");
+  if (!existsSync(tempDir)) {
+    mkdirSync(tempDir, { recursive: true });
   }
   writeFileSync(testPath, fakeSource);
 

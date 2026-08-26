@@ -1,0 +1,30 @@
+# Copy this file to config.local.yaml and set the paths for your machine.
+# Environment variables override these values (see docs/README.md).
+
+photoshop:
+  plugin_path: "C:/Program Files/Adobe/Adobe Photoshop 2026/Plug-ins"
+  min_major_version: 2026
+  min_host_version: "27.0.0"
+
+comfyui:
+  root: "C:/path/to/ComfyUI"
+  url: "http://127.0.0.1:8188"
+  models_dir: "C:/path/to/ComfyUI/models"
+
+model_gateway:
+  host: "127.0.0.1"
+  port: 8787
+  provider: "comfyui"
+  data_dir: ""
+  log_level: "info"
+
+models:
+  mirrors: ["modelscope", "huggingface-mirror", "huggingface", "manual"]
+  allow_large_models: true
+  verify_hash: true
+  cache_dir: ""
+
+pixel_oasis:
+  debug_workflows: true
+  keep_intermediate_images: false
+  default_result_layer_group: "PixelOasis"

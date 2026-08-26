@@ -1,11 +1,12 @@
-node_modules
-pixeloasis-plugin/dist
+node_modules/
+pixeloasis-plugin/dist/
 .turbo
 .DS_Store
 coverage
 *.log
 PixelOasis/
 config.yaml
+config.local.yaml
 tools/cache/
 logs/debug-workflows/
 logs/debug-images/
@@ -13,5 +14,6 @@ logs/comfyui-audit/
 logs/
 models/
 PixelOasisData/
+.pixeloasis/
 __pycache__/
 *.pyc

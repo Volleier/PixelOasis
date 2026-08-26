@@ -2,7 +2,7 @@
  *
  * ImplList §1.4 — Refactored to load from config.yaml via config-loader.
  *
- * Priority: env var > config.yaml > built-in defaults.
+ * Priority: env var > config.local.yaml > config.yaml > built-in defaults.
  * Environment variables:
  *   PO_HOST            — gateway listen host
  *   PO_PORT            — gateway listen port
@@ -21,6 +21,7 @@ import { loadConfig } from "./config/config-loader.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..", "..");
+const DEFAULT_DATA_DIR = path.resolve(PROJECT_ROOT, ".pixeloasis", "data");
 
 const { config: loaded, warnings } = loadConfig();
 
@@ -75,9 +76,9 @@ export default {
   modelAssetsDir: path.resolve(PROJECT_ROOT, "models"),
 
   /* ── v2: Data & persistence ──────────────────────── */
-  dataDir: process.env.PO_DATA_DIR || loaded.model_gateway.data_dir || "E:/PixelOasisData",
+  dataDir: process.env.PO_DATA_DIR || loaded.model_gateway.data_dir || DEFAULT_DATA_DIR,
   sqlitePath: process.env.PO_SQLITE_PATH || loaded.model_gateway.sqlite_path || "",
-  sqliteDir: "E:/PixelOasisData",
+  sqliteDir: process.env.PO_DATA_DIR || loaded.model_gateway.data_dir || DEFAULT_DATA_DIR,
   gpuConcurrency: loaded.model_gateway.gpu_concurrency || 1,
   cpuConcurrency: loaded.model_gateway.cpu_concurrency || 2,
   maxQueuedPerClient: loaded.model_gateway.max_queued_per_client || 3,

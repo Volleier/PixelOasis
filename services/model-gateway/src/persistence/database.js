@@ -19,7 +19,7 @@ let _db = null;
 export function getDb() {
   if (_db) return _db;
 
-  const dataDir = config.dataDir || config.sqliteDir || "E:/PixelOasisData";
+  const dataDir = config.dataDir || config.sqliteDir;
   if (!existsSync(dataDir)) {
     mkdirSync(dataDir, { recursive: true });
   }

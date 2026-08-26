@@ -43,7 +43,7 @@ console.log("\n=== Gateway Stage 2 — V2 API Tests (port " + testPort + ") ===\
 
 /* Import and configure server */
 process.env.PO_PORT = String(testPort);
-process.env.PO_DATA_DIR = resolve(__dirname, "..", "..", "..", "PixelOasisData");
+process.env.PO_DATA_DIR = resolve(__dirname, "..", "..", "..", ".pixeloasis", "test-v2-api");
 
 /* Dynamic import of server (it starts listening immediately) */
 const serverModule = await import("../src/server.js");

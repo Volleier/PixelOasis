@@ -23,7 +23,7 @@ const ARTIFACT_TTL_HOURS = 168; /* 7 days */
  * ═══════════════════════════════════════════════════════════════════ */
 
 function getAssetDir(id) {
-  const dataDir = config.dataDir || "E:/PixelOasisData";
+  const dataDir = config.dataDir;
   const prefix = id.substring(0, 2).replace(/[^A-Za-z0-9]/g, "a");
   return resolve(dataDir, "assets", prefix);
 }

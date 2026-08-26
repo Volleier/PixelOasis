@@ -35,11 +35,12 @@ services/model-gateway/          ← 本地 Node.js 模型网关
   models/                        ← 模型清单（models.manifest.yaml）
   workflows/comfyui/             ← ComfyUI API workflow 与 .meta.json 元数据
 
+ComfyUI/custom_nodes/            ← 项目自定义 ComfyUI 节点
 tools/                           ← 部署、下载、校验、启动脚本
-PixelOasis/                      ← 单文件直接部署版输出（manifest v6）
 docs/                            ← 项目文档
-logs/                            ← 网关运行时日志
-config.yaml                      ← 项目统一配置文件
+config.example.yaml              ← 可提交的本地配置模板
+config.local.yaml                ← 本地配置（忽略）
+.pixeloasis/data/                ← 默认网关运行数据（忽略）
 ```
 
 ---

@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0.."
 
 set LOCAL_CONFIG=%cd%\config.local.yaml
-set TEMPLATE_CONFIG=%cd%\config.yaml
+set TEMPLATE_CONFIG=%cd%\config.example.yaml
 set PLUGIN_DIR=%cd%\PixelOasis
 
 echo ========================================
@@ -18,7 +18,7 @@ if exist "%LOCAL_CONFIG%" (
     echo [Config] Using config.local.yaml
 ) else if exist "%TEMPLATE_CONFIG%" (
     echo [Config] No config.local.yaml found.
-    echo   Copying config.yaml to config.local.yaml for you...
+    echo   Copying config.example.yaml to config.local.yaml for you...
     copy "%TEMPLATE_CONFIG%" "%LOCAL_CONFIG%" >nul
     if exist "%LOCAL_CONFIG%" (
         set "CONFIG_FILE=%LOCAL_CONFIG%"
@@ -34,7 +34,7 @@ if exist "%LOCAL_CONFIG%" (
         exit /b 1
     )
 ) else (
-    echo ERROR: No config file found ^(config.yaml or config.local.yaml^)
+    echo ERROR: No config file found ^(config.example.yaml or config.local.yaml^)
     pause
     exit /b 1
 )

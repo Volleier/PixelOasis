@@ -13,6 +13,7 @@ import { transition, isTerminal, isActive, STATES } from "../src/jobs/state-mach
 import * as jobRepo from "../src/jobs/job-repository.js";
 import * as eventRepo from "../src/jobs/event-repository.js";
 import * as assetStore from "../src/assets/asset-store.js";
+import config from "../src/config.js";
 import { existsSync, writeFileSync, unlinkSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -169,7 +170,7 @@ try {
 
   /* ── 5. Assets ── */
   console.log("[5] Assets");
-  const tempDir = resolve("E:/PixelOasisData/assets");
+  const tempDir = resolve(config.dataDir, "assets");
   if (!existsSync(tempDir)) mkdirSync(tempDir, { recursive: true });
 
   const testFilePath = resolve(tempDir, "test_asset_" + Date.now() + ".png");
