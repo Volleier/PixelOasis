@@ -1,81 +1,40 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import config from "./config.js";
 
-const assets = new Map();
-const jobs = new Map();
-const artifacts = new Map();
 const listeners = new Map();
-
 for (const subdir of ["assets", "incoming", "artifacts"]) mkdirSync(resolve(config.dataDir, subdir), { recursive: true });
+const database = new DatabaseSync(resolve(config.dataDir, "online-gateway.sqlite"));
+database.exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;");
+database.exec(`CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, client_id TEXT NOT NULL, kind TEXT NOT NULL, path TEXT NOT NULL, mime TEXT NOT NULL, filename TEXT, width INTEGER, height INTEGER, size_bytes INTEGER NOT NULL, sha256 TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, client_id TEXT NOT NULL, correlation_id TEXT, trace_id TEXT, idempotency_key TEXT, capability_id TEXT NOT NULL, payload_json TEXT NOT NULL, state TEXT NOT NULL, progress INTEGER NOT NULL, error_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_online_jobs_idempotency ON jobs(client_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_online_jobs_client ON jobs(client_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS job_stages (id INTEGER PRIMARY KEY AUTOINCREMENT, job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE, name TEXT NOT NULL, state TEXT NOT NULL, progress INTEGER NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS job_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE, type TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE, client_id TEXT NOT NULL, role TEXT NOT NULL, path TEXT NOT NULL, mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, sha256 TEXT NOT NULL, width INTEGER, height INTEGER, placement_json TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_online_artifacts_job ON artifacts(job_id);
+CREATE TABLE IF NOT EXISTS audits (id INTEGER PRIMARY KEY AUTOINCREMENT, job_id TEXT, trace_id TEXT, event TEXT NOT NULL, duration_ms INTEGER, request_bytes INTEGER, response_bytes INTEGER, model TEXT, upstream_status INTEGER, details_json TEXT, created_at TEXT NOT NULL);`);
 
 export function id(prefix) { return prefix + "_" + randomUUID().replaceAll("-", ""); }
+function parseJson(value, fallback) { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } }
+function hydrateJob(row) { if (!row) return null; return { id: row.id, clientId: row.client_id, correlationId: row.correlation_id || "", traceId: row.trace_id || "", idempotencyKey: row.idempotency_key, capabilityId: row.capability_id, payload: parseJson(row.payload_json, {}), state: row.state, progress: row.progress, error: parseJson(row.error_json, null), createdAt: row.created_at, updatedAt: row.updated_at, stages: database.prepare("SELECT name, state, progress, created_at AS at FROM job_stages WHERE job_id=? ORDER BY id").all(row.id) }; }
 
-export function putAsset({ tempPath, clientId, kind, mime, filename, width, height }) {
-  const assetId = id("ast");
-  const path = resolve(config.dataDir, "assets", assetId);
-  renameSync(tempPath, path);
-  const bytes = readFileSync(path);
-  const asset = { id: assetId, clientId, kind, mime, filename, width, height, path, sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"), createdAt: Date.now() };
-  assets.set(assetId, asset);
-  return asset;
-}
-
-export function getAsset(assetId, clientId) {
-  const asset = assets.get(assetId);
-  return asset && (!clientId || asset.clientId === clientId) && existsSync(asset.path) ? asset : null;
-}
-
-export function putJob(payload, clientId) {
-  const existing = [...jobs.values()].find(job => job.clientId === clientId && job.idempotencyKey === payload.idempotencyKey);
-  if (existing) return { job: existing, existing: true };
-  const now = new Date().toISOString();
-  const job = { id: id("job"), clientId, correlationId: payload.correlationId || "", traceId: payload.traceId || payload.correlationId || "", idempotencyKey: payload.idempotencyKey, capabilityId: payload.capabilityId, payload, state: "queued", progress: 0, stages: [], createdAt: now, updatedAt: now, error: null };
-  jobs.set(job.id, job);
-  emit(job.id, "state", { state: job.state, progress: 0 });
-  return { job, existing: false };
-}
-
-export function getJob(jobId, clientId) {
-  const job = jobs.get(jobId);
-  return job && (!clientId || job.clientId === clientId) ? job : null;
-}
-
-export function listJobs(clientId) { return [...jobs.values()].filter(job => job.clientId === clientId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)); }
-
-export function updateJob(jobId, state, progress, extra = {}) {
-  const job = jobs.get(jobId);
-  if (!job) return null;
-  Object.assign(job, extra, { state, progress, updatedAt: new Date().toISOString() });
-  job.stages.push({ name: state, state: state === "failed" ? "failed" : "completed", progress, at: job.updatedAt });
-  emit(jobId, "state_change", { newState: state, state, progress, message: extra.error?.message });
-  return job;
-}
-
-export function putArtifact(job, bytes, metadata) {
-  const artifactId = id("art");
-  const path = resolve(config.dataDir, "artifacts", artifactId + ".png");
-  writeFileSync(path, bytes);
-  const artifact = { id: artifactId, jobId: job.id, clientId: job.clientId, role: "result", path, mimeType: "image/png", sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"), width: metadata.width, height: metadata.height, placement: metadata.placement, createdAt: Date.now() };
-  artifacts.set(artifactId, artifact);
-  return artifact;
-}
-
-export function getArtifact(artifactId, clientId) {
-  const artifact = artifacts.get(artifactId);
-  return artifact && artifact.clientId === clientId && existsSync(artifact.path) ? artifact : null;
-}
-
-export function jobArtifacts(jobId) {
-  return [...artifacts.values()].filter(artifact => artifact.jobId === jobId).map(artifact => ({ id: artifact.id, role: artifact.role, mimeType: artifact.mimeType, sha256: artifact.sha256, sizeBytes: artifact.sizeBytes, width: artifact.width, height: artifact.height, downloadUrl: "/v2/artifacts/" + artifact.id, placement: artifact.placement, previewOnly: false }));
-}
-
-export function subscribe(jobId, listener) {
-  if (!listeners.has(jobId)) listeners.set(jobId, new Set());
-  listeners.get(jobId).add(listener);
-  return () => listeners.get(jobId)?.delete(listener);
-}
-
+export function putAsset({ tempPath, clientId, kind, mime, filename, width, height }) { const assetId = id("ast"); const path = resolve(config.dataDir, "assets", assetId); renameSync(tempPath, path); const bytes = readFileSync(path); const asset = { id: assetId, clientId, kind, mime, filename, width, height, path, sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"), createdAt: Date.now() }; database.prepare("INSERT INTO assets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(asset.id, asset.clientId, asset.kind, asset.path, asset.mime, asset.filename, asset.width, asset.height, asset.sizeBytes, asset.sha256, asset.createdAt); return asset; }
+export function getAsset(assetId, clientId) { const row = clientId ? database.prepare("SELECT * FROM assets WHERE id=? AND client_id=?").get(assetId, clientId) : database.prepare("SELECT * FROM assets WHERE id=?").get(assetId); if (!row || !existsSync(row.path)) return null; return { id: row.id, clientId: row.client_id, kind: row.kind, path: row.path, mime: row.mime, filename: row.filename, width: row.width, height: row.height, sizeBytes: row.size_bytes, sha256: row.sha256, createdAt: row.created_at }; }
+export function putJob(payload, clientId) { const existing = payload.idempotencyKey ? database.prepare("SELECT * FROM jobs WHERE client_id=? AND idempotency_key=?").get(clientId, payload.idempotencyKey) : null; if (existing) return { job: hydrateJob(existing), existing: true }; const now = new Date().toISOString(); const jobId = id("job"); database.prepare("INSERT INTO jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(jobId, clientId, payload.correlationId || "", payload.traceId || payload.correlationId || "", payload.idempotencyKey || null, payload.capabilityId, JSON.stringify(payload), "queued", 0, null, now, now); recordEvent(jobId, "state", { state: "queued", progress: 0 }); return { job: getJob(jobId, clientId), existing: false }; }
+export function getJob(jobId, clientId) { const row = clientId ? database.prepare("SELECT * FROM jobs WHERE id=? AND client_id=?").get(jobId, clientId) : database.prepare("SELECT * FROM jobs WHERE id=?").get(jobId); return hydrateJob(row); }
+export function listJobs(clientId) { return database.prepare("SELECT * FROM jobs WHERE client_id=? ORDER BY created_at DESC").all(clientId).map(hydrateJob); }
+export function recoverableJobs() { return database.prepare("SELECT * FROM jobs WHERE state IN ('queued','preparing','running','postprocessing') ORDER BY created_at").all().map(hydrateJob); }
+export function updateJob(jobId, state, progress, extra = {}) { const now = new Date().toISOString(); database.exec("BEGIN IMMEDIATE"); try { database.prepare("UPDATE jobs SET state=?, progress=?, error_json=?, updated_at=? WHERE id=?").run(state, progress, extra.error ? JSON.stringify(extra.error) : null, now, jobId); database.prepare("INSERT INTO job_stages (job_id,name,state,progress,created_at) VALUES (?,?,?,?,?)").run(jobId, state, state === "failed" ? "failed" : "completed", progress, now); database.prepare("INSERT INTO job_events (job_id,type,payload_json,created_at) VALUES (?,?,?,?)").run(jobId, "state_change", JSON.stringify({ newState: state, state, progress, message: extra.error?.message }), now); database.exec("COMMIT"); } catch (error) { database.exec("ROLLBACK"); throw error; } emit(jobId, "state_change", { newState: state, state, progress, message: extra.error?.message }); return getJob(jobId); }
+export function putArtifact(job, bytes, metadata) { const artifactId = id("art"); const path = resolve(config.dataDir, "artifacts", artifactId + ".png"); writeFileSync(path, bytes); const artifact = { id: artifactId, jobId: job.id, clientId: job.clientId, role: "result", path, mimeType: "image/png", sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"), width: metadata.width, height: metadata.height, placement: metadata.placement, createdAt: Date.now() }; database.prepare("INSERT INTO artifacts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(artifact.id, artifact.jobId, artifact.clientId, artifact.role, artifact.path, artifact.mimeType, artifact.sizeBytes, artifact.sha256, artifact.width, artifact.height, JSON.stringify(artifact.placement), artifact.createdAt); return artifact; }
+export function getArtifact(artifactId, clientId) { const row = database.prepare("SELECT * FROM artifacts WHERE id=? AND client_id=?").get(artifactId, clientId); if (!row || !existsSync(row.path)) return null; return { id: row.id, jobId: row.job_id, clientId: row.client_id, role: row.role, path: row.path, mimeType: row.mime_type, sizeBytes: row.size_bytes, sha256: row.sha256, width: row.width, height: row.height, placement: parseJson(row.placement_json, {}), createdAt: row.created_at }; }
+export function jobArtifacts(jobId) { return database.prepare("SELECT * FROM artifacts WHERE job_id=? ORDER BY created_at").all(jobId).map(row => ({ id: row.id, role: row.role, mimeType: row.mime_type, sha256: row.sha256, sizeBytes: row.size_bytes, width: row.width, height: row.height, downloadUrl: "/v2/artifacts/" + row.id, placement: parseJson(row.placement_json, {}), previewOnly: false })); }
+export function recordAudit(entry) { database.prepare("INSERT INTO audits (job_id,trace_id,event,duration_ms,request_bytes,response_bytes,model,upstream_status,details_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)").run(entry.jobId || null, entry.traceId || null, entry.event, entry.durationMs || null, entry.requestBytes || null, entry.responseBytes || null, entry.model || null, entry.upstreamStatus || null, JSON.stringify(entry.details || {}), new Date().toISOString()); }
+export function getAudits(jobId, clientId) { if (!getJob(jobId, clientId)) return null; return database.prepare("SELECT event,duration_ms AS durationMs,request_bytes AS requestBytes,response_bytes AS responseBytes,model,upstream_status AS upstreamStatus,details_json AS details,created_at AS createdAt FROM audits WHERE job_id=? ORDER BY id").all(jobId).map(row => ({ ...row, details: parseJson(row.details, {}) })); }
+function recordEvent(jobId, type, data) { database.prepare("INSERT INTO job_events (job_id,type,payload_json,created_at) VALUES (?,?,?,?)").run(jobId, type, JSON.stringify(data), new Date().toISOString()); emit(jobId, type, data); }
+export function subscribe(jobId, listener) { if (!listeners.has(jobId)) listeners.set(jobId, new Set()); listeners.get(jobId).add(listener); return () => listeners.get(jobId)?.delete(listener); }
 export function emit(jobId, type, data) { for (const listener of listeners.get(jobId) || []) listener(type, data); }
-export function finish(jobId) { const job = jobs.get(jobId); emit(jobId, "complete", { state: job.state, artifacts: jobArtifacts(jobId) }); }
+export function finish(jobId) { const job = getJob(jobId); if (job) recordEvent(jobId, "complete", { state: job.state, artifacts: jobArtifacts(jobId) }); }

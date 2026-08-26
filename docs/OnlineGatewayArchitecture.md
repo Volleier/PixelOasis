@@ -94,4 +94,8 @@ npm run start:online
 
 插件设置中选择“在线 GPT Image”，目标自动切换为 `http://127.0.0.1:8790`。
 
-当前任务元数据保存在进程内，图片与 artifact 保存在 `.pixeloasis/online-data/`。生产化下一阶段应把任务元数据迁移到 SQLite、增加启动恢复、上游并发队列、请求成本审计和加密凭据存储；这些扩展不会改变插件 `/v2` 契约。
+任务、素材、阶段、事件、artifact 与调用审计保存在 `.pixeloasis/online-data/online-gateway.sqlite`，数据库启用 WAL。网关重启时会重新调度未完成任务；`PO_ONLINE_CONCURRENCY` 控制上游并发数，取消任务会通过 `AbortController` 中止仍在进行的 HTTP 请求。
+
+`GET /v2/jobs/{id}/audit` 可读取上游耗时、请求/响应字节数、模型、HTTP 状态和失败代码。审计数据不记录 API Key、完整提示词或图像内容。
+
+下一阶段仍建议增加系统凭据库集成、按供应商账单字段记录精确费用，以及定期清理过期素材。

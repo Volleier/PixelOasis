@@ -5,8 +5,9 @@ import Busboy from "busboy";
 import sharp from "sharp";
 import config from "./config.js";
 import { getCapabilities, getCapability } from "./capabilities.js";
-import { emit, finish, getArtifact, getAsset, getJob, id, jobArtifacts, listJobs, putArtifact, putAsset, putJob, subscribe, updateJob } from "./store.js";
+import { emit, finish, getArtifact, getAsset, getAudits, getJob, id, jobArtifacts, listJobs, putArtifact, putAsset, putJob, recordAudit, recoverableJobs, subscribe, updateJob } from "./store.js";
 import { generateOnline, getUsage } from "./provider.js";
+import { cancel as cancelScheduled, enqueue, stats as queueStats } from "./scheduler.js";
 
 function json(res, status, data) {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, X-Client-Id, X-Trace-Id, X-Correlation-Id", "Access-Control-Allow-Methods": "GET,POST,HEAD,DELETE,OPTIONS" });
@@ -26,21 +27,25 @@ async function upload(req, res, owner) {
   const busboy = Busboy({ headers: req.headers, limits: { fileSize: config.maxUploadBytes, files: 1 } });
   const fields = {};
   let fileInfo = null;
+  let fileWrite = Promise.resolve();
   const done = new Promise((resolveDone, reject) => {
     busboy.on("field", (name, value) => { fields[name] = value; });
     busboy.on("file", (name, stream, info) => {
       const tempPath = resolve(config.dataDir, "incoming", id("upload"));
       const writer = createWriteStream(tempPath);
+      fileWrite = new Promise((resolveWrite, rejectWrite) => {
+        writer.on("close", () => { fileInfo = { tempPath, filename: info.filename, mime: info.mimeType }; resolveWrite(); });
+        writer.on("error", rejectWrite);
+      });
       stream.pipe(writer);
       stream.on("limit", () => reject(new Error("File too large")));
-      writer.on("close", () => { fileInfo = { tempPath, filename: info.filename, mime: info.mimeType }; });
-      writer.on("error", reject);
     });
     busboy.on("close", resolveDone);
     busboy.on("error", reject);
   });
   req.pipe(busboy);
   await done;
+  await fileWrite;
   if (!fileInfo) return json(res, 400, { error: { code: "UPLOAD_FAILED", message: "Image file is required" } });
   const metadata = await sharp(fileInfo.tempPath).metadata();
   const asset = putAsset({ ...fileInfo, clientId: owner, kind: fields.kind || "source", width: metadata.width, height: metadata.height });
@@ -51,7 +56,8 @@ function publicJob(job) {
   return { jobId: job.id, correlationId: job.correlationId, capabilityId: job.capabilityId, state: job.state, progress: job.progress, stages: job.stages, artifacts: jobArtifacts(job.id), error: job.error, createdAt: job.createdAt, updatedAt: job.updatedAt };
 }
 
-async function run(job, capability) {
+async function run(job, signal) {
+  const capability = getCapability(job.capabilityId);
   try {
     updateJob(job.id, "preparing", 10);
     const source = getAsset(job.payload.source.assetId, job.clientId);
@@ -61,13 +67,16 @@ async function run(job, capability) {
     updateJob(job.id, "running", 35);
     const width = Math.max(1, Math.round(job.payload.source.bounds?.width || source.width || 1024));
     const height = Math.max(1, Math.round(job.payload.source.bounds?.height || source.height || 1024));
-    const bytes = await generateOnline({ capability, source, mask, parameters: job.payload.parameters, width, height });
+    const result = await generateOnline({ capability, source, mask, parameters: job.payload.parameters, width, height, signal });
     if (getJob(job.id, job.clientId)?.state === "canceled") return;
     updateJob(job.id, "postprocessing", 90);
     const artDef = capability.outputSchema?.artifacts?.find(item => item.previewOnly !== true) || { layerName: capability.title, blendMode: "normal", opacity: 100 };
-    putArtifact(job, bytes, { width, height, placement: { layerName: artDef.layerName || capability.title, groupName: "PixelOasis/" + capability.title, blendMode: artDef.blendMode || "normal", opacity: artDef.opacity || 100, bounds: job.payload.source.bounds || null, createSmartObject: true, order: 10 } });
+    putArtifact(job, result.bytes, { width, height, placement: { layerName: artDef.layerName || capability.title, groupName: "PixelOasis/" + capability.title, blendMode: artDef.blendMode || "normal", opacity: artDef.opacity || 100, bounds: job.payload.source.bounds || null, createSmartObject: true, order: 10 } });
+    recordAudit({ jobId: job.id, traceId: job.traceId, event: "provider.completed", ...result.metrics, details: { capabilityId: job.capabilityId } });
     updateJob(job.id, "succeeded", 100);
   } catch (error) {
+    if (error.name === "AbortError" && getJob(job.id)?.state === "canceled") return;
+    recordAudit({ jobId: job.id, traceId: job.traceId, event: "provider.failed", model: config.upstream.model, upstreamStatus: error.status, details: { code: error.code || error.name, message: error.message } });
     updateJob(job.id, "failed", 0, { error: { code: error.code || "ONLINE_GENERATION_FAILED", message: error.message, retryable: error.status === 429 || error.status >= 500 } });
   } finally { finish(job.id); }
 }
@@ -80,7 +89,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/v2/health") {
       let usage = null;
       if (url.searchParams.get("depth") === "full") try { usage = await getUsage(); } catch (error) { usage = { configured: true, valid: false, error: error.code || error.message }; }
-      return json(res, 200, { status: "ok", gateway: "ok", mode: "online", provider: "feifeimiao", model: config.upstream.model, upstream: config.upstream.apiKey ? (usage?.valid === false ? "error" : "configured") : "not_configured", usage, timestamp: new Date().toISOString() });
+      return json(res, 200, { status: "ok", gateway: "ok", mode: "online", provider: "feifeimiao", model: config.upstream.model, upstream: config.upstream.apiKey ? (usage?.valid === false ? "error" : "configured") : "not_configured", usage, queue: queueStats(), persistence: "sqlite", timestamp: new Date().toISOString() });
     }
     if (req.method === "GET" && url.pathname === "/v2/usage") return json(res, 200, await getUsage());
     if (req.method === "GET" && url.pathname === "/v2/capabilities") return json(res, 200, { schemaVersion: "2.0", revision: "online-gpt-image-2", capabilities: getCapabilities() });
@@ -96,7 +105,7 @@ const server = createServer(async (req, res) => {
       if (!payload.source?.assetId) return json(res, 400, { error: { code: "REQUEST_SCHEMA_INVALID", message: "source.assetId is required" } });
       if (!getAsset(payload.source.assetId, owner)) return json(res, 422, { error: { code: "ASSET_NOT_FOUND", message: "Source asset not found" } });
       const created = putJob(payload, owner);
-      if (!created.existing) setTimeout(() => run(created.job, capability), 0);
+      if (!created.existing) enqueue(created.job, run);
       return json(res, created.existing ? 200 : 202, publicJob(created.job));
     }
     if (req.method === "GET" && url.pathname === "/v2/jobs") return json(res, 200, listJobs(owner).map(publicJob));
@@ -111,13 +120,15 @@ const server = createServer(async (req, res) => {
     }
     const clientEventMatch = url.pathname.match(/^\/v2\/jobs\/([^/]+)\/client-events$/);
     if (req.method === "POST" && clientEventMatch) { const job = getJob(clientEventMatch[1], owner); if (!job) return json(res, 404, { error: { code: "JOB_NOT_FOUND", message: "Job not found" } }); const event = await bodyJson(req); emit(job.id, event.event || "client_event", event.data || {}); return json(res, 201, { acknowledged: true, event: event.event }); }
+    const auditMatch = url.pathname.match(/^\/v2\/jobs\/([^/]+)\/audit$/);
+    if (req.method === "GET" && auditMatch) { const audits = getAudits(auditMatch[1], owner); return audits ? json(res, 200, { jobId: auditMatch[1], events: audits }) : json(res, 404, { error: { code: "JOB_NOT_FOUND", message: "Job not found" } }); }
     const retryMatch = url.pathname.match(/^\/v2\/jobs\/([^/]+)\/retry$/);
     if (req.method === "POST" && retryMatch) return json(res, 409, { error: { code: "RETRY_REQUIRES_RESUBMIT", message: "Retry requires submitting source assets again" } });
     const jobMatch = url.pathname.match(/^\/v2\/jobs\/([^/]+)$/);
     if (jobMatch) {
       const job = getJob(jobMatch[1], owner); if (!job) return json(res, 404, { error: { code: "JOB_NOT_FOUND", message: "Job not found" } });
       if (req.method === "GET") return json(res, 200, publicJob(job));
-      if (req.method === "DELETE") { if (["succeeded", "failed", "canceled"].includes(job.state)) return json(res, 409, { error: { code: "JOB_ALREADY_TERMINAL", message: "Job already terminal" } }); updateJob(job.id, "canceled", 0); finish(job.id); return json(res, 200, { jobId: job.id, state: "canceled" }); }
+      if (req.method === "DELETE") { if (["succeeded", "failed", "canceled"].includes(job.state)) return json(res, 409, { error: { code: "JOB_ALREADY_TERMINAL", message: "Job already terminal" } }); cancelScheduled(job.id); updateJob(job.id, "canceled", 0); finish(job.id); return json(res, 200, { jobId: job.id, state: "canceled" }); }
     }
     const artifactMatch = url.pathname.match(/^\/v2\/artifacts\/([^/]+)$/);
     if (req.method === "GET" && artifactMatch) { const artifact = getArtifact(artifactMatch[1], owner); if (!artifact) return json(res, 404, { error: { code: "ARTIFACT_NOT_FOUND", message: "Artifact not found" } }); const stats = statSync(artifact.path); res.writeHead(200, { "Content-Type": artifact.mimeType, "Content-Length": stats.size, ETag: '"' + artifact.sha256 + '"', "Access-Control-Allow-Origin": "*" }); return (await import("node:fs")).createReadStream(artifact.path).pipe(res); }
@@ -126,5 +137,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(config.port, config.host, () => console.log("PixelOasis online gateway listening at http://" + config.host + ":" + config.port));
+
+for (const job of recoverableJobs()) enqueue(job, run);
 
 export { server };

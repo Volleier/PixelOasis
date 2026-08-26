@@ -15,5 +15,6 @@ export default {
     timeoutMs: Number(process.env.FEIFEIMIAO_TIMEOUT_MS || 300000),
   },
   maxUploadBytes: Number(process.env.PO_ONLINE_MAX_UPLOAD_MB || 100) * 1024 * 1024,
+  concurrency: Math.max(1, Number(process.env.PO_ONLINE_CONCURRENCY || 2)),
   artifactTtlMs: 7 * 24 * 60 * 60 * 1000,
 };

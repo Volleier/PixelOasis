@@ -31,18 +31,18 @@ async function upstreamError(response) {
   throw error;
 }
 
-async function decodeResult(data) {
+async function decodeResult(data, signal) {
   const item = data?.data?.[0];
   if (item?.b64_json) return Buffer.from(item.b64_json, "base64");
   if (item?.url) {
-    const response = await fetch(item.url, { signal: AbortSignal.timeout(config.upstream.timeoutMs) });
+    const response = await fetch(item.url, { signal });
     if (!response.ok) throw new Error("Unable to download generated image");
     return Buffer.from(await response.arrayBuffer());
   }
   throw Object.assign(new Error("Provider response did not contain image data"), { code: "ONLINE_RESULT_MISSING" });
 }
 
-export async function generateOnline({ capability, source, mask, parameters, width, height }) {
+export async function generateOnline({ capability, source, mask, parameters, width, height, signal }) {
   if (!config.upstream.apiKey) throw Object.assign(new Error("FEIFEIMIAO_API_KEY is not configured"), { code: "ONLINE_AUTH_MISSING", status: 424 });
 
   const form = new FormData();
@@ -53,15 +53,20 @@ export async function generateOnline({ capability, source, mask, parameters, wid
   form.append("image", new Blob([readFileSync(source.path)], { type: source.mime || "image/png" }), source.filename || "source.png");
   if (mask) form.append("mask", new Blob([readFileSync(mask.path)], { type: mask.mime || "image/png" }), mask.filename || "mask.png");
 
+  const requestBytes = source.sizeBytes + (mask?.sizeBytes || 0);
+  const startedAt = Date.now();
+  const timeoutSignal = AbortSignal.timeout(config.upstream.timeoutMs);
+  const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
   const response = await fetch(config.upstream.baseUrl + "/images/edits", {
     method: "POST",
     headers: { Authorization: "Bearer " + config.upstream.apiKey },
     body: form,
-    signal: AbortSignal.timeout(config.upstream.timeoutMs),
+    signal: combinedSignal,
   });
   if (!response.ok) await upstreamError(response);
-  const generated = await decodeResult(await response.json());
-  return sharp(generated).resize(width, height, { fit: "fill", kernel: sharp.kernel.lanczos3 }).png().toBuffer();
+  const generated = await decodeResult(await response.json(), combinedSignal);
+  const output = await sharp(generated).resize(width, height, { fit: "fill", kernel: sharp.kernel.lanczos3 }).png().toBuffer();
+  return { bytes: output, metrics: { durationMs: Date.now() - startedAt, requestBytes, responseBytes: output.length, upstreamStatus: response.status, model: config.upstream.model } };
 }
 
 export async function getUsage() {
