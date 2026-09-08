@@ -3,18 +3,33 @@ import { resolve } from "node:path";
 const serviceRoot = resolve(import.meta.dirname, "..");
 const projectRoot = resolve(serviceRoot, "..", "..");
 
+const defaultBaseUrl = (process.env.PO_ONLINE_BASE_URL || process.env.ONLINE_BASE_URL || "").replace(/\/+$/, "");
+const defaultDrawUrl = (process.env.PO_ONLINE_DRAW_URL || process.env.PO_ONLINE_DRAW_BASE_URL || (defaultBaseUrl ? `${defaultBaseUrl}/draw` : "")).replace(/\/+$/, "");
+const defaultTasksUrl = (process.env.PO_ONLINE_TASKS_URL || defaultBaseUrl).replace(/\/+$/, "");
+
 export default {
   host: process.env.PO_ONLINE_HOST || "127.0.0.1",
   port: Number(process.env.PO_ONLINE_PORT || 8790),
   dataDir: process.env.PO_ONLINE_DATA_DIR || resolve(projectRoot, ".pixeloasis", "online-data"),
   capabilitiesDir: resolve(projectRoot, "services", "model-gateway", "capabilities"),
   upstream: {
-    baseUrl: (process.env.FEIFEIMIAO_BASE_URL || "https://api.feifeimiao.top/v1").replace(/\/+$/, ""),
-    apiKey: process.env.FEIFEIMIAO_API_KEY || "",
-    model: process.env.FEIFEIMIAO_IMAGE_MODEL || "gpt-image-2",
-    timeoutMs: Number(process.env.FEIFEIMIAO_TIMEOUT_MS || 300000),
+    drawBaseUrl: defaultDrawUrl,
+    tasksBaseUrl: defaultTasksUrl,
+    apiKey: process.env.PO_ONLINE_API_KEY || process.env.ONLINE_API_KEY || "",
+    model: process.env.PO_ONLINE_MODEL || process.env.PO_ONLINE_IMAGE_MODEL || process.env.ONLINE_IMAGE_MODEL || "nano-banana-2",
+    supportedModels: [
+      "gpt-image-2",
+      "gpt-image-2-vip",
+      "nano-banana-2",
+      "nano-banana-2-lite",
+      "nano-banana-pro",
+    ],
+    imageSize: process.env.PO_ONLINE_IMAGE_SIZE || process.env.ONLINE_IMAGE_SIZE || "1K",
+    pollIntervalMs: Number(process.env.PO_ONLINE_POLL_INTERVAL_MS || process.env.ONLINE_POLL_INTERVAL_MS || 1500),
+    timeoutMs: Number(process.env.PO_ONLINE_TIMEOUT_MS || process.env.ONLINE_TIMEOUT_MS || 300000),
   },
   maxUploadBytes: Number(process.env.PO_ONLINE_MAX_UPLOAD_MB || 100) * 1024 * 1024,
   concurrency: Math.max(1, Number(process.env.PO_ONLINE_CONCURRENCY || 2)),
   artifactTtlMs: 7 * 24 * 60 * 60 * 1000,
 };
+

@@ -78,9 +78,18 @@ window.PO.initSettings = function () {
       localStorage.setItem("po.settings.v2", JSON.stringify({
         gatewayMode: window.PO.state.gateway.mode,
         gatewayUrl: window.PO.state.gatewayUrl,
+        onlineModel: window.PO.state.gateway.onlineModel,
       }));
     } catch (_) {}
   }
+
+  /* Load initial saved settings */
+  try {
+    var saved = JSON.parse(localStorage.getItem("po.settings.v2") || "{}");
+    if (saved.onlineModel) {
+      window.PO.state.gateway.onlineModel = saved.onlineModel;
+    }
+  } catch (_) {}
 
   function refreshGateway() {
     window.PO.state.gateway.health = "unknown";
@@ -93,8 +102,11 @@ window.PO.initSettings = function () {
       var data = response && response.data;
       var healthy = !!(response && response.ok && data && data.status === "ok");
       window.PO.state.gateway.health = healthy ? "online" : "offline";
+      if (data && data.models && Array.isArray(data.models)) {
+        window.PO.state.gateway.availableModels = data.models;
+      }
       if (window.PO.CapabilitySections) {
-        var backend = data && data.mode === "online" ? "在线 GPT Image" : "本地 ComfyUI";
+        var backend = data && data.mode === "online" ? ("在线生图 (" + (data.model || "在线") + ")") : "本地 ComfyUI";
         window.PO.CapabilitySections.updateEnvStatus(healthy ? backend + " 已连接" : backend + " 未连接");
       }
     }).catch(function () { window.PO.state.gateway.health = "offline"; });
@@ -122,7 +134,25 @@ window.PO.initSettings = function () {
         if (els.gatewayUrlInput) els.gatewayUrlInput.value = GATEWAY_PRESETS[mode];
       }
       saveGatewaySettings();
-      window.PO.showTransientStatus(mode === "online" ? "已切换到在线 GPT Image" : "已切换运算后端");
+      window.PO.showTransientStatus(mode === "online" ? "已切换到在线生图" : "已切换运算后端");
+      refreshGateway();
+    });
+  }
+
+  if (els.gatewayModelSelect) {
+    els.gatewayModelSelect.value = window.PO.state.gateway.onlineModel || "nano-banana-2";
+    els.gatewayModelSelect.addEventListener("change", function () {
+      var model = els.gatewayModelSelect.value;
+      window.PO.state.gateway.onlineModel = model;
+      saveGatewaySettings();
+      if (window.PO.state.gateway.mode === "online" || (window.PO.state.gatewayUrl && window.PO.state.gatewayUrl.indexOf(":8790") !== -1)) {
+        fetch(window.PO.state.gatewayUrl + "/v2/models", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: model }),
+        }).catch(function () {});
+      }
+      window.PO.showTransientStatus("已切换生图模型为 " + model);
       refreshGateway();
     });
   }

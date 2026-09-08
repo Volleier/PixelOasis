@@ -536,11 +536,30 @@ window.PO.CapabilitySections = (function () {
     var modeSelect = document.createElement("select");
     modeSelect.id = "gateway-mode-select";
     modeSelect.className = "po-settings-url-input";
-    [["local", "本地 ComfyUI"], ["online", "在线 GPT Image"], ["custom", "自定义网关"]].forEach(function (item) {
+    [["local", "本地 ComfyUI"], ["online", "在线生图"], ["custom", "自定义网关"]].forEach(function (item) {
       var option = document.createElement("option");
       option.value = item[0];
       option.textContent = item[1];
       modeSelect.appendChild(option);
+    });
+    var modelLabel = document.createElement("label");
+    modelLabel.className = "po-setting-row__label";
+    modelLabel.setAttribute("for", "gateway-model-select");
+    modelLabel.textContent = "生图模型";
+    var modelSelect = document.createElement("select");
+    modelSelect.id = "gateway-model-select";
+    modelSelect.className = "po-settings-url-input";
+    [
+      "gpt-image-2",
+      "gpt-image-2-vip",
+      "nano-banana-2",
+      "nano-banana-2-lite",
+      "nano-banana-pro",
+    ].forEach(function (m) {
+      var opt = document.createElement("option");
+      opt.value = m;
+      opt.textContent = m;
+      modelSelect.appendChild(opt);
     });
     var gwLabel = document.createElement("label");
     gwLabel.className = "po-setting-row__label";
@@ -553,6 +572,8 @@ window.PO.CapabilitySections = (function () {
     gwInput.placeholder = "http://127.0.0.1:8787";
     gwGroup.appendChild(modeLabel);
     gwGroup.appendChild(modeSelect);
+    gwGroup.appendChild(modelLabel);
+    gwGroup.appendChild(modelSelect);
     gwGroup.appendChild(gwLabel);
     gwGroup.appendChild(gwInput);
     drawerBody.appendChild(gwGroup);
@@ -561,7 +582,6 @@ window.PO.CapabilitySections = (function () {
     var logGroup = document.createElement("div");
     logGroup.className = "po-setting-group";
     var logRow = document.createElement("div");
-    logRow.className = "po-setting-row";
     var logLabel = document.createElement("span");
     logLabel.className = "po-setting-row__label";
     logLabel.textContent = "日志记录";
@@ -652,6 +672,7 @@ window.PO.CapabilitySections = (function () {
     els.settingsDrawer = settingsDrawer;
     els.gatewayUrlInput = gwInput;
     els.gatewayModeSelect = modeSelect;
+    els.gatewayModelSelect = modelSelect;
     els.statusNode = statusNode;
 
     /* Update status node reference for v1 status functions */

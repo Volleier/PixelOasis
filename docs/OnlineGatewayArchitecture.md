@@ -1,101 +1,177 @@
-# 在线模型网关架构方案
+# PixelOasis 在线生图网关架构设计 (Online Gateway Architecture)
 
-## 1. 目标
+本文档阐述 PixelOasis 在线生图网关（`model-gateway-online`）的系统架构、协议映射规范、异步任务流转与多模型调度机制。
 
-`services/model-gateway-online/` 在不改变 Photoshop 插件任务协议的前提下，将本地 ComfyUI 运算替换为 feifeimiao 的 OpenAI-compatible `gpt-image-2` 图片编辑调用。
+---
 
-文档确认的上游接口为：
+## 1. 架构目标与定位
 
-- Base URL：`https://api.feifeimiao.top/v1`
-- 鉴权：`Authorization: Bearer <API Key>`
-- 图片生成：`POST /images/generations`
-- 图片编辑：`POST /images/edits`
-- 余额查询：`GET /usage`
-- 图片模型：`gpt-image-2`
+1. **保持 `/v2` 统一契约不变**：
+   Photoshop UXP 插件基于标准 `/v2` 协议（`/v2/capabilities`、`/v2/jobs`、`/v2/artifacts`、`/v2/health`）与网关通信。无论是本地 ComfyUI 网关（8787）还是在线生图网关（8790），前端插件的代码路径与核心调度逻辑保持完全一致。
+2. **异步生图任务编排**：
+   上游在线生图接口采用标准的异步任务流程（提交生图任务返回 `task_id` -> 异步轮询任务状态 -> 任务完成后获取输出图片 URL）。网关负责维护异步轮询与工件落盘，对外呈现标准的 PixelOasis Job 状态机。
+3. **多模型动态选择与可扩展性**：
+   支持多种在线模型动态切换（如 `gpt-image-2`、`gpt-image-2-vip`、`nano-banana-2`、`nano-banana-2-lite`、`nano-banana-pro`），既支持全局默认配置切换，也支持单任务级别的模型指定。
+4. **代码工程与厂商解耦 (Vendor-Agnostic)**：
+   系统架构、环境变量、路由规范与 UI 组件不与特定厂商名称硬编码绑定，保持开放、通用与可替换性。
+5. **凭据安全隔离**：
+   在线生图 API Key 与鉴权信息仅由网关服务端进程在运行时持有，绝不透传给前端 Photoshop 插件或暴露在客户端存储中。
 
-PixelOasis 的所有任务都包含 Photoshop 捕获源图，因此在线网关统一使用图片编辑接口；选择蒙版存在时一并上传，以保留局部编辑语义。
+---
 
-## 2. 信任边界
+## 2. 系统拓扑与数据流
 
 ```text
-Photoshop UXP plugin
-  │ PixelOasis /v2 contract (no provider key)
-  ▼
-localhost:8790 model-gateway-online
-  │ Bearer API Key + source/mask image
-  ▼
-api.feifeimiao.top/v1/images/edits
+┌────────────────────────────────────────────────────────┐
+│               Photoshop UXP 插件面板                    │
+│  - 模型选择下拉框 (gpt-image-2 / nano-banana-2 / ...)   │
+│  - 选区与图层捕获 (RGB PNG + Alpha Mask)                │
+│  - 提交任务: POST /v2/jobs                             │
+│  - 状态轮询: GET /v2/jobs/{id}                         │
+│  - 工件下载并回填: GET /v2/artifacts/{id}               │
+└───────────────────────────▲────────────────────────────┘
+                            │ (Local HTTP: 127.0.0.1:8790)
+┌───────────────────────────▼────────────────────────────┐
+│         PixelOasis 在线网关 (model-gateway-online)      │
+│  - Capabilities 映射 (将 27 种能力统一映射为在线执行)   │
+│  - Request 适配: 将图像编码为 Base64 Data URI           │
+│  - 任务持久化与恢复: SQLite WAL (jobs & artifacts)     │
+│  - 并发限流与超时熔断                                   │
+└───────────────▲────────────────────────▲───────────────┘
+                │                        │
+  1. POST /draw/v1/images/generations    │ 2. 轮询 GET /v1/tasks/{task_id}
+     (async: true, prompt, image: [...]) │    (SUCCESS -> 提取图片 URL)
+                ▼                        ▼
+┌────────────────────────────────────────────────────────┐
+│                  上游在线异步生图服务                    │
+│  - 任务调度队列                                         │
+│  - GPU 图像生成 (支持多模型 gpt-image / nano-banana)    │
+│  - 输出结果托管                                         │
+└────────────────────────────────────────────────────────┘
 ```
 
-API Key 只存在于在线网关进程的 `FEIFEIMIAO_API_KEY` 环境变量中。插件、浏览器存储、任务负载、日志和 Photoshop 图层元数据均不保存 API Key。
+---
 
-## 3. 兼容层
+## 3. 上游接口映射与工作流
 
-在线网关实现插件已经使用的接口：
+### 3.1 任务创建：`POST /draw/v1/images/generations`
 
-| 接口 | 兼容行为 |
-|---|---|
-| `GET /v2/health` | 网关模式、模型、上游配置和余额状态 |
-| `GET /v2/capabilities` | 复用本地网关的 27 个 capability 定义 |
-| `POST /v2/assets` | 源图、编辑蒙版、主体蒙版上传 |
-| `HEAD /v2/assets/{id}` | 素材有效性检查 |
-| `POST /v2/jobs` | 幂等创建异步在线生图任务 |
-| `GET /v2/jobs[/{id}]` | 列表、恢复和轮询 |
-| `GET /v2/jobs/{id}/events` | SSE 状态与完成事件 |
-| `DELETE /v2/jobs/{id}` | 取消结果落盘与回填 |
-| `GET /v2/artifacts/{id}` | PNG 下载、长度与 SHA-256 校验 |
-| `POST /v2/jobs/{id}/client-events` | 下载和回填确认事件 |
-| `GET /v2/usage` | 上游余额和额度查询代理 |
+- **请求头**：
+  - `Authorization: Bearer <PO_ONLINE_API_KEY>`
+  - `Content-Type: application/json`
+- **请求体设计**：
+  ```json
+  {
+    "model": "nano-banana-2",
+    "prompt": "提示词内容",
+    "async": true,
+    "size": "1:1",
+    "imageSize": "1K",
+    "image": [
+      "data:image/png;base64,iVBORw0KGgo..."
+    ]
+  }
+  ```
+  - `model`: 任务指定或当前全局选定模型。
+  - `prompt`: 插件传入的提示词，若图生图模式下提示词为空，网关自适应提供匹配动作的描述。
+  - `async`: 设为 `true`，上游立即返回异步任务 ID。
+  - `size`: 宽高比比例规格（`1:1`、`3:4`、`4:3`、`9:16`、`16:9`、`2:3`、`3:2`），由网关根据输入图像实际宽高比自动计算最接近的标准比例。
+  - `imageSize`: 分辨率规格（`1K`、`2K` 等）。
+  - `image`: 参考图 Base64 数组。当插件传入源图或蒙版合成图时编码为 Base64 传递。
 
-插件端仍执行原有的捕获、预检、参数表单、任务面板、下载校验、智能对象创建、图层命名和放置流程。
+- **响应格式**：
+  ```json
+  {
+    "code": 200,
+    "message": "success",
+    "data": {
+      "task_id": "task_fea46299c377404e85ad8d45c1478275"
+    }
+  }
+  ```
 
-## 4. Capability 到在线提示词
+### 3.2 任务状态轮询：`GET /v1/tasks/{task_id}`
 
-在线网关读取 `services/model-gateway/capabilities/**/*.capability.json`，保留输入要求、参数 schema、敏感操作确认、分组和 UI 顺序。执行时将以下信息组合成受控编辑提示：
+- **请求头**：`Authorization: Bearer <PO_ONLINE_API_KEY>`
+- **状态流转**：
+  - `PENDING` / `RUNNING`：任务处于排队或计算中，网关继续休眠间隔后轮询。
+  - `SUCCESS`：任务成功完成，从响应体中解析 `data.data` 获取生成的图片结果 URL 数组。
+  - `FAILED`：任务失败，提取错误信息并抛出结构化异常，将本地任务置为 `failed`。
 
-1. capability 中文标题和描述；
-2. 用户在参数表单中选择的合法参数；
-3. 保身份、构图、透视、文字、Logo 和非编辑区域的通用约束；
-4. 自然融合边缘、光照、色彩、颗粒和景深的质量约束。
+### 3.3 结果落盘与尺寸自适应
 
-输出统一为一张完成图，并按 Photoshop 捕获边界精确缩放。多层效果的 UI 和回填协议仍兼容，但单次 GPT Image 调用只返回一个合成结果层；这是上游图片接口与 ComfyUI 多节点多输出之间的能力差异。
+网关在接收到上游返回的图片 URL 后：
+1. 下载图片二进制流。
+2. 使用 `sharp` 库读取图片尺寸元数据。
+3. 若存在原始 Photoshop 选区或目标尺寸，执行平滑缩放以完全对齐原始画布边界。
+4. 写入网关本地工件缓存，提供 `/v2/artifacts/{id}` 访问端点。
 
-## 5. 尺寸策略
+---
 
-上游请求按宽高比选择：
+## 4. 多模型选择体系
 
-- 横图：`1536x1024`
-- 竖图：`1024x1536`
-- 方图：`1024x1024`
+### 4.1 支持的模型矩阵
 
-返回图片通过 Lanczos 重采样到 `source.bounds` 的精确宽高，确保插件回填时像素网格与原捕获区域一致。
+| 模型标识 | 说明 | 适用场景 |
+|---|---|---|
+| `nano-banana-2` | 默认通用高速模型 | 日常快速草图生成、风格迁移 |
+| `nano-banana-2-lite` | 轻量加速模型 | 快速预览、低延迟生成 |
+| `nano-banana-pro` | 专业级高精模型 | 高质感细节强化、复杂概念生成 |
+| `gpt-image-2` | 通用标准生成模型 | 精准指令遵循、细节修饰 |
+| `gpt-image-2-vip` | 旗舰级高算力模型 | 商业级精细画质生成 |
 
-## 6. 状态和错误映射
+### 4.2 模型选择交互流
 
-任务状态保持 `queued → preparing → running → postprocessing → succeeded`。上游错误转换为稳定代码：
+1. **网关动态查询与切换**：
+   - `GET /v2/models`：获取当前生效模型及全部可用模型列表。
+   - `POST /v2/models`：动态切换网关全局默认模型。
+2. **设置面板控制**：
+   - 插件设置抽屉提供“生图模型”下拉框，用户可直接在 UI 中切换全局默认模型。
+3. **参数面板即时控制**：
+   - 用户在参数面板点击“开始生成”前，可通过面板顶部的“生图模型”选项单独为当前任务指定模型。
+   - 选中的模型随请求提交在 `payload.model` 中，优先级高于网关全局默认配置。
 
-- `401` → `ONLINE_AUTH_INVALID`
-- `429` → `ONLINE_QUOTA_EXCEEDED`
-- 其他上游错误 → `ONLINE_PROVIDER_ERROR`
-- 未配置 Key → `ONLINE_AUTH_MISSING`
-- 无图片结果 → `ONLINE_RESULT_MISSING`
+---
 
-插件已为这些错误提供中文信息和建议动作。
+## 5. 核心模块与文件拓扑
 
-## 7. 运行和演进
+```text
+services/model-gateway-online/
+├── src/
+│   ├── config.js         # 统一配置（环境变量读取与默认模型清单）
+│   ├── server.js         # HTTP 路由服务（/v2/capabilities, /v2/jobs, /v2/models 等）
+│   ├── provider.js       # 上游协议封装（POST 任务提交、GET 任务轮询、尺寸比例匹配）
+│   ├── capabilities.js   # 27 项能力定义映射表
+│   ├── queue.js          # 异步队列与并发限流器
+│   ├── storage.js        # SQLite 任务状态持久化
+│   └── audit.js          # 审计指标收集
+└── test/
+    └── contract.mjs      # 自动化契约与多模型测试套件
+```
 
-开发启动：
+---
+
+## 6. 环境配置与运维
+
+### 环境变量说明
 
 ```powershell
-$env:FEIFEIMIAO_API_KEY = "sk-..."
-npm install --prefix services/model-gateway-online
-npm run start:online
+# 必选：在线接口鉴权凭证
+$env:PO_ONLINE_API_KEY = "sk-..."
+
+# 可选：默认模型（默认 nano-banana-2）
+$env:PO_ONLINE_MODEL = "nano-banana-2"
+
+# 可选：分辨率规格（默认 1K）
+$env:PO_ONLINE_IMAGE_SIZE = "1K"
+
+# 可选：网络服务监听端口（默认 8790）
+$env:PO_ONLINE_PORT = "8790"
 ```
 
-插件设置中选择“在线 GPT Image”，目标自动切换为 `http://127.0.0.1:8790`。
+### 启动方式
 
-任务、素材、阶段、事件、artifact 与调用审计保存在 `.pixeloasis/online-data/online-gateway.sqlite`，数据库启用 WAL。网关重启时会重新调度未完成任务；`PO_ONLINE_CONCURRENCY` 控制上游并发数，取消任务会通过 `AbortController` 中止仍在进行的 HTTP 请求。
-
-`GET /v2/jobs/{id}/audit` 可读取上游耗时、请求/响应字节数、模型、HTTP 状态和失败代码。审计数据不记录 API Key、完整提示词或图像内容。
-
-下一阶段仍建议增加系统凭据库集成、按供应商账单字段记录精确费用，以及定期清理过期素材。
+```powershell
+# 启动在线网关
+node tools/start-online-gateway.mjs
+```

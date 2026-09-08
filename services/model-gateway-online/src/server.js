@@ -67,7 +67,21 @@ async function run(job, signal) {
     updateJob(job.id, "running", 35);
     const width = Math.max(1, Math.round(job.payload.source.bounds?.width || source.width || 1024));
     const height = Math.max(1, Math.round(job.payload.source.bounds?.height || source.height || 1024));
-    const result = await generateOnline({ capability, source, mask, parameters: job.payload.parameters, width, height, signal });
+    const jobModel = job.payload.model || job.payload.options?.model || job.payload.parameters?.model || config.upstream.model;
+    const result = await generateOnline({
+      capability,
+      source,
+      mask,
+      parameters: job.payload.parameters,
+      width,
+      height,
+      signal,
+      model: jobModel,
+      onProgress: progress => {
+        const p = Math.max(35, Math.min(88, Math.round(35 + (progress || 0) * 0.5)));
+        updateJob(job.id, "running", p);
+      },
+    });
     if (getJob(job.id, job.clientId)?.state === "canceled") return;
     updateJob(job.id, "postprocessing", 90);
     const artDef = capability.outputSchema?.artifacts?.find(item => item.previewOnly !== true) || { layerName: capability.title, blendMode: "normal", opacity: 100 };
@@ -76,7 +90,8 @@ async function run(job, signal) {
     updateJob(job.id, "succeeded", 100);
   } catch (error) {
     if (error.name === "AbortError" && getJob(job.id)?.state === "canceled") return;
-    recordAudit({ jobId: job.id, traceId: job.traceId, event: "provider.failed", model: config.upstream.model, upstreamStatus: error.status, details: { code: error.code || error.name, message: error.message } });
+    const jobModel = job.payload?.model || job.payload?.options?.model || config.upstream.model;
+    recordAudit({ jobId: job.id, traceId: job.traceId, event: "provider.failed", model: jobModel, upstreamStatus: error.status, details: { code: error.code || error.name, message: error.message } });
     updateJob(job.id, "failed", 0, { error: { code: error.code || "ONLINE_GENERATION_FAILED", message: error.message, retryable: error.status === 429 || error.status >= 500 } });
   } finally { finish(job.id); }
 }
@@ -89,10 +104,19 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/v2/health") {
       let usage = null;
       if (url.searchParams.get("depth") === "full") try { usage = await getUsage(); } catch (error) { usage = { configured: true, valid: false, error: error.code || error.message }; }
-      return json(res, 200, { status: "ok", gateway: "ok", mode: "online", provider: "feifeimiao", model: config.upstream.model, upstream: config.upstream.apiKey ? (usage?.valid === false ? "error" : "configured") : "not_configured", usage, queue: queueStats(), persistence: "sqlite", timestamp: new Date().toISOString() });
+      return json(res, 200, { status: "ok", gateway: "ok", mode: "online", provider: "online", model: config.upstream.model, models: config.upstream.supportedModels, upstream: config.upstream.apiKey ? (usage?.valid === false ? "error" : "configured") : "not_configured", usage, queue: queueStats(), persistence: "sqlite", timestamp: new Date().toISOString() });
     }
     if (req.method === "GET" && url.pathname === "/v2/usage") return json(res, 200, await getUsage());
-    if (req.method === "GET" && url.pathname === "/v2/capabilities") return json(res, 200, { schemaVersion: "2.0", revision: "online-gpt-image-2", capabilities: getCapabilities() });
+    if (req.method === "GET" && url.pathname === "/v2/models") return json(res, 200, { current: config.upstream.model, models: config.upstream.supportedModels });
+    if (req.method === "POST" && url.pathname === "/v2/models") {
+      const body = await bodyJson(req);
+      if (!body?.model || !config.upstream.supportedModels.includes(body.model)) {
+        return json(res, 400, { error: { code: "INVALID_MODEL", message: "Model must be one of: " + config.upstream.supportedModels.join(", ") } });
+      }
+      config.upstream.model = body.model;
+      return json(res, 200, { current: config.upstream.model, models: config.upstream.supportedModels });
+    }
+    if (req.method === "GET" && url.pathname === "/v2/capabilities") return json(res, 200, { schemaVersion: "2.0", revision: "online-" + config.upstream.model, capabilities: getCapabilities() });
     const capabilityMatch = url.pathname.match(/^\/v2\/capabilities\/([^/]+)$/);
     if (req.method === "GET" && capabilityMatch) { const capability = getCapability(decodeURIComponent(capabilityMatch[1])); return capability ? json(res, 200, capability) : json(res, 404, { error: { code: "CAPABILITY_NOT_FOUND", message: "Capability not found" } }); }
     if (req.method === "POST" && url.pathname === "/v2/assets") return await upload(req, res, owner);

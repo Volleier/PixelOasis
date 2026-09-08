@@ -11,6 +11,14 @@ window.PO.state = {
     baseUrl: "http://127.0.0.1:8787",
     health: "unknown",   /* unknown | online | offline */
     apiVersion: null,
+    onlineModel: "nano-banana-2",
+    availableModels: [
+      "gpt-image-2",
+      "gpt-image-2-vip",
+      "nano-banana-2",
+      "nano-banana-2-lite",
+      "nano-banana-pro",
+    ],
   },
 
   /* ── v2: capabilities ── */

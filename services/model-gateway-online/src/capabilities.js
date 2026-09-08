@@ -26,7 +26,7 @@ export function getCapabilities() {
       description: localized(raw.description),
       variants: [{ id: "online", profile: "online", priority: 100, enabled: true }],
       availability: { state: config.upstream.apiKey ? "ready" : "blocked", profile: "online", details: config.upstream.apiKey ? null : { reason: "API_KEY_MISSING" } },
-      online: { provider: "feifeimiao", model: config.upstream.model },
+      online: { provider: "online", model: config.upstream.model },
     };
   }).filter(capability => capability.enabled !== false);
   return cache;

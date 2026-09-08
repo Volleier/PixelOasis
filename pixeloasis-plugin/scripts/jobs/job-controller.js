@@ -44,11 +44,14 @@ window.PO.JobController = (function () {
     var bounds = capture.contextBounds || capture.subjectBounds || capture.bounds || capture.editBounds;
     var normalizedBounds = window.PO.CaptureUtils.normalizeBounds(bounds) || { left: 0, top: 0, width: 0, height: 0 };
 
+    var model = opts.model || values.model || (window.PO.state && window.PO.state.gateway ? window.PO.state.gateway.onlineModel : null) || "nano-banana-2";
+
     var payload = {
       schemaVersion: "2.0",
       capabilityId: capability.id,
       correlationId: correlationId,
       idempotencyKey: idempotencyKey,
+      model: model,
       source: {
         assetId: sourceAssetId,
         scope: capture.scope || "document",
@@ -75,6 +78,7 @@ window.PO.JobController = (function () {
       parameters: values,
       options: {
         profile: values.profile || "quality_16gb",
+        model: model,
       },
       clientCapabilities: {
         multiArtifact: true,
@@ -253,6 +257,7 @@ window.PO.JobController = (function () {
         sourceAssetId: sourceAssetId,
         editMaskAssetId: editMaskAssetId,
         subjectMaskAssetId: subjectMaskAssetId,
+        model: opts.model,
       });
       payload.traceId = traceId;
 

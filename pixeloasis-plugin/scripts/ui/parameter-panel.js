@@ -319,6 +319,41 @@ window.PO.ParameterPanel = (function () {
       scroll.appendChild(sensitiveSection);
     }
 
+    /* ── Model choice (when online gateway is in use or available) ── */
+    var modelSection = document.createElement("div");
+    modelSection.className = "po-param-section";
+    var modelLabel = document.createElement("label");
+    modelLabel.className = "po-param-label";
+    modelLabel.setAttribute("for", "param-model-select");
+    modelLabel.textContent = "生图模型";
+    var modelSelect = document.createElement("select");
+    modelSelect.id = "param-model-select";
+    modelSelect.className = "po-settings-url-input";
+    modelSelect.style.cssText = "width:100%;margin-top:4px;";
+    var availableModels = (window.PO.state && window.PO.state.gateway && window.PO.state.gateway.availableModels) || [
+      "gpt-image-2",
+      "gpt-image-2-vip",
+      "nano-banana-2",
+      "nano-banana-2-lite",
+      "nano-banana-pro",
+    ];
+    var currentSelectedModel = (window.PO.state && window.PO.state.gateway && window.PO.state.gateway.onlineModel) || "nano-banana-2";
+    availableModels.forEach(function (m) {
+      var opt = document.createElement("option");
+      opt.value = m;
+      opt.textContent = m;
+      if (m === currentSelectedModel) opt.selected = true;
+      modelSelect.appendChild(opt);
+    });
+    modelSelect.addEventListener("change", function () {
+      if (window.PO.state && window.PO.state.gateway) {
+        window.PO.state.gateway.onlineModel = modelSelect.value;
+      }
+    });
+    modelSection.appendChild(modelLabel);
+    modelSection.appendChild(modelSelect);
+    scroll.appendChild(modelSection);
+
     /* ── Parameter form ── */
     var formSection = document.createElement("div");
     formSection.className = "po-param-overlay__form";
@@ -503,6 +538,10 @@ window.PO.ParameterPanel = (function () {
 
     /* Submit via JobController */
     try {
+      var modelEl = _overlay && _overlay.querySelector("#param-model-select");
+      var selectedModel = (modelEl && modelEl.value) ||
+        (window.PO.state && window.PO.state.gateway && window.PO.state.gateway.onlineModel) || "nano-banana-2";
+
       var jobResult = await window.PO.JobController.createAndSubmit({
         capability: _currentCapability,
         capture: _currentCapture,
@@ -510,6 +549,7 @@ window.PO.ParameterPanel = (function () {
         preflight: _currentPreflight,
         subjectMode: _subjectMode,
         traceId: _traceId,
+        model: selectedModel,
       });
 
       /* State: queued — job created */
