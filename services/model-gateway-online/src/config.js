@@ -1,7 +1,10 @@
 import { resolve } from "node:path";
+import { loadEnvFiles } from "./env.js";
 
 const serviceRoot = resolve(import.meta.dirname, "..");
 const projectRoot = resolve(serviceRoot, "..", "..");
+
+loadEnvFiles([projectRoot, serviceRoot]);
 
 const defaultBaseUrl = (process.env.PO_ONLINE_BASE_URL || process.env.ONLINE_BASE_URL || "").replace(/\/+$/, "");
 const defaultDrawUrl = (process.env.PO_ONLINE_DRAW_URL || process.env.PO_ONLINE_DRAW_BASE_URL || (defaultBaseUrl ? `${defaultBaseUrl}/draw` : "")).replace(/\/+$/, "");

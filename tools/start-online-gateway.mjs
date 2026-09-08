@@ -3,12 +3,16 @@ import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { loadEnvFiles } from "../services/model-gateway-online/src/env.js";
+
 const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const serviceDir = resolve(projectRoot, "services", "model-gateway-online");
 
+loadEnvFiles([projectRoot, serviceDir]);
+
 const apiKey = process.env.PO_ONLINE_API_KEY || process.env.ONLINE_API_KEY;
 if (!apiKey) {
-  console.error("PO_ONLINE_API_KEY is required.");
+  console.error("PO_ONLINE_API_KEY is required (can be set in .env.local or environment variable).");
   console.error('$env:PO_ONLINE_API_KEY = "sk-..."');
   process.exit(1);
 }
