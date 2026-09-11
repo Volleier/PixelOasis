@@ -10,6 +10,15 @@ const defaultBaseUrl = (process.env.PO_ONLINE_BASE_URL || process.env.ONLINE_BAS
 const defaultDrawUrl = (process.env.PO_ONLINE_DRAW_URL || process.env.PO_ONLINE_DRAW_BASE_URL || (defaultBaseUrl ? `${defaultBaseUrl}/draw` : "")).replace(/\/+$/, "");
 const defaultTasksUrl = (process.env.PO_ONLINE_TASKS_URL || defaultBaseUrl).replace(/\/+$/, "");
 
+export function normalizeModelName(m) {
+  if (!m) return m;
+  const lower = String(m).trim().toLowerCase();
+  if (lower === "banana2pro" || lower === "nano-banana-2-pro" || lower === "banana-pro" || lower === "banana-2-pro") {
+    return "nano-banana-pro";
+  }
+  return m;
+}
+
 export default {
   host: process.env.PO_ONLINE_HOST || "127.0.0.1",
   port: Number(process.env.PO_ONLINE_PORT || 8790),
@@ -19,7 +28,7 @@ export default {
     drawBaseUrl: defaultDrawUrl,
     tasksBaseUrl: defaultTasksUrl,
     apiKey: process.env.PO_ONLINE_API_KEY || process.env.ONLINE_API_KEY || "",
-    model: process.env.PO_ONLINE_MODEL || process.env.PO_ONLINE_IMAGE_MODEL || process.env.ONLINE_IMAGE_MODEL || "nano-banana-2",
+    model: normalizeModelName(process.env.PO_ONLINE_MODEL || process.env.PO_ONLINE_IMAGE_MODEL || process.env.ONLINE_IMAGE_MODEL || "nano-banana-pro"),
     supportedModels: [
       "gpt-image-2",
       "gpt-image-2-vip",

@@ -1,10 +1,10 @@
 :root {
-  --bg-primary: #2b2b2b;
-  --bg-surface: #303030;
-  --bg-surface-alt: #353535;
+  --bg-primary: #17181c;
+  --bg-surface: #202228;
+  --bg-surface-alt: #292c34;
   --bg-control: #565656;
   --bg-control-alt: #3f3f3f;
-  --border-muted: #404040;
+  --border-muted: #363a45;
   --border-strong: #666666;
   --border-subtle: #1f1f1f;
   --text-primary: #f3f3f3;
@@ -18,6 +18,34 @@
   --font-size-sm: 13px;
   --font-size-md: 15px;
 }
+
+/* Modern creation workspace refresh */
+.po-root { background: radial-gradient(circle at 100% 0%, #282d3b 0, #17181c 42%); }
+.po-main { padding: 16px; }
+.po-workspace-intro { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:4px 2px 16px; }
+.po-workspace-kicker { color:#9aa7e8; font-size:10px; font-weight:700; letter-spacing:.12em; }
+.po-workspace-intro h1 { margin:5px 0 4px; font-size:21px; line-height:1.15; }
+.po-workspace-intro p { margin:0; color:var(--text-muted); font-size:12px; }
+.po-workspace-step { flex:none; color:#aab4d8; background:#2b3040; border:1px solid #414860; border-radius:999px; padding:5px 9px; font-size:11px; }
+.po-section, .po-favorites { border-radius: 12px; border-color: #363a45; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+.po-section__header { padding: 4px 2px 10px; }
+.po-section__title { font-size: 16px; letter-spacing: .01em; }
+.po-capability-card { border-radius: 10px; margin-bottom: 8px; background: rgba(41,44,52,.86); transition: transform .15s, border-color .15s, background .15s; }
+.po-capability-card:hover { transform: translateY(-1px); border-color: #7184c4; background: #303542; }
+.po-section__body { display:grid; grid-template-columns:1fr; gap:8px; }
+.po-section__body .po-capability-card { margin:0; }
+.po-section__toggle { width:28px; height:28px; border:0; border-radius:7px; background:#2b2f39; color:#b9c2e2; cursor:pointer; }
+.po-section__toggle:hover { background:#3a4050; }
+.po-capability-card__body { padding: 13px 12px; gap: 12px; }
+.po-capability-card__icon { width: 34px; height: 34px; border-radius: 9px; background: #3a4050; font-size: 18px; }
+.po-capability-card__title { font-size: 14px; font-weight: 650; }
+.po-capability-card__desc { line-height: 1.4; }
+.po-button { height: 34px; border-radius: 8px; min-width: 112px; }
+.po-button--primary { background: linear-gradient(135deg,#6d7fe0,#8d68cf); border: 0; box-shadow: 0 6px 16px rgba(109,127,224,.25); }
+.po-search { height: 38px; border-radius: 9px; padding-left: 38px; background: rgba(23,24,28,.8); }
+.po-preview__viewport { height: 220px; background: #111217; }
+.po-bottom-bar { height: 42px; padding: 0 12px; background: #1f2128; }
+.po-bottom-button { height: 28px; border-radius: 7px; }
 
 html,
 body {
@@ -982,6 +1010,15 @@ body {
   background: var(--bg-surface);
   flex-shrink: 0;
 }
+.po-param-overlay { background: #17181c; }
+.po-param-overlay__header { background:linear-gradient(180deg,#292e3b,#202228); height:52px; padding:0 16px; }
+.po-param-overlay__title { font-size:16px; letter-spacing:.01em; }
+.po-param-overlay__scroll { padding:16px; }
+.po-param-section { border:1px solid #363a45; border-radius:10px; background:#202228; padding:12px; margin-bottom:12px; }
+.po-param-overlay__form { background:#202228; border:1px solid #363a45; border-radius:10px; padding:12px; }
+.po-param-overlay__actions { padding:14px 16px; background:#202228; gap:10px; }
+.po-param-overlay__actions .po-button { height:40px; border-radius:9px; }
+.po-param-overlay__notice { border-radius:8px; margin:0 16px 12px; }
 
 .po-param-overlay__back {
   height: 26px;
@@ -1426,3 +1463,10 @@ body {
 .po-env-row--error .po-env-row__message {
   color: #e86030;
 }
+/* Compact panel overrides */
+.po-workspace-intro{display:flex;align-items:center;padding:0 2px 8px;min-height:18px}
+.po-brand{color:#b8c2f2;font-size:11px;font-weight:700;letter-spacing:.14em}
+.po-search{height:30px;border-radius:7px;padding-left:12px}
+.po-favorites,.po-section{padding:8px;margin-bottom:8px;border-radius:8px}
+.po-capability-card__body{padding:7px 9px;gap:8px}
+.po-capability-card__icon{width:26px;height:26px;border-radius:7px;font-size:14px}

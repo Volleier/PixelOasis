@@ -1,4 +1,4 @@
-$src = "C:\Users\12066\Documents\GitHub\PixelOasis\PixelOasis"
+$src = (Resolve-Path "$PSScriptRoot\..\PixelOasis").Path
 $dst = "C:\Program Files\Adobe\Adobe Photoshop 2026\Plug-ins\PixelOasis"
 
 Remove-Item -Path $dst -Recurse -Force -ErrorAction SilentlyContinue

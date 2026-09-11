@@ -401,6 +401,11 @@ window.PO.CapabilitySections = (function () {
     var scroll = document.createElement("div");
     scroll.className = "po-main-scroll";
 
+    var intro = document.createElement("div");
+    intro.className = "po-workspace-intro";
+    intro.innerHTML = '<div class="po-brand">PIXELOASIS</div>';
+    scroll.appendChild(intro);
+
     /* Search bar */
     var searchBar = document.createElement("div");
     searchBar.className = "po-search-bar";

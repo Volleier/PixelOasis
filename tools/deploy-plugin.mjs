@@ -16,22 +16,26 @@ const pluginRoot = resolve(projectRoot, "pixeloasis-plugin");
 const deployDir = resolve(projectRoot, "PixelOasis");
 const legacyDeployDir = resolve(projectRoot, "com.pixeloasis.plugin");
 
-/* ── Read config.yaml ── */
+/* ── Read config (config.local.yaml > config.yaml > defaults) ── */
 let config = {};
-const configPath = resolve(projectRoot, "config.yaml");
-if (existsSync(configPath)) {
+const configCandidates = [
+  resolve(projectRoot, "config.local.yaml"),
+  resolve(projectRoot, "config.yaml"),
+];
+const foundConfig = configCandidates.find(p => existsSync(p));
+if (foundConfig) {
   try {
-    const raw = readFileSync(configPath, "utf-8");
+    const raw = readFileSync(foundConfig, "utf-8");
     config = parseYaml(raw) || {};
   } catch (err) {
-    console.warn("Warning: failed to parse config.yaml:", err.message);
+    console.warn("Warning: failed to parse " + basename(foundConfig) + ":", err.message);
   }
 } else {
-  console.warn("Warning: config.yaml not found — using defaults.");
+  console.warn("Warning: config.local.yaml / config.yaml not found — using defaults.");
 }
 
-const psMinHostVersion = config.photoshop?.min_host_version || "27.0.0";
-const psPluginPath = config.photoshop?.plugin_path || "";
+const psMinHostVersion = process.env.PO_PS_MIN_HOST_VERSION || config.photoshop?.min_host_version || "27.0.0";
+const psPluginPath = process.env.PO_PS_PLUGIN_PATH || process.env.PHOTOSHOP_PLUGIN_PATH || config.photoshop?.plugin_path || "";
 
 /* ── Import manifest ── */
 const manifestPath = resolve(pluginRoot, "scripts", "script-manifest.mjs");

@@ -3,7 +3,7 @@ import { createWriteStream, mkdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import Busboy from "busboy";
 import sharp from "sharp";
-import config from "./config.js";
+import config, { normalizeModelName } from "./config.js";
 import { getCapabilities, getCapability } from "./capabilities.js";
 import { emit, finish, getArtifact, getAsset, getAudits, getJob, id, jobArtifacts, listJobs, putArtifact, putAsset, putJob, recordAudit, recoverableJobs, subscribe, updateJob } from "./store.js";
 import { generateOnline, getUsage } from "./provider.js";
@@ -67,7 +67,7 @@ async function run(job, signal) {
     updateJob(job.id, "running", 35);
     const width = Math.max(1, Math.round(job.payload.source.bounds?.width || source.width || 1024));
     const height = Math.max(1, Math.round(job.payload.source.bounds?.height || source.height || 1024));
-    const jobModel = job.payload.model || job.payload.options?.model || job.payload.parameters?.model || config.upstream.model;
+    const jobModel = normalizeModelName(job.payload.model || job.payload.options?.model || job.payload.parameters?.model || config.upstream.model);
     const result = await generateOnline({
       capability,
       source,
@@ -110,10 +110,11 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/v2/models") return json(res, 200, { current: config.upstream.model, models: config.upstream.supportedModels });
     if (req.method === "POST" && url.pathname === "/v2/models") {
       const body = await bodyJson(req);
-      if (!body?.model || !config.upstream.supportedModels.includes(body.model)) {
+      const requestedModel = normalizeModelName(body?.model);
+      if (!requestedModel || !config.upstream.supportedModels.includes(requestedModel)) {
         return json(res, 400, { error: { code: "INVALID_MODEL", message: "Model must be one of: " + config.upstream.supportedModels.join(", ") } });
       }
-      config.upstream.model = body.model;
+      config.upstream.model = requestedModel;
       return json(res, 200, { current: config.upstream.model, models: config.upstream.supportedModels });
     }
     if (req.method === "GET" && url.pathname === "/v2/capabilities") return json(res, 200, { schemaVersion: "2.0", revision: "online-" + config.upstream.model, capabilities: getCapabilities() });
